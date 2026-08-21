@@ -1,0 +1,48 @@
+---
+title: "Minimal I4R verification fixture"
+output: html_document
+---
+
+This sanitized fixture illustrates the four explicit outcomes. Production notebooks are generated
+by `scripts/make_verification_notebook.sh`; rendered HTML and result CSVs are outputs and are not
+distributed as skill context.
+
+```{r setup}
+results <- list()
+record <- function(claim, expected, observed, verdict, detail = "") {
+  results[[length(results) + 1L]] <<- data.frame(
+    claim, expected = as.character(expected), observed = as.character(observed), verdict, detail)
+}
+```
+
+## C-1 — deterministic result
+
+```{r C_1}
+expected <- 42                 # state before computation
+observed <- sum(c(20, 22))
+record("C-1", expected, observed,
+       if (identical(expected, observed)) "PASS" else "FAIL")
+```
+
+## C-2 — judgement
+
+```{r C_2}
+record("C-2", "explicit assessment", "evidence reviewed", "JUDGEMENT",
+       "The basis must be stated so another verifier can disagree on the merits.")
+```
+
+## C-3 — unverifiable
+
+```{r C_3}
+record("C-3", "deposited input", "input absent", "UNVERIFIABLE",
+       "Name what was sought, what was attempted, and how the absence limits the claim.")
+```
+
+```{r summary}
+table <- do.call(rbind, results)
+knitr::kable(table)
+utils::write.csv(table, "verification_summary.csv", row.names = FALSE)
+failures <- sum(table$verdict == "FAIL")
+writeLines(as.character(as.integer(failures > 0)), "verification_status.txt")
+if (failures) stop("verification failed")
+```
