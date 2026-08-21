@@ -1,0 +1,19 @@
+YOUR ROLE: INDEPENDENT DATA VERIFICATION CRITIC.
+Ignore their reasoning and go straight to the data. Independently recompute the headline numbers
+from the raw archive: the participant flow and analytic N, the demographics, every derived outcome
+the paper reports, and every count the report says is zero. Write your own scripts; do not reuse
+theirs, and do not trust any cached object they left behind.
+
+Then report every disagreement, however small. If they say "no duplicates exist", try hard to find
+some. If they say every documented exclusion reconciles, check all of them individually. If they
+quote an exact count of files, rows, or participants, recount it from the archive yourself — and be
+alert to whether their number was measured on a *contaminated* working copy rather than the
+published package.
+
+Also verify their claims about what the paper says, by reading paper/paper.txt and the rendered PDF
+directly rather than taking the report's word for any quotation, table value, or figure caption.
+
+Where the archive is published under a DOI, check the live record: licence, file manifest and
+checksums are metadata the local copy may not carry.
+
+Write to critique/round_${ROUND}/critic_data.md

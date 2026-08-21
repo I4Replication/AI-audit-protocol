@@ -1,0 +1,1897 @@
+{
+  "schema_version": "1.0.0",
+  "audit_id": "20260714-nakamura-9f3ac1",
+  "paper_doi": "10.1016/j.psychsport.2025.102841",
+  "paper_title": "Self-talk training and endurance performance in competitive cyclists: a randomised controlled trial",
+  "protocol_version": "2026.05-r3",
+  "gate_set_version": "2026.06-r1",
+  "safe_to_publish": false,
+  "publication_redaction": {
+    "fields_requiring_removal": [
+      "/audit_dir",
+      "/toolkit/skill_path",
+      "/costs",
+      "/auditor_model/provider",
+      "/model_assignments",
+      "/failure_events",
+      "/compliance/violations",
+      "/delivery/recipient"
+    ],
+    "safe_aggregates": [
+      "/phases",
+      "/rounds",
+      "/rounds_run",
+      "/stopping_reason",
+      "/brief_corrections/count",
+      "/compliance/compliance_pass",
+      "/token_accounting/coverage_fraction",
+      "/package"
+    ],
+    "note": "Release the phase and round timings, the defect counts and the compliance booleans; code model ids to families and drop providers and costs. The two violations below are real protocol breaches and belong in the meta-paper only as counts, never attributed to a named audit.",
+    "cleared_by": null
+  },
+  "registry": {
+    "registry_dir": "/Users/pablo/Library/CloudStorage/Dropbox-I4R/Sport_exercise_psych/registry/20260714-nakamura-9f3ac1",
+    "filed_at": "2026-07-17T18:40:05Z",
+    "index_row_appended": true
+  },
+  "toolkit": {
+    "skill_path": "/Users/example/.claude/skills/i4r-audit",
+    "skill_commit": "a41f9c2",
+    "scripts_sha256": "c93b7f21d4e6a08b5c1f37ae920d4b68f5a2c7e01b93d846fa27c50e8b31d9f4",
+    "host_os": "Darwin 25.5.0",
+    "bash_version": "3.2.57(1)-release"
+  },
+  "audit_dir": "/Users/example/audits/20260714-nakamura",
+  "started_at": "2026-07-14T09:02:11Z",
+  "ended_at": "2026-07-17T18:40:03Z",
+  "wall_clock_seconds": 293872,
+  "active_seconds": 286410,
+  "status": "complete",
+  "auditor_model": {
+    "model_id": "claude-opus-4-6-20260514",
+    "family": "claude",
+    "provider": "anthropic",
+    "declared_at": "2026-07-14T09:02:11Z"
+  },
+  "phases": {
+    "intake": {
+      "ran": true,
+      "started_at": "2026-07-14T09:02:11Z",
+      "ended_at": "2026-07-14T10:47:33Z",
+      "wall_clock_seconds": 6322,
+      "notes": "setup_workspace.sh, package extraction, brief drafted from reference/brief_template.md"
+    },
+    "fan_out": {
+      "ran": true,
+      "started_at": "2026-07-14T10:52:00Z",
+      "ended_at": "2026-07-14T11:44:12Z",
+      "wall_clock_seconds": 3132,
+      "notes": "five auditors launched in one message; all five returned reports"
+    },
+    "adjudication": {
+      "ran": true,
+      "started_at": "2026-07-14T11:44:12Z",
+      "ended_at": "2026-07-14T14:20:05Z",
+      "wall_clock_seconds": 9353,
+      "notes": "LEDGER.md built from full reports; 3 disputed computations re-run"
+    },
+    "critique": {
+      "ran": true,
+      "started_at": "2026-07-14T14:31:00Z",
+      "ended_at": "2026-07-17T15:12:44Z",
+      "wall_clock_seconds": 261704,
+      "notes": "five rounds; stopped on the cap, not on convergence"
+    },
+    "release": {
+      "ran": true,
+      "started_at": "2026-07-17T15:20:10Z",
+      "ended_at": "2026-07-17T16:58:29Z",
+      "wall_clock_seconds": 5899,
+      "notes": "stage_release.sh clean on second attempt; build_docx.sh + PDF check"
+    }
+  },
+  "human_effort": {
+    "self_reported": true,
+    "instrumented": false,
+    "person_minutes_by_phase": {
+      "intake": 55,
+      "fan_out": 40,
+      "adjudication": 120,
+      "critique": 385,
+      "release": 75
+    },
+    "person_minutes_total": 675,
+    "phases_recorded": 5,
+    "people_involved": 2,
+    "notes": "Reported by the coordinator at close from calendar blocks. The critique figure is the least reliable of the five: it spans three days and was reconstructed rather than timed. Self-report, not instrumentation."
+  },
+  "settled_facts": {
+    "used": true,
+    "generated_after_round": 2,
+    "path": "SETTLED.md",
+    "entries": 14,
+    "spot_check_failures": 0,
+    "notes": "Generated after round 2 once two reviewers had independently confirmed the core counts. Rounds 3-5 spot-checked rather than rebuilt; no spot-check failed."
+  },
+  "model_assignments": [
+    {
+      "role": "coordinator",
+      "role_class": "coordinator",
+      "round": null,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T09:02:11Z"
+    },
+    {
+      "role": "auditor_reproduction",
+      "role_class": "auditor",
+      "round": null,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T10:52:00Z"
+    },
+    {
+      "role": "auditor_data_integrity",
+      "role_class": "auditor",
+      "round": null,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T10:52:00Z"
+    },
+    {
+      "role": "auditor_text_vs_data",
+      "role_class": "auditor",
+      "round": null,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T10:52:00Z"
+    },
+    {
+      "role": "auditor_code_methods",
+      "role_class": "auditor",
+      "round": null,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T10:52:00Z"
+    },
+    {
+      "role": "auditor_privacy_archive",
+      "role_class": "auditor",
+      "round": null,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T10:52:00Z"
+    },
+    {
+      "role": "adjudicator",
+      "role_class": "adjudicator",
+      "round": null,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "critic_stats",
+      "role_class": "critic",
+      "round": 1,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T14:31:00Z"
+    },
+    {
+      "role": "critic_data",
+      "role_class": "critic",
+      "round": 1,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T14:31:00Z"
+    },
+    {
+      "role": "critic_fairness",
+      "role_class": "critic",
+      "round": 1,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T14:31:00Z"
+    },
+    {
+      "role": "critic_completeness",
+      "role_class": "critic",
+      "round": 1,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T14:31:00Z"
+    },
+    {
+      "role": "critic_synth",
+      "role_class": "synthesizer",
+      "round": 1,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-14T14:31:00Z"
+    },
+    {
+      "role": "critic_stats",
+      "role_class": "critic",
+      "round": 2,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T08:12:03Z"
+    },
+    {
+      "role": "critic_data",
+      "role_class": "critic",
+      "round": 2,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T08:12:03Z"
+    },
+    {
+      "role": "critic_fairness",
+      "role_class": "critic",
+      "round": 2,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T08:12:03Z"
+    },
+    {
+      "role": "critic_completeness",
+      "role_class": "critic",
+      "round": 2,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T08:12:03Z"
+    },
+    {
+      "role": "critic_synth",
+      "role_class": "synthesizer",
+      "round": 2,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T08:12:03Z"
+    },
+    {
+      "role": "critic_stats",
+      "role_class": "critic",
+      "round": 3,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T14:10:00Z"
+    },
+    {
+      "role": "critic_data",
+      "role_class": "critic",
+      "round": 3,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T14:10:00Z"
+    },
+    {
+      "role": "critic_fairness",
+      "role_class": "critic",
+      "round": 3,
+      "model_id": "claude-opus-4-6-20260514",
+      "model_family": "claude",
+      "provider": "anthropic",
+      "differs_from_auditor_family": false,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": "gpt-5.4-2026-01-20",
+      "intended": false,
+      "recorded_at": "2026-07-15T15:06:40Z"
+    },
+    {
+      "role": "critic_completeness",
+      "role_class": "critic",
+      "round": 3,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T14:10:00Z"
+    },
+    {
+      "role": "critic_synth",
+      "role_class": "synthesizer",
+      "round": 3,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-15T14:10:00Z"
+    },
+    {
+      "role": "critic_stats",
+      "role_class": "critic",
+      "round": 4,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-16T09:05:00Z"
+    },
+    {
+      "role": "critic_data",
+      "role_class": "critic",
+      "round": 4,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-16T09:05:00Z"
+    },
+    {
+      "role": "critic_fairness",
+      "role_class": "critic",
+      "round": 4,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-16T09:05:00Z"
+    },
+    {
+      "role": "critic_completeness",
+      "role_class": "critic",
+      "round": 4,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-16T09:05:00Z"
+    },
+    {
+      "role": "critic_synth",
+      "role_class": "synthesizer",
+      "round": 4,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-16T09:05:00Z"
+    },
+    {
+      "role": "critic_stats",
+      "role_class": "critic",
+      "round": 5,
+      "model_id": "gpt-5.4-turbo-2026-03-11",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": "gpt-5.4-2026-01-20",
+      "intended": false,
+      "recorded_at": "2026-07-17T10:11:52Z"
+    },
+    {
+      "role": "critic_data",
+      "role_class": "critic",
+      "round": 5,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-17T09:30:00Z"
+    },
+    {
+      "role": "critic_synth",
+      "role_class": "synthesizer",
+      "round": 5,
+      "model_id": "gpt-5.4-2026-01-20",
+      "model_family": "gpt",
+      "provider": "openai",
+      "differs_from_auditor_family": true,
+      "auditor_family_at_time": "claude",
+      "source": "observed",
+      "replaces_model_id": null,
+      "intended": true,
+      "recorded_at": "2026-07-17T09:30:00Z"
+    }
+  ],
+  "tokens": [
+    {
+      "role": "coordinator",
+      "round": null,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_reproduction",
+      "round": null,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_data_integrity",
+      "round": null,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_text_vs_data",
+      "round": null,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_code_methods",
+      "round": null,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_privacy_archive",
+      "round": null,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "adjudicator",
+      "round": null,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 1,
+      "obtainable": true,
+      "input_tokens": 82406,
+      "output_tokens": 7642,
+      "cached_input_tokens": 27468,
+      "reasoning_tokens": null,
+      "total_tokens": 90048,
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 1,
+      "obtainable": true,
+      "input_tokens": 82406,
+      "output_tokens": 7642,
+      "cached_input_tokens": 27468,
+      "reasoning_tokens": null,
+      "total_tokens": 90048,
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 1,
+      "obtainable": true,
+      "input_tokens": 82406,
+      "output_tokens": 7642,
+      "cached_input_tokens": 27468,
+      "reasoning_tokens": null,
+      "total_tokens": 90048,
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 1,
+      "obtainable": true,
+      "input_tokens": 82406,
+      "output_tokens": 7642,
+      "cached_input_tokens": 27468,
+      "reasoning_tokens": null,
+      "total_tokens": 90048,
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 1,
+      "obtainable": true,
+      "input_tokens": 82406,
+      "output_tokens": 7642,
+      "cached_input_tokens": 27468,
+      "reasoning_tokens": null,
+      "total_tokens": 90048,
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 2,
+      "obtainable": true,
+      "input_tokens": 77688,
+      "output_tokens": 7022,
+      "cached_input_tokens": 25896,
+      "reasoning_tokens": null,
+      "total_tokens": 84710,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 2,
+      "obtainable": true,
+      "input_tokens": 77688,
+      "output_tokens": 7022,
+      "cached_input_tokens": 25896,
+      "reasoning_tokens": null,
+      "total_tokens": 84710,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 2,
+      "obtainable": true,
+      "input_tokens": 77688,
+      "output_tokens": 7022,
+      "cached_input_tokens": 25896,
+      "reasoning_tokens": null,
+      "total_tokens": 84710,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 2,
+      "obtainable": true,
+      "input_tokens": 77688,
+      "output_tokens": 7022,
+      "cached_input_tokens": 25896,
+      "reasoning_tokens": null,
+      "total_tokens": 84710,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 2,
+      "obtainable": true,
+      "input_tokens": 77688,
+      "output_tokens": 7022,
+      "cached_input_tokens": 25896,
+      "reasoning_tokens": null,
+      "total_tokens": 84710,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 3,
+      "obtainable": true,
+      "input_tokens": 60399,
+      "output_tokens": 5748,
+      "cached_input_tokens": 20133,
+      "reasoning_tokens": null,
+      "total_tokens": 66147,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 3,
+      "obtainable": true,
+      "input_tokens": 60399,
+      "output_tokens": 5748,
+      "cached_input_tokens": 20133,
+      "reasoning_tokens": null,
+      "total_tokens": 66147,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 3,
+      "obtainable": false,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "total_tokens": null,
+      "source": "unavailable",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 3,
+      "obtainable": true,
+      "input_tokens": 60399,
+      "output_tokens": 5748,
+      "cached_input_tokens": 20133,
+      "reasoning_tokens": null,
+      "total_tokens": 66147,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 3,
+      "obtainable": true,
+      "input_tokens": 60399,
+      "output_tokens": 5748,
+      "cached_input_tokens": 20133,
+      "reasoning_tokens": null,
+      "total_tokens": 66147,
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 4,
+      "obtainable": true,
+      "input_tokens": 51062,
+      "output_tokens": 4376,
+      "cached_input_tokens": 17020,
+      "reasoning_tokens": null,
+      "total_tokens": 55438,
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 4,
+      "obtainable": true,
+      "input_tokens": 51062,
+      "output_tokens": 4376,
+      "cached_input_tokens": 17020,
+      "reasoning_tokens": null,
+      "total_tokens": 55438,
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 4,
+      "obtainable": true,
+      "input_tokens": 51062,
+      "output_tokens": 4376,
+      "cached_input_tokens": 17020,
+      "reasoning_tokens": null,
+      "total_tokens": 55438,
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 4,
+      "obtainable": true,
+      "input_tokens": 51062,
+      "output_tokens": 4376,
+      "cached_input_tokens": 17020,
+      "reasoning_tokens": null,
+      "total_tokens": 55438,
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 4,
+      "obtainable": true,
+      "input_tokens": 51062,
+      "output_tokens": 4376,
+      "cached_input_tokens": 17020,
+      "reasoning_tokens": null,
+      "total_tokens": 55438,
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 5,
+      "obtainable": true,
+      "input_tokens": 80038,
+      "output_tokens": 6334,
+      "cached_input_tokens": 26679,
+      "reasoning_tokens": null,
+      "total_tokens": 86372,
+      "source": "cli_log",
+      "recorded_at": "2026-07-17T12:05:19Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 5,
+      "obtainable": true,
+      "input_tokens": 80038,
+      "output_tokens": 6334,
+      "cached_input_tokens": 26679,
+      "reasoning_tokens": null,
+      "total_tokens": 86372,
+      "source": "cli_log",
+      "recorded_at": "2026-07-17T12:05:19Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 5,
+      "obtainable": true,
+      "input_tokens": 80038,
+      "output_tokens": 6334,
+      "cached_input_tokens": 26679,
+      "reasoning_tokens": null,
+      "total_tokens": 86372,
+      "source": "cli_log",
+      "recorded_at": "2026-07-17T12:05:19Z"
+    }
+  ],
+  "costs": [
+    {
+      "role": "coordinator",
+      "round": null,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_reproduction",
+      "round": null,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_data_integrity",
+      "round": null,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_text_vs_data",
+      "round": null,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_code_methods",
+      "round": null,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "auditor_privacy_archive",
+      "round": null,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "adjudicator",
+      "round": null,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-14T11:44:12Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 1,
+      "obtainable": true,
+      "amount": 1.966,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 1,
+      "obtainable": true,
+      "amount": 1.966,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 1,
+      "obtainable": true,
+      "amount": 1.966,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 1,
+      "obtainable": true,
+      "amount": 1.966,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 1,
+      "obtainable": true,
+      "amount": 1.966,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-14T18:20:41Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 2,
+      "obtainable": true,
+      "amount": 1.842,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 2,
+      "obtainable": true,
+      "amount": 1.842,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 2,
+      "obtainable": true,
+      "amount": 1.842,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 2,
+      "obtainable": true,
+      "amount": 1.842,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 2,
+      "obtainable": true,
+      "amount": 1.842,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T11:31:47Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 3,
+      "obtainable": true,
+      "amount": 1.47,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 3,
+      "obtainable": true,
+      "amount": 1.47,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 3,
+      "obtainable": false,
+      "amount": null,
+      "currency": "USD",
+      "billing_model": "subscription",
+      "source": "unavailable",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 3,
+      "obtainable": true,
+      "amount": 1.47,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 3,
+      "obtainable": true,
+      "amount": 1.47,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-15T16:44:52Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 4,
+      "obtainable": true,
+      "amount": 1.204,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 4,
+      "obtainable": true,
+      "amount": 1.204,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_fairness",
+      "round": 4,
+      "obtainable": true,
+      "amount": 1.204,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_completeness",
+      "round": 4,
+      "obtainable": true,
+      "amount": 1.204,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 4,
+      "obtainable": true,
+      "amount": 1.204,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-16T11:12:38Z"
+    },
+    {
+      "role": "critic_stats",
+      "round": 5,
+      "obtainable": true,
+      "amount": 1.87,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-17T12:05:19Z"
+    },
+    {
+      "role": "critic_data",
+      "round": 5,
+      "obtainable": true,
+      "amount": 1.87,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-17T12:05:19Z"
+    },
+    {
+      "role": "critic_synth",
+      "round": 5,
+      "obtainable": true,
+      "amount": 1.87,
+      "currency": "USD",
+      "billing_model": "metered_api",
+      "source": "cli_log",
+      "recorded_at": "2026-07-17T12:05:19Z"
+    }
+  ],
+  "token_accounting": {
+    "role_rounds_expected": 30,
+    "role_rounds_with_tokens": 22,
+    "coverage_fraction": 0.7333,
+    "total_tokens_observed": 1674684,
+    "total_cost_usd_observed": 36.55
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "started_at": "2026-07-14T14:31:00Z",
+      "ended_at": "2026-07-14T18:20:41Z",
+      "wall_clock_seconds": 13781,
+      "critics_run": [
+        "critic_stats",
+        "critic_data",
+        "critic_fairness",
+        "critic_completeness"
+      ],
+      "critics_failed": [],
+      "parallelism": 2,
+      "report_version_reviewed": "REPORT_v1.md",
+      "blocking_items": 6,
+      "non_blocking_items": 11,
+      "comment_defects": 4,
+      "paper_defects": 2,
+      "unclassified_defects": 0,
+      "items_accepted": 9,
+      "items_contested": 8,
+      "integrated_at": "2026-07-14T20:05:12Z",
+      "integrated_before_delivery": true,
+      "consistency_check_run": true,
+      "consistency_check_exit": 0,
+      "character": "substantive",
+      "notes": "round 1 lost critic_completeness to a DNS outage and recovered it on retry"
+    },
+    {
+      "round": 2,
+      "started_at": "2026-07-15T08:12:03Z",
+      "ended_at": "2026-07-15T11:31:47Z",
+      "wall_clock_seconds": 11984,
+      "critics_run": [
+        "critic_stats",
+        "critic_data",
+        "critic_fairness",
+        "critic_completeness"
+      ],
+      "critics_failed": [],
+      "parallelism": 2,
+      "report_version_reviewed": "REPORT_v2.md",
+      "blocking_items": 5,
+      "non_blocking_items": 9,
+      "comment_defects": 3,
+      "paper_defects": 2,
+      "unclassified_defects": 0,
+      "items_accepted": 7,
+      "items_contested": 7,
+      "integrated_at": "2026-07-15T13:02:55Z",
+      "integrated_before_delivery": true,
+      "consistency_check_run": true,
+      "consistency_check_exit": 0,
+      "character": "substantive",
+      "notes": "SETTLED.md generated after this round"
+    },
+    {
+      "round": 3,
+      "started_at": "2026-07-15T14:10:00Z",
+      "ended_at": "2026-07-15T16:44:52Z",
+      "wall_clock_seconds": 9292,
+      "critics_run": [
+        "critic_stats",
+        "critic_data",
+        "critic_fairness",
+        "critic_completeness"
+      ],
+      "critics_failed": [],
+      "parallelism": 2,
+      "report_version_reviewed": "REPORT_v3.md",
+      "blocking_items": 3,
+      "non_blocking_items": 8,
+      "comment_defects": 3,
+      "paper_defects": 0,
+      "unclassified_defects": 0,
+      "items_accepted": 6,
+      "items_contested": 5,
+      "integrated_at": "2026-07-15T18:01:30Z",
+      "integrated_before_delivery": true,
+      "consistency_check_run": true,
+      "consistency_check_exit": 0,
+      "character": "framing",
+      "notes": "critic_fairness ran on the AUDITOR family after quota exhaustion; this round's fairness review is not independent"
+    },
+    {
+      "round": 4,
+      "started_at": "2026-07-16T09:05:00Z",
+      "ended_at": "2026-07-16T11:12:38Z",
+      "wall_clock_seconds": 7658,
+      "critics_run": [
+        "critic_stats",
+        "critic_data",
+        "critic_fairness",
+        "critic_completeness"
+      ],
+      "critics_failed": [],
+      "parallelism": 2,
+      "report_version_reviewed": "REPORT_v4.md",
+      "blocking_items": 2,
+      "non_blocking_items": 6,
+      "comment_defects": 1,
+      "paper_defects": 1,
+      "unclassified_defects": 0,
+      "items_accepted": 5,
+      "items_contested": 3,
+      "integrated_at": "2026-07-16T12:40:00Z",
+      "integrated_before_delivery": true,
+      "consistency_check_run": true,
+      "consistency_check_exit": 0,
+      "character": "precision",
+      "notes": "WRAPUP.txt written before this round: one round remaining"
+    },
+    {
+      "round": 5,
+      "started_at": "2026-07-17T09:30:00Z",
+      "ended_at": "2026-07-17T12:05:19Z",
+      "wall_clock_seconds": 9319,
+      "critics_run": [
+        "critic_stats",
+        "critic_data"
+      ],
+      "critics_failed": [],
+      "parallelism": 2,
+      "report_version_reviewed": "REPORT_v5.md",
+      "blocking_items": 3,
+      "non_blocking_items": 4,
+      "comment_defects": 3,
+      "paper_defects": 0,
+      "unclassified_defects": 0,
+      "items_accepted": 4,
+      "items_contested": 3,
+      "integrated_at": "2026-07-17T14:50:02Z",
+      "integrated_before_delivery": true,
+      "consistency_check_run": true,
+      "consistency_check_exit": 0,
+      "character": "substantive",
+      "notes": "round 5 returned MORE blocking items than round 4, all of them defects in our own new text; cap reached"
+    }
+  ],
+  "rounds_run": 5,
+  "round_cap": 5,
+  "stopping_reason": "cap",
+  "stopping_reason_detail": "Round 5 returned three blocking items, all defects in our own text added after round 4. The cap was reached with corrections still arriving; this is not convergence.",
+  "unreviewed_sections": [
+    "Section 2.3",
+    "Section 6.1",
+    "Abstract (recounted after round 5)"
+  ],
+  "compliance": {
+    "phases_ran": {
+      "intake": true,
+      "fan_out": true,
+      "adjudication": true,
+      "critique": true,
+      "release": true
+    },
+    "all_five_auditors_ran": true,
+    "critique_integrated_before_delivery": true,
+    "rounds_integrated_before_delivery": 5,
+    "rounds_not_integrated": [],
+    "converged": false,
+    "critics_independent_all_rounds": false,
+    "no_silent_model_swap": false,
+    "gates_run": [
+      {
+        "gate": "check_consistency",
+        "at": "2026-07-14T20:31:00Z",
+        "round": 1,
+        "exit_status": 0,
+        "passed": true,
+        "log_path": "work/logs/cc_r1.log"
+      },
+      {
+        "gate": "check_consistency",
+        "at": "2026-07-15T13:22:10Z",
+        "round": 2,
+        "exit_status": 1,
+        "passed": false,
+        "log_path": "work/logs/cc_r2.log"
+      },
+      {
+        "gate": "check_consistency",
+        "at": "2026-07-15T13:58:44Z",
+        "round": 2,
+        "exit_status": 0,
+        "passed": true,
+        "log_path": "work/logs/cc_r2b.log"
+      },
+      {
+        "gate": "check_consistency",
+        "at": "2026-07-15T18:20:02Z",
+        "round": 3,
+        "exit_status": 0,
+        "passed": true,
+        "log_path": "work/logs/cc_r3.log"
+      },
+      {
+        "gate": "check_consistency",
+        "at": "2026-07-16T12:55:31Z",
+        "round": 4,
+        "exit_status": 0,
+        "passed": true,
+        "log_path": "work/logs/cc_r4.log"
+      },
+      {
+        "gate": "check_consistency",
+        "at": "2026-07-17T15:04:19Z",
+        "round": 5,
+        "exit_status": 0,
+        "passed": true,
+        "log_path": "work/logs/cc_r5.log"
+      },
+      {
+        "gate": "stage_release",
+        "at": "2026-07-17T16:31:07Z",
+        "round": null,
+        "exit_status": 1,
+        "passed": false,
+        "log_path": "work/logs/stage_release_1.log"
+      },
+      {
+        "gate": "stage_release",
+        "at": "2026-07-17T16:58:29Z",
+        "round": null,
+        "exit_status": 0,
+        "passed": true,
+        "log_path": "work/logs/stage_release_2.log"
+      }
+    ],
+    "consistency_check_after_every_round": true,
+    "compliance_pass": false,
+    "violations": [
+      "round 3: critic_fairness ran on the auditor family (claude) after quota exhaustion -- that round's fairness review was self-review, not adversarial review",
+      "round 5: critic_stats model changed from gpt-5.4-2026-01-20 to gpt-5.4-turbo-2026-03-11 mid-run without an intended change (provider alias resolution)"
+    ]
+  },
+  "brief_corrections": {
+    "count": 2,
+    "items": [
+      {
+        "id": "bc1",
+        "at": "2026-07-14T11:20:41Z",
+        "raised_by": "auditor_privacy_archive",
+        "field": "package file count",
+        "description": "The brief said 198 files; pkg/ holds 213. The brief counted only the top two directory levels.",
+        "accepted": true
+      },
+      {
+        "id": "bc2",
+        "at": "2026-07-14T11:33:08Z",
+        "raised_by": "auditor_data_integrity",
+        "field": "data inventory",
+        "description": "The brief listed one data folder; a second, pkg/data_wave2/, holds the follow-up wave used in Table 4 and was not mentioned.",
+        "accepted": true
+      }
+    ]
+  },
+  "failure_events": [
+    {
+      "at": "2026-07-14T16:40:02Z",
+      "kind": "network_outage",
+      "role": "critic_completeness",
+      "round": 1,
+      "detail": "failed to lookup address information; wait_for_net held 210s before the retry succeeded",
+      "retries": 2,
+      "substitution": "none -- recovered on retry",
+      "resolved": true
+    },
+    {
+      "at": "2026-07-15T15:02:11Z",
+      "kind": "quota_exhausted",
+      "role": "critic_fairness",
+      "round": 3,
+      "detail": "429 insufficient_quota on all three attempts against the external provider",
+      "retries": 3,
+      "substitution": "re-ran critic_fairness on the auditor family (claude-opus-4-6-20260514) so the round would not be lost; the resulting review is NOT independent and round 3's fairness verdict must be read as self-review",
+      "resolved": false
+    },
+    {
+      "at": "2026-07-17T10:11:45Z",
+      "kind": "api_error",
+      "role": "critic_stats",
+      "round": 5,
+      "detail": "404 on the pinned model id gpt-5.4-2026-01-20; the alias resolved to gpt-5.4-turbo-2026-03-11",
+      "retries": 1,
+      "substitution": "the provider substituted a newer model; caught only because the response echoed a model_id different from the one requested",
+      "resolved": true
+    }
+  ],
+  "records_retained": [
+    {
+      "artifact": "report_final",
+      "path": "report/REPORT_final.md",
+      "present": true,
+      "count": 1,
+      "bytes": 91244,
+      "sha256": "2b7e5c19a04f3d68b1c9e7a2f50d386c4a91b7e03d5f2c86a41097bd3e5c8f20",
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "ledger",
+      "path": "report/LEDGER.md",
+      "present": true,
+      "count": 1,
+      "bytes": 14822,
+      "sha256": "8d3f1a06c7b294e5f08a37d61bc4092e5a7f3c81d06b924ea5c73f180d29b64c",
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "adjudication_log",
+      "path": "report/ADJUDICATION.md",
+      "present": true,
+      "count": 1,
+      "bytes": 22019,
+      "sha256": "51c8a72e0f9b43d6812c7ae5f30b96d418a2c7f05e91b3d648a07c2fe15b930d",
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "auditor_reports",
+      "path": "report/",
+      "present": true,
+      "count": 5,
+      "bytes": 187332,
+      "sha256": null,
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "critique_rounds",
+      "path": "critique/",
+      "present": true,
+      "count": 5,
+      "bytes": 402118,
+      "sha256": null,
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "critic_prompts",
+      "path": "critique/round_*/prompt_*.txt",
+      "present": true,
+      "count": 23,
+      "bytes": 96140,
+      "sha256": null,
+      "retention": "retained_local",
+      "reason": "Kept for the model-identity record; not released because the rendered prompts embed local paths."
+    },
+    {
+      "artifact": "agent_transcripts",
+      "path": "critique/round_*/log_*.txt",
+      "present": true,
+      "count": 31,
+      "bytes": 5512889,
+      "sha256": null,
+      "retention": "excluded_by_manifest",
+      "reason": "Process records, not audit evidence; excluded by stage_release.sh."
+    },
+    {
+      "artifact": "work_scripts",
+      "path": "work/",
+      "present": true,
+      "count": 44,
+      "bytes": 211903,
+      "sha256": null,
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "derived_tables",
+      "path": "work/out/",
+      "present": false,
+      "count": 0,
+      "bytes": 0,
+      "sha256": null,
+      "retention": "destroyed",
+      "reason": "Regenerable from work/ scripts; deleted at close because two carried a participant code in the row index."
+    },
+    {
+      "artifact": "run_json",
+      "path": "run.json",
+      "present": true,
+      "count": 1,
+      "bytes": 41288,
+      "sha256": null,
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "event_journal",
+      "path": "run.events.jsonl",
+      "present": true,
+      "count": 1,
+      "bytes": 18773,
+      "sha256": null,
+      "retention": "retained",
+      "reason": null
+    },
+    {
+      "artifact": "package_manifest",
+      "path": "work/pkg_manifest.txt",
+      "present": true,
+      "count": 1,
+      "bytes": 20455,
+      "sha256": null,
+      "retention": "retained",
+      "reason": null
+    }
+  ],
+  "records_retained_checked_at": "2026-07-17T18:40:03Z",
+  "package": {
+    "source_url": "https://osf.io/7q2xk/",
+    "retrieved_at": "2026-07-14T08:41:02Z",
+    "file_count": 213,
+    "total_bytes": 48213977,
+    "formats": [
+      {
+        "extension": "csv",
+        "count": 88,
+        "bytes": 22910433
+      },
+      {
+        "extension": "r",
+        "count": 41,
+        "bytes": 388120
+      },
+      {
+        "extension": "png",
+        "count": 33,
+        "bytes": 18442901
+      },
+      {
+        "extension": "rds",
+        "count": 27,
+        "bytes": 5901244
+      },
+      {
+        "extension": "md",
+        "count": 12,
+        "bytes": 84119
+      },
+      {
+        "extension": "xlsx",
+        "count": 9,
+        "bytes": 402886
+      },
+      {
+        "extension": "",
+        "count": 3,
+        "bytes": 84274
+      }
+    ],
+    "analysis_code_files": 41,
+    "manifest_sha256": "6f1c0a9b2e7d4c83a15b8f0e3d6a97c24be5108f7d3c9a4610e2b8f5c7d09a13",
+    "file_count_at_close": 213,
+    "manifest_sha256_at_close": "6f1c0a9b2e7d4c83a15b8f0e3d6a97c24be5108f7d3c9a4610e2b8f5c7d09a13",
+    "pkg_unchanged": true,
+    "runs_as_shipped": "partial",
+    "runs_as_shipped_notes": "00_master.R runs after two absolute paths are repointed; 04_bayes.R aborts on a package version not pinned anywhere in the deposit."
+  },
+  "delivery": {
+    "delivered_at": "2026-07-17T17:02:00Z",
+    "artifact_path": "report/comment_nakamura2025.docx",
+    "artifact_sha256": "f30c9b41a7d25e6801fc3b94d7a2e065b18c43a97f2d0e5b81c6a4390df72e18",
+    "release_dir": "release/20260714-nakamura-9f3ac1",
+    "recipient": "I4R editorial"
+  },
+  "notes": "The events journal in this EXAMPLE file is abridged to 16 representative entries; a real run carries one per phase boundary, role, round, failure and gate (this audit logged 87). Everything else is a plausible full record.",
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-07-14T09:02:11Z",
+      "type": "init",
+      "payload": {
+        "audit_id": "20260714-nakamura-9f3ac1",
+        "protocol_version": "2026.05-r3",
+        "gate_set_version": "2026.06-r1"
+      },
+      "pid": 41221,
+      "source": "init_run.sh"
+    },
+    {
+      "seq": 2,
+      "at": "2026-07-14T09:02:11Z",
+      "type": "phase_start",
+      "payload": {
+        "phase": "intake"
+      },
+      "pid": 41221,
+      "source": "init_run.sh"
+    },
+    {
+      "seq": 3,
+      "at": "2026-07-14T09:04:50Z",
+      "type": "package",
+      "payload": {
+        "file_count": 213,
+        "total_bytes": 48213977,
+        "manifest_sha256": "6f1c0a9b2e7d4c83a15b8f0e3d6a97c24be5108f7d3c9a4610e2b8f5c7d09a13"
+      },
+      "pid": 41221,
+      "source": "init_run.sh"
+    },
+    {
+      "seq": 4,
+      "at": "2026-07-14T10:47:33Z",
+      "type": "phase_end",
+      "payload": {
+        "phase": "intake"
+      },
+      "pid": 41240,
+      "source": "log_event.sh"
+    },
+    {
+      "seq": 5,
+      "at": "2026-07-14T10:52:00Z",
+      "type": "model",
+      "payload": {
+        "role": "auditor_reproduction",
+        "role_class": "auditor",
+        "model_id": "claude-opus-4-6-20260514",
+        "model_family": "claude",
+        "provider": "anthropic",
+        "source": "observed"
+      },
+      "pid": 41255,
+      "source": "log_event.sh"
+    },
+    {
+      "seq": 6,
+      "at": "2026-07-14T11:20:41Z",
+      "type": "brief_correction",
+      "payload": {
+        "id": "bc1",
+        "raised_by": "auditor_privacy_archive",
+        "field": "package file count",
+        "description": "brief said 198 files; pkg/ holds 213 -- the brief counted only the top two levels",
+        "accepted": true
+      },
+      "pid": 41255,
+      "source": "log_event.sh"
+    },
+    {
+      "seq": 7,
+      "at": "2026-07-14T14:31:00Z",
+      "type": "round_start",
+      "payload": {
+        "round": 1,
+        "parallelism": 2,
+        "report_version_reviewed": "REPORT_v1.md"
+      },
+      "pid": 41302,
+      "source": "run_critique.sh"
+    },
+    {
+      "seq": 8,
+      "at": "2026-07-14T16:40:02Z",
+      "type": "failure",
+      "payload": {
+        "kind": "network_outage",
+        "role": "critic_completeness",
+        "round": 1,
+        "detail": "failed to lookup address information; wait_for_net held for 210s",
+        "retries": 2,
+        "substitution": "none -- recovered on retry",
+        "resolved": true
+      },
+      "pid": 41302,
+      "source": "run_critique.sh"
+    },
+    {
+      "seq": 9,
+      "at": "2026-07-14T18:20:41Z",
+      "type": "round_end",
+      "payload": {
+        "round": 1
+      },
+      "pid": 41302,
+      "source": "run_critique.sh"
+    },
+    {
+      "seq": 10,
+      "at": "2026-07-14T20:05:12Z",
+      "type": "round_result",
+      "payload": {
+        "round": 1,
+        "blocking_items": 6,
+        "non_blocking_items": 11,
+        "comment_defects": 4,
+        "paper_defects": 2,
+        "items_accepted": 9,
+        "items_contested": 8,
+        "integrated_at": "2026-07-14T20:05:12Z",
+        "character": "substantive"
+      },
+      "pid": 41390,
+      "source": "log_event.sh"
+    },
+    {
+      "seq": 11,
+      "at": "2026-07-15T15:02:11Z",
+      "type": "failure",
+      "payload": {
+        "kind": "quota_exhausted",
+        "role": "critic_fairness",
+        "round": 3,
+        "detail": "provider returned 429 insufficient_quota on all three attempts",
+        "retries": 3,
+        "substitution": "re-ran critic_fairness on the auditor family (claude-opus-4-6-20260514); round 3 fairness review is NOT independent",
+        "resolved": false
+      },
+      "pid": 41501,
+      "source": "run_critique.sh"
+    },
+    {
+      "seq": 12,
+      "at": "2026-07-17T10:11:45Z",
+      "type": "failure",
+      "payload": {
+        "kind": "api_error",
+        "role": "critic_stats",
+        "round": 5,
+        "detail": "404 on the pinned model id; the alias resolved to gpt-5.4-turbo-2026-03-11",
+        "retries": 1,
+        "substitution": "provider auto-upgraded the model mid-run; detected only because the response echoed a different model_id",
+        "resolved": true
+      },
+      "pid": 41702,
+      "source": "run_critique.sh"
+    },
+    {
+      "seq": 13,
+      "at": "2026-07-17T14:50:02Z",
+      "type": "round_result",
+      "payload": {
+        "round": 5,
+        "blocking_items": 3,
+        "non_blocking_items": 4,
+        "comment_defects": 3,
+        "paper_defects": 0,
+        "items_accepted": 4,
+        "items_contested": 3,
+        "integrated_at": "2026-07-17T14:50:02Z",
+        "character": "substantive"
+      },
+      "pid": 41755,
+      "source": "log_event.sh"
+    },
+    {
+      "seq": 14,
+      "at": "2026-07-17T16:58:29Z",
+      "type": "gate",
+      "payload": {
+        "gate": "stage_release",
+        "exit_status": 0,
+        "log_path": "work/logs/stage_release_2.log"
+      },
+      "pid": 41801,
+      "source": "log_event.sh"
+    },
+    {
+      "seq": 15,
+      "at": "2026-07-17T17:02:00Z",
+      "type": "delivery",
+      "payload": {
+        "delivered_at": "2026-07-17T17:02:00Z",
+        "artifact_path": "report/comment_nakamura2025.docx",
+        "recipient": "I4R editorial"
+      },
+      "pid": 41801,
+      "source": "log_event.sh"
+    },
+    {
+      "seq": 16,
+      "at": "2026-07-17T18:40:03Z",
+      "type": "finalize",
+      "payload": {
+        "stopping_reason": "cap",
+        "compliance_pass": false
+      },
+      "pid": 41880,
+      "source": "finalize_run.sh"
+    }
+  ]
+}

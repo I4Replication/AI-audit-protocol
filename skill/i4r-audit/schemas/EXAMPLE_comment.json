@@ -1,0 +1,676 @@
+{
+  "schema_version": "1.0.0",
+  "audit_id": "20260714-nakamura-9f3ac1",
+  "comment_id": null,
+  "safe_to_publish": false,
+  "publication_redaction": {
+    "fields_requiring_removal": [
+      "/governance/pii_description",
+      "/governance/ethics_identifier",
+      "/author_response/note",
+      "/findings/*/package_locus",
+      "/findings/*/verification/verifiers/*/verifier",
+      "/disclosure/statement"
+    ],
+    "safe_aggregates": [
+      "/bibliographic",
+      "/design",
+      "/sample",
+      "/reported_statistics",
+      "/package",
+      "/rollup",
+      "/timing"
+    ],
+    "note": "F2 is disclosure-flagged at urgency 'prompt': the authors and the journal must be notified before this record leaves the registry, and pii_description must be coarsened first. Do not publish any worked example that demonstrates the re-identification route. package_locus on every finding needs a read-through before release: a deposit path can name a participant.",
+    "cleared_by": null
+  },
+  "enumeration_scheme": "v1.0",
+  "bibliographic": {
+    "doi": "10.1016/j.psychsport.2025.102841",
+    "title": "Self-talk training and endurance performance in competitive cyclists: a randomised controlled trial",
+    "journal": "Psychology of Sport and Exercise",
+    "publisher": "Elsevier",
+    "year": 2025,
+    "field": "sport and exercise psychology",
+    "subfield": "performance psychology",
+    "authors_n": 5,
+    "corresponding_author_contactable": true,
+    "open_access": true,
+    "oa_route": "hybrid",
+    "preregistered": true,
+    "preregistration_id": "OSF:h4k9m",
+    "registered_report": false,
+    "replication_package_url": "https://osf.io/7q2xk/",
+    "package_repository": "osf"
+  },
+  "design": {
+    "type": "rct",
+    "type_other_description": null,
+    "secondary_types": [
+      "longitudinal"
+    ],
+    "randomised": true,
+    "unit_of_randomisation": "individual",
+    "blinded": "single",
+    "secondary_data": false,
+    "notes": "Two arms (self-talk training vs attention-matched control), three measurement waves over eight weeks."
+  },
+  "sample": {
+    "n": 84,
+    "n_in_data": 82,
+    "n_analysed": 78,
+    "unit_of_observation": "participant-wave",
+    "clusters_n": null,
+    "human_subjects": true,
+    "minors": false,
+    "vulnerable_population": false,
+    "population_description": "Competitive amateur road cyclists, 19-41, recruited through three regional clubs."
+  },
+  "reported_statistics": {
+    "main_result_description": "Self-talk training improved 20-km time-trial performance relative to control at wave 3.",
+    "main_result_significant": true,
+    "main_result_p": 0.031,
+    "main_result_p_reported_as": "p = .031",
+    "inference_framework": "both",
+    "power_analysis_present": true,
+    "power_analysis_description": "A priori G*Power analysis targeting 80% power for d = 0.65 gives a required n of 78.4, reported in the paper as 78. Rounded DOWN: the requirement is 79. The achieved analytic n of 78 therefore meets the printed target and misses the real one by one participant.",
+    "effect_sizes_reported": true,
+    "effect_size_types": [
+      "cohens_d",
+      "partial_eta_squared"
+    ],
+    "intervals_reported": true,
+    "interval_type": "both",
+    "tests_performed": 41,
+    "tests_reported": 12,
+    "multiplicity_correction_present": false,
+    "multiplicity_correction_method": "none",
+    "multiplicity_correction_adequate": false
+  },
+  "package": {
+    "package_present": true,
+    "data_present": true,
+    "data_completeness": "partial",
+    "data_completeness_note": "Wave-2 accelerometer data referenced in Section 2.4 are not deposited; the derived summary is.",
+    "code_present": true,
+    "code_languages": [
+      "R"
+    ],
+    "runs_as_shipped": "partial",
+    "runs_as_shipped_note": "00_master.R runs after repointing two absolute paths; 04_bayes.R aborts because the brms version it needs is not pinned anywhere in the deposit.",
+    "reproduces_headline": "within_rounding",
+    "readme": true,
+    "codebook": false,
+    "seed": true,
+    "session_info": false,
+    "session_info_form": "none",
+    "licence": "CC-BY-4.0",
+    "licence_spdx": "CC-BY-4.0",
+    "das_present": true,
+    "das_text": "All data and analysis code supporting the findings of this study are openly available on the Open Science Framework.",
+    "das_matches_deposit": false,
+    "das_mismatch_description": "The statement says all data are available; the wave-2 accelerometer series underlying Section 2.4 and Figure 3 is not in the deposit, only its derived per-participant summary.",
+    "file_count": 213,
+    "total_bytes": 48213977,
+    "formats": [
+      "csv",
+      "r",
+      "png",
+      "rds",
+      "md",
+      "xlsx"
+    ],
+    "proprietary_format_dependency": false
+  },
+  "governance": {
+    "coi_statement_present": true,
+    "coi_declared": false,
+    "coi_text": "The authors declare no competing interests.",
+    "funding_statement_present": true,
+    "funders": [
+      "Japan Society for the Promotion of Science"
+    ],
+    "funding_none_declared": false,
+    "ethics_identifier": "IRB-2023-114",
+    "ethics_body": "University ethics committee (named in the paper)",
+    "consent_covers_republication": null,
+    "consent_evidence": "The paper states written informed consent was obtained; neither the paper nor the deposit says whether it covered open republication of participant-level data.",
+    "pii_present": true,
+    "pii_description": "One deposited file pairs a participant code with a session date; the pairing narrows most participants to a single club training slot. Reported to the authors at the coarsest level that lets them find it; the file and column names are in the disclosure email, not in this record.",
+    "pii_detector_scope": "Scanned all 213 files under pkg/. Forms covered: bare P-codes, underscore-prefixed codes (CYC_P07), and club-prefixed codes; dates in ISO, dd/mm/yyyy and dd.mm.yyyy; clocks hh:mm:ss. Two xlsx workbooks and one rds were decoded before scanning rather than pattern-matched as bytes. Negative control: ordinary prose from the paper's Methods does not fire. Positive controls used out-of-range ids (P999).",
+    "anonymisation_claimed": true,
+    "disclosure_notified": true,
+    "disclosure_notified_at": "2026-07-16T09:00:00Z"
+  },
+  "disclosure": {
+    "flags": [
+      "identifiability_indirect"
+    ],
+    "urgency": "prompt",
+    "statement": "One deposited file pairs a participant code with the date of that participant's testing session. Combined with the club training schedules published on the three clubs' own websites, the pairing narrows most participants to a single slot. Re-identification requires that auxiliary information, so the exposure is real but not immediate.",
+    "consistent_with": "correction (deposit modification); the repository supports a direct file modification request, so no new deposit is required",
+    "findings_flagged": [
+      "F2"
+    ]
+  },
+  "assertions_withheld": {
+    "intent": "not_assessed",
+    "misconduct": "not_assessed",
+    "note": "This programme reports only what the artifacts show. It makes no finding as to cause, intent, or good faith, and recommends no editorial action. 'consistent_with' fields locate findings against published editorial standards and are descriptive only."
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "claim": "The deposited data and code return a standardised effect of 0.58 for the time-trial result; the article reports 0.65.",
+      "section": "Section 3",
+      "checklist_item": 3,
+      "impact": "value_wrong",
+      "impact_rank": 2,
+      "locus": "estimation",
+      "verification_tier": 3,
+      "expected_verifier_hours": 6,
+      "actual_verifier_hours": 5.5,
+      "paper_only": false,
+      "unverifiable_reason": null,
+      "blocked_tier": null,
+      "check_nature": "deterministic_with_tolerance",
+      "claim_ref": "section 3.2, Table 2, main effect size",
+      "evidence": {
+        "artifact": "pkg/code/02_effects.R + pkg/data/analysis_wave3.csv",
+        "operation": "execute as supplied, unmodified, R 4.4.1; effsize 0.9.0",
+        "expected": {
+          "d": 0.65
+        },
+        "observed": {
+          "d": 0.58
+        },
+        "tolerance_note": "Reproduced identically under effsize 0.8.1 and 0.9.0 and under all four exclusion rules the article describes. The gap is not attributable to environment, seed or solver version."
+      },
+      "consistent_with": "correction (corrigendum)",
+      "disclosure_flag": false,
+      "remedy_class": "one_number",
+      "remedy_description": "Correct d and its interval in Table 2 and the abstract; the direction and significance of the result are unchanged.",
+      "remedy_verified": true,
+      "package_locus": [
+        "code/02_effects.R:41",
+        "data/analysis_wave3.csv"
+      ],
+      "verification_script": "work/f1_effect_size.R",
+      "changes_conclusion": false,
+      "changes_conclusion_which": null,
+      "confidence": "CONFIRMED",
+      "benign_explanations_ruled_out": [
+        "Different exclusion set: reproduced under all four exclusion rules described in the paper; none gives 0.65.",
+        "Rounding: 0.58 does not round to 0.65 under any convention.",
+        "Package version drift: reproduced under effsize 0.8.1 and 0.9.0 with identical results."
+      ],
+      "affects": [
+        "Table 2",
+        "abstract"
+      ],
+      "verification": {
+        "verifier_count": 2,
+        "verifiers": [
+          {
+            "verifier": "V1",
+            "at": "2026-07-21",
+            "method": "re-ran work/f1_effect_size.R on a clean checkout",
+            "outcome": "reproduced",
+            "notes": null
+          },
+          {
+            "verifier": "V2",
+            "at": "2026-07-23",
+            "method": "recomputed d by hand from the deposited group means and SDs",
+            "outcome": "reproduced",
+            "notes": "0.582 by hand; matches to the printed precision."
+          }
+        ],
+        "all_reproduced": true
+      },
+      "provenance": {
+        "origin_role": "auditor_reproduction",
+        "auditor_report": "report/01_reproduction.md",
+        "adjudication_entry": "ADJ-02",
+        "ledger_row": "L-004",
+        "round_introduced": 0,
+        "independently_found_by": [
+          "auditor_reproduction",
+          "auditor_text_vs_data"
+        ],
+        "independent_corroboration_count": 2,
+        "agreed_after_seeing": [
+          "critic_stats"
+        ],
+        "contested_by_critic": true,
+        "survived_contest": true
+      }
+    },
+    {
+      "id": "F2",
+      "claim": "A deposited file pairs each participant's code with the date of their testing session.",
+      "section": "Section 7",
+      "checklist_item": 7,
+      "impact": "none",
+      "impact_rank": 0,
+      "locus": "data",
+      "verification_tier": 1,
+      "expected_verifier_hours": 0.25,
+      "actual_verifier_hours": null,
+      "paper_only": false,
+      "unverifiable_reason": null,
+      "blocked_tier": null,
+      "check_nature": "deterministic",
+      "claim_ref": null,
+      "evidence": {
+        "artifact": "pkg/data/ (one file; named in the disclosure email, not here)",
+        "operation": "scan every deposited file for a participant code and a date on one row",
+        "expected": "no participant code beside a date",
+        "observed": "one file pairs both across all rows",
+        "tolerance_note": null
+      },
+      "consistent_with": "correction (deposit metadata); removal is not in question",
+      "disclosure_flag": true,
+      "remedy_class": "one_line_code",
+      "remedy_description": "Drop the date column, or coarsen it to study week, and request a direct file modification through the repository -- OSF supports this without a new deposit.",
+      "remedy_verified": true,
+      "package_locus": [],
+      "verification_script": "work/f2_quasi_identifier_scan.R",
+      "changes_conclusion": false,
+      "changes_conclusion_which": null,
+      "confidence": "CONFIRMED",
+      "benign_explanations_ruled_out": [
+        "Dates could be audit-run artefacts rather than testing times: excluded, they match the wave schedule in Table 1.",
+        "Codes could be non-unique: excluded, each code appears in exactly one row per wave."
+      ],
+      "affects": [
+        "replication package"
+      ],
+      "verification": {
+        "verifier_count": 0,
+        "verifiers": [],
+        "all_reproduced": false
+      },
+      "provenance": {
+        "origin_role": "auditor_privacy_archive",
+        "auditor_report": "report/05_privacy_archive.md",
+        "adjudication_entry": "ADJ-05",
+        "ledger_row": "L-011",
+        "round_introduced": 0,
+        "independently_found_by": [
+          "auditor_privacy_archive"
+        ],
+        "independent_corroboration_count": 1,
+        "agreed_after_seeing": [],
+        "contested_by_critic": false,
+        "survived_contest": null
+      }
+    },
+    {
+      "id": "F3",
+      "claim": "The shipped script assigns the attention-matched task to both arms in wave 1; the Methods describe two distinct conditions from wave 1 onward.",
+      "section": "Section 4",
+      "checklist_item": 4,
+      "impact": "conclusion_contradicted",
+      "impact_rank": 5,
+      "locus": "analysis_code",
+      "verification_tier": 3,
+      "expected_verifier_hours": 10,
+      "actual_verifier_hours": 12.5,
+      "paper_only": false,
+      "unverifiable_reason": null,
+      "blocked_tier": null,
+      "check_nature": "deterministic",
+      "claim_ref": "section 4.1, wave-1 early training effect",
+      "evidence": {
+        "artifact": "pkg/code/01_assign.R + pkg/data/allocation.csv",
+        "operation": "trace the condition variable from allocation through the wave-1 model call",
+        "expected": "two distinct conditions at wave 1, per Methods section 2.3",
+        "observed": "both arms receive the attention-matched task at wave 1; the condition column is constant within that wave",
+        "tolerance_note": null
+      },
+      "consistent_with": "retraction, or retraction with republication where a valid analysis survives in the same materials",
+      "disclosure_flag": false,
+      "remedy_class": "reanalysis",
+      "remedy_description": "Re-run the wave-1 comparison with the arms as described, or amend the Methods to describe what was run. Either way Table 2 and the abstract need revisiting.",
+      "remedy_verified": true,
+      "package_locus": [
+        "code/01_assign.R:63-77",
+        "data/allocation.csv column condition"
+      ],
+      "verification_script": "work/f3_arm_assignment.R",
+      "changes_conclusion": true,
+      "changes_conclusion_which": "The claim that the wave-1 difference establishes an early training effect; as shipped, the wave-1 contrast is between two identical conditions.",
+      "confidence": "CONFIRMED",
+      "benign_explanations_ruled_out": [
+        "A deliberate wash-in design: excluded, the paper describes no wash-in and the preregistration specifies distinct arms from wave 1.",
+        "A superseded script left in the deposit: excluded, 00_master.R sources this file and no alternative exists in the package."
+      ],
+      "affects": [
+        "Table 2",
+        "Figure 2",
+        "Section 2.3 of the paper",
+        "abstract"
+      ],
+      "verification": {
+        "verifier_count": 1,
+        "verifiers": [
+          {
+            "verifier": "V1",
+            "at": "2026-07-22",
+            "method": "re-ran work/f3_arm_assignment.R and independently traced the condition column",
+            "outcome": "reproduced_with_deviation",
+            "notes": "Confirms both arms share the wave-1 task, but the constancy holds for 79 of 82 rows, not all 82; three rows carry a distinct code that the model call drops. The finding stands; the claim was narrowed to match."
+          }
+        ],
+        "all_reproduced": false
+      },
+      "provenance": {
+        "origin_role": "critic_data",
+        "auditor_report": "critique/round_2/critic_data.md",
+        "adjudication_entry": "ADJ-09",
+        "ledger_row": "L-023",
+        "round_introduced": 2,
+        "independently_found_by": [
+          "critic_data"
+        ],
+        "independent_corroboration_count": 1,
+        "agreed_after_seeing": [
+          "auditor_code_methods",
+          "critic_stats"
+        ],
+        "contested_by_critic": true,
+        "survived_contest": true
+      }
+    },
+    {
+      "id": "F4",
+      "claim": "Forty-one statistical tests are performed in the analysis code and twelve are reported, with no correction for multiplicity.",
+      "section": "Section 8",
+      "checklist_item": 12,
+      "impact": "conclusion_unsupported",
+      "impact_rank": 4,
+      "locus": "inference",
+      "verification_tier": 4,
+      "expected_verifier_hours": 16,
+      "actual_verifier_hours": null,
+      "paper_only": false,
+      "unverifiable_reason": null,
+      "blocked_tier": null,
+      "check_nature": "judgement",
+      "claim_ref": "section 3, secondary outcomes",
+      "evidence": {
+        "artifact": "pkg/code/ (all 41 R files)",
+        "operation": "inventory every call to a test function, hand-classify each as a hypothesis test or a diagnostic, then re-run the reported set under Holm correction over the 29 hypothesis tests",
+        "expected": "the reported significance pattern",
+        "observed": "seven of the twelve reported results lose significance under Holm over the full family of 29",
+        "tolerance_note": "Which tests constitute the family is a judgement and is contestable; the alternative used is stated so it can be disagreed with."
+      },
+      "consistent_with": "expression of concern",
+      "disclosure_flag": false,
+      "remedy_class": "reanalysis",
+      "remedy_description": "Report the full test family, or state the confirmatory subset preregistered in advance and correct the exploratory remainder.",
+      "remedy_verified": true,
+      "package_locus": [
+        "code/"
+      ],
+      "verification_script": "work/f4_test_inventory.R",
+      "changes_conclusion": false,
+      "changes_conclusion_which": null,
+      "confidence": "CONFIRMED",
+      "benign_explanations_ruled_out": [
+        "Unreported tests could be diagnostics rather than hypothesis tests: excluded by hand-classifying all 41 calls; 29 are hypothesis tests on outcome variables.",
+        "The preregistration could designate the twelve: excluded, it names seven."
+      ],
+      "affects": [
+        "Section 3 of the paper"
+      ],
+      "verification": {
+        "verifier_count": 0,
+        "verifiers": [],
+        "all_reproduced": false
+      },
+      "provenance": {
+        "origin_role": "auditor_code_methods",
+        "auditor_report": "report/04_code_methods.md",
+        "adjudication_entry": "ADJ-11",
+        "ledger_row": "L-030",
+        "round_introduced": 0,
+        "independently_found_by": [
+          "auditor_code_methods",
+          "auditor_reproduction",
+          "critic_stats"
+        ],
+        "independent_corroboration_count": 3,
+        "agreed_after_seeing": [],
+        "contested_by_critic": true,
+        "survived_contest": false
+      }
+    },
+    {
+      "id": "F5",
+      "claim": "The wave-2 accelerometer series behind Figure 3 is not deposited, and Figure 3 cannot be regenerated by any route in the package.",
+      "section": "Section 9",
+      "checklist_item": 10,
+      "impact": "unverifiable",
+      "impact_rank": 1,
+      "locus": "data",
+      "verification_tier": 1,
+      "blocked_tier": 3,
+      "unverifiable_reason": "data_missing",
+      "expected_verifier_hours": 0.25,
+      "actual_verifier_hours": 0.3,
+      "paper_only": false,
+      "check_nature": "deterministic",
+      "claim_ref": "section 2.4 and Figure 3",
+      "evidence": {
+        "artifact": "pkg/ (all 213 files, including all 27 rds loaded and inventoried)",
+        "operation": "search the deposit for the accelerometer series at any granularity",
+        "expected": "a per-participant accelerometer series, per the data availability statement",
+        "observed": "only the derived per-participant summary is present",
+        "tolerance_note": null
+      },
+      "consistent_with": "editorial data-availability query",
+      "disclosure_flag": false,
+      "remedy_class": "one_line_code",
+      "remedy_description": "Deposit the series, or amend the statement to say which data are available.",
+      "remedy_verified": true,
+      "package_locus": [
+        "data/"
+      ],
+      "verification_script": "work/f5_deposit_inventory.R",
+      "changes_conclusion": false,
+      "changes_conclusion_which": null,
+      "confidence": "CONFIRMED",
+      "benign_explanations_ruled_out": [
+        "The series could be embedded in an rds: excluded, all 27 rds files were loaded and inventoried.",
+        "It could sit in a second deposit: excluded, the article links one OSF component and no other is referenced."
+      ],
+      "affects": [
+        "Figure 3",
+        "data availability statement"
+      ],
+      "verification": {
+        "verifier_count": 1,
+        "verifiers": [
+          {
+            "verifier": "V2",
+            "at": "2026-07-21",
+            "method": "independent inventory of the deposit",
+            "outcome": "reproduced",
+            "notes": "Nothing here suggests Figure 3 is wrong; only that it cannot be checked."
+          }
+        ],
+        "all_reproduced": true
+      },
+      "provenance": {
+        "origin_role": "auditor_text_vs_data",
+        "auditor_report": "report/03_text_vs_data.md",
+        "adjudication_entry": "ADJ-13",
+        "ledger_row": "L-034",
+        "round_introduced": 0,
+        "independently_found_by": [
+          "auditor_text_vs_data"
+        ],
+        "independent_corroboration_count": 1,
+        "agreed_after_seeing": [
+          "auditor_privacy_archive"
+        ],
+        "contested_by_critic": false,
+        "survived_contest": null
+      }
+    },
+    {
+      "id": "F6",
+      "claim": "The power analysis requires 79 participants; the article states the requirement as 78 and reports an analytic sample of 78.",
+      "section": "Section 6",
+      "checklist_item": 5,
+      "impact": "value_wrong",
+      "impact_rank": 2,
+      "locus": "reporting",
+      "verification_tier": 1,
+      "expected_verifier_hours": 0.25,
+      "actual_verifier_hours": 0.2,
+      "paper_only": true,
+      "unverifiable_reason": null,
+      "blocked_tier": null,
+      "check_nature": "deterministic",
+      "claim_ref": "section 2.2, power analysis",
+      "evidence": {
+        "artifact": "published article, section 2.2",
+        "operation": "recompute the G*Power requirement for 80% power at d = 0.65, two-tailed",
+        "expected": 78,
+        "observed": 79,
+        "tolerance_note": "The computed requirement is 78.4. An integer requirement rounds up: 78.4 participants means 79."
+      },
+      "consistent_with": "correction (corrigendum)",
+      "disclosure_flag": false,
+      "remedy_class": "one_number",
+      "remedy_description": "State the requirement as 79 and note that the achieved analytic sample of 78 falls one short of it.",
+      "remedy_verified": true,
+      "package_locus": [],
+      "verification_script": null,
+      "changes_conclusion": false,
+      "changes_conclusion_which": null,
+      "confidence": "CONFIRMED",
+      "benign_explanations_ruled_out": [
+        "A different target power or effect size: excluded, both are printed in the article and reproduce 78.4.",
+        "A one-tailed test: excluded, the article specifies two-tailed."
+      ],
+      "affects": [
+        "Section 2.2 of the paper"
+      ],
+      "verification": {
+        "verifier_count": 1,
+        "verifiers": [
+          {
+            "verifier": "V1",
+            "at": "2026-07-20",
+            "method": "recomputed in G*Power 3.1 from the printed parameters",
+            "outcome": "reproduced",
+            "notes": null
+          }
+        ],
+        "all_reproduced": true
+      },
+      "provenance": {
+        "origin_role": "auditor_text_vs_data",
+        "auditor_report": "report/03_text_vs_data.md",
+        "adjudication_entry": "ADJ-14",
+        "ledger_row": "L-036",
+        "round_introduced": 0,
+        "independently_found_by": [
+          "auditor_text_vs_data",
+          "auditor_reproduction"
+        ],
+        "independent_corroboration_count": 2,
+        "agreed_after_seeing": [],
+        "contested_by_critic": false,
+        "survived_contest": null
+      }
+    }
+  ],
+  "rollup": {
+    "impact_max": "conclusion_contradicted",
+    "impact_max_rank": 5,
+    "impact_max_finding": "F3",
+    "tier_of_max": 3,
+    "tier_distribution": {
+      "T1": 3,
+      "T2": 0,
+      "T3": 2,
+      "T4": 1,
+      "T5": 0
+    },
+    "total_expected_verifier_hours": 32.75,
+    "total_actual_verifier_hours": 18.5,
+    "residual_unverifiable": true,
+    "claims_affected": 5,
+    "paper_only": false,
+    "n_paper_only": 1,
+    "overall_rationale": "The maximum is set by F3 alone, and its tier travels with it: F3 was established at T3, so the comment's headline finding is a two-day check, not the two-week T4 grind that F4 represents. F5 means the deposit also contains territory we could not enter.",
+    "findings_total": 6,
+    "count_by_remedy_class": {
+      "one_line_code": 2,
+      "one_number": 2,
+      "reanalysis": 2,
+      "not_fixable": 0
+    },
+    "count_by_impact": {
+      "value_wrong": 2,
+      "none": 1,
+      "conclusion_contradicted": 1,
+      "conclusion_unsupported": 1,
+      "unverifiable": 1
+    },
+    "n_changing_conclusions": 1,
+    "n_disclosure_flagged": 1,
+    "n_multiply_corroborated": 3,
+    "max_independent_corroboration": 3,
+    "n_human_verified": 4,
+    "n_unverified": 2,
+    "reproduces": "partial",
+    "hypotheses_refuted_n": 6,
+    "credits": [
+      "The deposit is self-contained apart from one series and runs from a single master script.",
+      "A seed is set and the clustering is reproducible to the digit.",
+      "The preregistration is linked from the paper and its primary outcome matches the reported one."
+    ]
+  },
+  "timing": {
+    "publication_date": "2025-09-12",
+    "online_first_date": "2025-07-30",
+    "package_deposit_date": "2025-07-28",
+    "audit_start_date": "2026-07-14",
+    "audit_date": "2026-07-17",
+    "days_elapsed": 308,
+    "notes": null
+  },
+  "author_response": {
+    "status": "acknowledged",
+    "channel": "both",
+    "notified_at": "2026-07-16",
+    "acknowledged_at": "2026-07-24",
+    "disputed_at": null,
+    "correction_submitted_at": null,
+    "corrected_at": null,
+    "retracted_at": null,
+    "no_response_declared_at": null,
+    "days_to_first_response": 8,
+    "days_to_outcome": null,
+    "findings_disputed": [],
+    "findings_accepted": [
+      "F1",
+      "F2",
+      "F5"
+    ],
+    "correction_url": null,
+    "note": "Corresponding author acknowledged within eight days, accepted F1, F2 and F5, and asked for two weeks to check F3 against their own logs. Private correspondence; redact before release."
+  },
+  "run_ref": {
+    "run_json_path": "./run.json",
+    "run_json_sha256": null,
+    "protocol_version": "2026.05-r3"
+  },
+  "notes": "Coded against SCHEME.md v1.0. The three fields are orthogonal and must never be collapsed: F2 is impact 'none' carrying a real disclosure defect, F6 is a T1 five-minute check that is nonetheless a genuine reporting error, and the comment's impact_max is computed by Rule 1 rather than judged. F5 is 'unverifiable', not 'none' -- the deposit does not support the check, which is an epistemic state and not a clean bill of health."
+}
