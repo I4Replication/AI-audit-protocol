@@ -268,15 +268,33 @@ targeted rounds gets substantially the same comment for a third of the time.
 
 These are not stylistic preferences. A comment that breaks them gets sent back.
 
-**1. Page 1 is an executive summary of 200 words, hard, plus two summary tables.** Not "about
-200". Count them (tables excluded). The prose states what reproduced, the substantive errors, and
-nothing else; the **findings table** gives one numbered row per finding (the numbers are the claim
-numbers) and the **files table** one row per deposited file and its role. The whole comment is
-capped at **10 rendered pages, everything included** — `build_docx.sh` measures the built document
-and blocks over the cap. Cut prose, not findings: shrink a finding to its table row plus two body
-sentences and move the evidence detail to LEDGER.md/ADJUDICATION.md, which ship with the package.
-Left unchecked summaries drift to 800–1100 words, because every round adds a clause and none
-removes one; re-count after every round.
+**1. A comment is a paper, and reads like one (team decision 2026-08-22).** Abstract, numbered
+sections, conclusion, references — not a briefing note. There is **no executive summary** and **no
+summary table in the body or on page 1**. The abstract is ≤250 words of prose, counted, stating what
+reproduced, the substantive errors, and whether any published conclusion changes. §1 is an
+Introduction; the last numbered section is a Conclusion. The **findings table lives in Appendix A**,
+at the end, one numbered row per finding — it is an index to the argument, not a substitute for it,
+and a reader must meet the findings as prose first. `check_consistency.sh` blocks a numbered findings
+table anywhere before the appendix, and blocks a table inside the abstract.
+
+The front matter carries **Original study** and **Replication package** lines. They are not optional:
+they are the first thing an editor checks and what makes the comment self-locating on its own.
+
+The abstract must **finish on page 1**, checked on the rendered PDF. There is **no Recommendations
+section**: each finding carries its own one-line Remedy, beside its evidence.
+
+The comment is capped at **10 rendered pages of body** — front matter through the last numbered
+section. **References and appendices start on their own page and do not count**, so a comment never
+loses a finding to make room for its bibliography. `build_docx.sh` finds the first back-matter page
+and counts what precedes it.
+
+Prose is house style: one idea per sentence, fact before qualification, active voice, numbers inside
+the sentence, no intensifiers. Citations and URLs render **blue**, cross-references to tables,
+figures and sections **red**; `build_docx.sh` colours them by anchor prefix and reports the counts. Cut prose, not findings: shrink a finding to two body
+sentences and move the evidence detail to LEDGER.md/ADJUDICATION.md, which ship with the package; if
+it still does not fit, merge adjacent sections. Never move the appendix table into the body to save a
+heading, and never drop a numbered claim. Left unchecked, abstracts drift to 800–1100 words, because
+every round adds a clause and none removes one; re-count after every round.
 
 **2. Always cite both I4R AI-reproducibility papers**, in a `## References` section, and reference
 them once in §1 as the protocol the comment was produced under:
@@ -433,11 +451,19 @@ bash scripts/make_claims_script.sh --selftest        # 12-check fixture; run aft
 bash scripts/publish_completed.sh <audit-dir>        # files PDF + claims script into "Completed reports"
 ```
 
-**5. Every finished audit is filed where the team can see it.** `publish_completed.sh` copies the
-final PDF (hash-verified) and the claims script — nothing else — into
-`<discipline-root>/Completed reports/<Journal>/<Paper>/`, deriving journal and paper from the
-audit's own path. The folder holds exactly two files; anything else already there blocks the
-publish. This is the team's one glance-able index of what is done.
+**5. Every finished audit is filed where the team can see it.** `publish_completed.sh` copies four
+hash-verified files into `<discipline-root>/Completed reports/<Journal>/<Paper>/`, deriving journal
+and paper from the audit's own path: the final PDF, the claims script, and **`run.json` and
+`comment.json`** (added 2026-08-22). The folder holds exactly those four; anything else already
+there blocks the publish. This is the team's one glance-able index of what is done.
+
+The metadata pair lives here *as well as* in the registry because the registry is keyed by audit id
+and is not browsable by paper: someone reading a finished comment wants the record of how it was
+produced beside it, not in a directory named after a hash. The registry copy stays canonical, and
+`publish_completed.sh` refuses a pair that `finalize_run.sh` has not accepted — an unvalidated
+record filed next to a finished comment reads as authoritative and is not. Both files carry
+`safe_to_publish: false`; "Completed reports" is internal, so this is not a release, but read the
+`publication_redaction` block before forwarding the folder anywhere.
 
 Severity labels are mapped MECHANICALLY from `comment.json` — never re-judged at handoff:
 `conclusion_contradicted`/`conclusion_unsupported` at CONFIRMED → **retraction material**; the same
@@ -563,3 +589,15 @@ regenerated artefact over an edited one.
 | Critics fail with "no output file" and three retries burn | The provider was **out of credits**. The round-1 probe catches a rejected model but not an exhausted balance | Extend the probe to grep for `out of credits` and fail fast with the provider's own message |
 | A critic's report looks finished but has no findings | Critics write a skeleton early so a cut-off loses nothing; the skeleton then reads as a verdict of "nothing wrong" | Gate on the process exit code, never on the file existing. Quarantine skeletons rather than integrating them, and record the round as N of M critics |
 | Registry validation rejects sensible extra fields | `run.schema.json` and `comment.schema.json` are closed, and `critics_run`/`critics_failed` are **arrays of role names**, not counts | Read `$defs` before writing the record. Put narrative in `notes` (round) or `evidence.tolerance_note` (finding) |
+
+## Failure modes added from audit A43
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The verification notebook extracts ZERO claims and the stub gate passes it | `make_verification_notebook.sh` matched only the pre-merge report format — bolded numbered leads and `## Abstract`. Under the merged format (`## N.` sections, `## Executive summary`) it matched nothing, and a notebook with no claims has no stubs, so the gate that exists to catch an empty notebook waved it through | The extractor now also reads `[claim N]` tags and accepts either opening heading. More generally: a gate that counts violations passes vacuously on an empty artefact. Gate on the count of things that SHOULD be there, not only on the count of things that should not |
+| A whole body section is deleted and every gate still passes | `check_consistency.sh` §4 compares findings-table row numbers against `[claim N]` tags. Both survived in a files table, so the numbers agreed — while the section those rows cited no longer existed. A compression step had silently removed it | Cross-check that each cited section EXISTS, not merely that the numbers match. Still open; worth adding |
+| A snippet cannot reference a sibling file | The notebook generator emitted `PKG_DIR` but no `AUDIT_DIR` or `SNIPS_DIR`, and snippets are inlined verbatim into the notebook | All three are emitted now |
+| A tolerance is set wide enough to hide the defect it measures | A cell tolerance wider than one of the reported errors passed that cell as matching, and the comment's headline reproduction count came out one too high | Choose the tolerance so it SEPARATES: it must admit every genuine match and neither reported error. Record the reasoning in the snippet |
+| Two detectors disagree on a count and both look right | The adjudication tested whether a token appears in the article as a **substring**; the notebook tested whether it appears as a **word**. The substring test is more permissive and silently excluded a token occurring inside a longer word, giving 4 where the word test gave 5 | Report both counts with their rules when the difference is a genuine ambiguity, rather than picking one. Same family as the encoding and scope failures above: the pattern was fine, the *absence test* was not |
+| A page-cap fix nibbles for an hour and never lands | Each small prose cut was reabsorbed because the last body page was already full; the cap only moved when a whole structural element moved | When over the cap, cut structure (merge sections, move a table to the ledger), not sentences |
+| The staging gate tells you to overwrite the current draft with a stale one | `stage_release.sh` refuses unless `REPORT_final.md` is byte-identical to the highest-numbered `REPORT_v*.md`, and its remedy line says to copy the snapshot over the final — which would discard every round since that snapshot | Cut a NEW `REPORT_v<n>.md` from the current final instead. The gate is right that they differ; its suggested direction is backwards |

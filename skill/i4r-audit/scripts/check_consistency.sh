@@ -101,26 +101,46 @@ echo "== 3. house rules =="
 python3 - "$R" <<'PY2'
 import sys, pathlib, re
 s = pathlib.Path(sys.argv[1]).read_text(); bad = 0
-# 3a. page 1: executive summary <=200 words (prose only), plus the two required tables
-m0 = re.search(r"^## (?:Executive summary|Abstract)", s, re.M)
+# 3a. the comment opens as a paper: an Abstract of <=250 words, prose only, and NO table
+# before the appendix. The findings table belongs in Appendix A, never in the body and never on
+# page 1 (team decision 2026-08-22). "Executive summary" is accepted as a legacy heading but
+# warned about, so old drafts still gate rather than silently passing under a stale name.
+m0 = re.search(r"^## (Executive summary|Abstract)", s, re.M)
 if not m0:
-    print("  WARN: no executive summary found")
+    print("  FAIL: no Abstract heading"); bad = 1
 else:
+    if m0.group(1) == "Executive summary":
+        print("  WARN: heading is 'Executive summary'; a comment is a paper and takes an Abstract")
     a = m0.start()
     m = re.search(r"^## (?:1\.|\d)", s[a+5:], re.M)
     seg = s[a:a+5+m.start()] if m else s[a:a+8000]
-    if not m: print("  WARN: could not delimit the summary page (no '## 1.' heading after it)")
+    if not m: print("  WARN: could not delimit the abstract (no '## 1.' heading after it)")
     lines = seg.split("\n")[1:]
     prose = [l for l in lines if not l.lstrip().startswith("|")]
     w = len(" ".join(prose).split())
-    if w > 200: print(f"  FAIL: executive summary is {w} words (limit 200, tables excluded)"); bad = 1
-    else: print(f"  ok: executive summary {w} words (tables excluded)")
-    ntab = sum(1 for i, l in enumerate(lines)
-               if l.lstrip().startswith("|") and (i == 0 or not lines[i-1].lstrip().startswith("|")))
-    if ntab < 2:
-        print(f"  FAIL: page 1 must carry two tables (findings summary, files summary) — found {ntab}"); bad = 1
+    if w > 250: print(f"  FAIL: abstract is {w} words (limit 250)"); bad = 1
+    else: print(f"  ok: abstract {w} words")
+    if any(l.lstrip().startswith("|") for l in lines):
+        print("  FAIL: the abstract carries a table; it must be prose only"); bad = 1
     else:
-        print(f"  ok: {ntab} summary tables on page 1")
+        print("  ok: abstract is prose only")
+# 3a-ii. no numbered findings table anywhere before Appendix A
+mapp = re.search(r"^## Appendix", s, re.M)
+body = s[:mapp.start()] if mapp else s
+body_rows = re.findall(r"^\|\s*(\d+)\s*\|", body, re.M)
+if body_rows:
+    ln = body[:body.index("| " + body_rows[0])].count("\n") + 1 if ("| " + body_rows[0]) in body else 0
+    print(f"  FAIL: a numbered findings table appears in the body ({len(body_rows)} rows, first near "
+          f"line {ln}); it belongs in Appendix A"); bad = 1
+elif mapp:
+    print("  ok: no numbered findings table in the body")
+else:
+    print("  WARN: no Appendix heading found — the findings table has nowhere to live")
+# 3a-iii. no Recommendations section: remedies belong beside their findings (2026-08-22)
+if re.search(r"^## (?:\d+\. )?Recommendations\s*$", s, re.M):
+    print("  FAIL: a Recommendations section — each finding carries its own Remedy line instead"); bad = 1
+else:
+    print("  ok: no Recommendations section")
 # 3b. required citations
 for needle, label in (("AI-Games", "Brodeur et al. / AI-Games"),
                       ("AI-vertical", "I4R / AI-vertical")):
@@ -155,7 +175,7 @@ PY2
 [ $? -ne 0 ] && fail=1
 
 
-echo "== 4. findings table vs body vs claim tags =="
+echo "== 4. appendix findings table vs body claim tags =="
 python3 - "$R" <<'PYX'
 import sys, re, pathlib
 s = pathlib.Path(sys.argv[1]).read_text()
@@ -165,21 +185,22 @@ assert re.search(r"^\|\s*(\d+)\s*\|", "| 3 | a finding | none |", re.M), "table-
 assert re.search(r"\[claim (\d+)\]", "text [claim 7] more"), "tag extractor inert"
 # rows come from the PAGE-1 findings table only — a body table with a numeric first column
 # (a results table) must not read as phantom findings
-m0 = re.search(r"^## (?:Executive summary|Abstract)", s, re.M)
-m1 = re.search(r"^## (?:1\.|\d)", s[m0.end():], re.M) if m0 else None
-page1 = s[m0.start():m0.end()+m1.start()] if (m0 and m1) else (s[m0.start():m0.start()+8000] if m0 else "")
-rows = set(int(m) for m in re.findall(r"^\|\s*(\d+)\s*\|", page1, re.M))
+# rows come from the APPENDIX findings table only — a body table with a numeric first column
+# (a results table) must not read as phantom findings
+mapp = re.search(r"^## Appendix", s, re.M)
+appendix = s[mapp.start():] if mapp else ""
+rows = set(int(m) for m in re.findall(r"^\|\s*(\d+)\s*\|", appendix, re.M))
 tags = set(int(m) for m in re.findall(r"\[claim (\d+)\]", s))
 if not rows and not tags:
     print("  (no findings table and no claim tags — pre-handoff draft; nothing to cross-check)")
 elif not rows:
-    print(f"  FAIL: {len(tags)} claim tags but no numbered findings table on page 1"); bad = 1
+    print(f"  FAIL: {len(tags)} claim tags but no numbered findings table in Appendix A"); bad = 1
 else:
     # a body finding with no table row, or a row never tagged in the body, is a defect
     # (critics are told the same; this makes it blocking rather than advisory)
     missing_tags = sorted(rows - tags); orphan_tags = sorted(tags - rows)
     if missing_tags: print(f"  FAIL: findings-table rows never tagged in the body: {missing_tags}"); bad = 1
-    if orphan_tags:  print(f"  FAIL: [claim N] tags with no findings-table row: {orphan_tags}"); bad = 1
+    if orphan_tags:  print(f"  FAIL: [claim N] tags with no appendix findings-table row: {orphan_tags}"); bad = 1
     if not bad: print(f"  ok: {len(rows)} findings-table rows and body tags agree (extractors self-tested)")
 sys.exit(bad)
 PYX
