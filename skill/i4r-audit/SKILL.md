@@ -207,9 +207,25 @@ minutes; the serial critique loop is the whole problem. Four levers, in order of
 | Lever | Mechanism | Saving |
 |---|---|---|
 | Stop re-deriving settled facts | `scripts/make_settled.sh` → `SETTLED.md`, injected into every prompt | ~40–50% of critic time |
-| Run critics 2-up | `PARALLEL=2` (default); serial retry for any that come back empty | ~40% |
-| Two critics from round 5 | automatic; `CRITICS="stats data fairness"` to override | ~25 min/round |
+| **Two critics from round 2** | automatic (was round 5, moved 2026-08-22); `CRITICS=` to override | **~40 min/round** |
+| **Skip synthesis at ≤2 critics** | automatic; read the two reports directly. `SYNTH=1` forces it, `SYNTH=0` always skips | **~25 min/round** |
+| **Round 1 runs 4-up** | automatic (was 2-up); `PARALLEL=2` if throttling returns | **~25 min** |
 | Target the changed sections | `WRAPUP.txt` naming them | rounds so scoped ran 43–49 min against 80–109 |
+
+**Why round 2 needs only two critics.** Measured across the Philyaw and Refalo audits: round 1
+refuted a false claim and added a finding all five auditors had missed; round 2 produced **zero** new
+findings about either paper and only corrections to the audit's own record. By round 2 the failure
+mode has already flipped from "missed finding", which redundancy catches, to "wrong correction in our
+own new text", which two critics catch as well as four.
+
+**Why synthesis is skippable at two critics.** It is a serial pass that re-reads work already done,
+and it cost 22–25 minutes per round. With four reports it earns that by deduplicating and
+adjudicating between them. With two it does not — and in both audits the coordinator read the critic
+reports directly while synthesis was still running, and got everything the consolidated file later
+said.
+
+Together these take roughly **90 minutes off a four-hour audit** with no reduction in adversarial
+coverage.
 
 `SETTLED.md` is the big one. Across seven rounds, four critics each rebuilt the analytic frame,
 refit every model and re-ran the clustering — roughly 28 full reconstructions of artefacts that never

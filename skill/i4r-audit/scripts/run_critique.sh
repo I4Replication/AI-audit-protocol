@@ -78,21 +78,29 @@ cp "$REPORT" "$WS/report/REPORT_TO_REVIEW.md"
 
 NAMES="stats data fairness completeness"
 
-# Round-dependent critic set. Rounds 1-4 need all four: the failure mode then is a MISSED finding
-# and redundancy is what catches it. From round 5 the failure mode flips to a WRONG correction in
-# our own new text, which two critics catch as reliably as four — in calibration rounds 6 and 7,
-# three of four critics converged on the identical items. Override with CRITICS=.
-if [ -z "${CRITICS:-}" ] && [ "$ROUND" -ge 5 ]; then
-  NAMES="stats data"
-  echo "  round $ROUND >= 5: running 2 critics (set CRITICS to override)"
+# Round-dependent critic set. Round 1 needs all four: the failure mode then is a MISSED finding and
+# redundancy is what catches it. FROM ROUND 2 the failure mode has already flipped to a WRONG
+# correction in our own new text, which two critics catch as reliably as four. Measured over the
+# Philyaw and Refalo audits (2026-08-21/22): round 2 produced zero new findings about either paper
+# and only corrections to the audit's own record, and in earlier calibration rounds three of four
+# critics converged on identical items. The threshold moved from 5 to 2 on 2026-08-22; it saves
+# roughly 40 minutes a round. Override with CRITICS=.
+if [ -z "${CRITICS:-}" ] && [ "$ROUND" -ge 2 ]; then
+  NAMES="stats completeness"
+  echo "  round $ROUND >= 2: running 2 critics (set CRITICS to override)"
 elif [ -n "${CRITICS:-}" ]; then
   NAMES="$CRITICS"
 fi
 
-# Critics ran sequentially because four concurrent sessions were throttled to death in round 1.
-# Four was too many; one is over-correction. Default to 2 with retry, override with PARALLEL=1
-# if throttling reappears.
-PARALLEL="${PARALLEL:-2}"
+# Concurrency. Four concurrent sessions were throttled to death once, on an older CLI; the fix at
+# the time was to drop to one, then to two. The pre-flight probe now catches a dead account or a
+# rejected model before any critic starts, and every critic is individually resumable (a non-empty
+# output counts as done), so a throttled critic costs a retry rather than the round. Round 1 runs
+# its four critics 4-up; later rounds have only two critics anyway. Set PARALLEL=2 or 1 if
+# throttling reappears — the serial retry pass below already recovers anything that comes back empty.
+if [ -z "${PARALLEL:-}" ]; then
+  if [ "$ROUND" -eq 1 ]; then PARALLEL=4; else PARALLEL=2; fi
+fi
 
 # Round 1 lost critic_completeness and three synthesis attempts to a DNS outage
 # ("failed to lookup address information"). Wait for connectivity to come back rather than
@@ -206,6 +214,17 @@ ls -la "$OUT"/critic_*.md 2>/dev/null || echo "  (none)"
 present=$(ls "$OUT"/critic_*.md 2>/dev/null | wc -l | tr -d ' ')
 [ "$present" -gt 0 ] || { echo "FATAL: no critic output; aborting synthesis"; exit 1; }
 
+# Synthesis is a serial pass that re-reads work already done, and it cost 22-25 minutes per round
+# in the 2026-08-22 audits. With four critic reports it earns that by deduplicating and adjudicating
+# between them. With two it does not: the coordinator can read both directly, and reading them
+# directly is what actually happened in those audits while synthesis was still running. Skipped at
+# <=2 critics unless SYNTH=1 forces it; SYNTH=0 skips it always.
+if [ "${SYNTH:-auto}" = "0" ] || { [ "${SYNTH:-auto}" = "auto" ] && [ "$present" -le 2 ]; }; then
+  echo "=== Round ${ROUND}: synthesis SKIPPED (${present} critic report(s) — read them directly) ==="
+  echo "    critic reports: $(ls "$OUT"/critic_*.md | tr '\n' ' ')"
+  echo "    set SYNTH=1 to force a consolidated CRITIQUE.md."
+  exit 0
+fi
 echo "=== Round ${ROUND}: synthesis over ${present} critiques ==="
 subst "$P/synth.txt" | sed "s/\${present}/${present}/g" > "$OUT/prompt_synth.txt"
 
