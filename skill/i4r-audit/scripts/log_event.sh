@@ -178,10 +178,21 @@ write_event () {
         | .status = (if .status == "initialized" then "running" else .status end)
 
       elif $type == "phase_end" then
+        # A phase closed in the same second it opened was stamped retroactively, not measured.
+        # Record null rather than 0: a zero that looks measured is worse than an honest gap, and
+        # the rest of this record already follows that rule. Added 2026-08-22, after two audits
+        # filed 0h00m intake and release phases that nobody had actually timed.
+        # NOTE: no apostrophes in this comment. It sits inside a single-quoted shell string.
         .phases[$p.phase].ended_at = $t
         | .phases[$p.phase].ran = (.phases[$p.phase].started_at != null)
-        | .phases[$p.phase].wall_clock_seconds = dur(.phases[$p.phase].started_at; $t)
-        | .phases[$p.phase].notes = ($p.notes // .phases[$p.phase].notes)
+        | (dur(.phases[$p.phase].started_at; $t)) as $d
+        | .phases[$p.phase].wall_clock_seconds =
+            (if $d == null then null elif $d < 2 then null else $d end)
+        | .phases[$p.phase].notes =
+            (($p.notes // .phases[$p.phase].notes) as $n
+             | if ($d != null and $d < 2)
+               then (($n // "") + " [duration not recorded: opened and closed in the same second, so it was stamped retroactively rather than measured]" | ltrimstr(" "))
+               else $n end)
 
       elif $type == "round_start" then
         ensure_round($p.round)

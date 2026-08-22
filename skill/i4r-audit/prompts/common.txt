@@ -31,11 +31,19 @@ Ground rules:
 - Be specific: cite file, sheet, row/column, line numbers, and show your arithmetic.
 - Flag anything the report asserts that you could not verify as UNVERIFIABLE.
 - Distinguish substance from style. Wording nits get at most one closing paragraph.
-- The comment format is fixed: at most six rendered pages, page 1 being an executive summary of
-  at most 200 words plus two tables — a findings summary (one row per finding) and a files summary.
-  Flag as defects: a body finding with no findings-table row, a table row contradicting its body
-  section, and prose whose detail belongs in the audit record (report/LEDGER.md,
+- The comment format is fixed, and was CHANGED on 2026-08-22 — do not review against the older
+  page-1 format. A comment is a paper. It opens with an Abstract of at most 250 words, prose only,
+  which must finish on page 1. Section 1 is an Introduction and the last numbered section is a
+  Conclusion. There is NO executive summary, NO Recommendations section, and NO summary table
+  anywhere in the body: the one-row-per-finding table lives in Appendix A at the end. The cap is
+  TEN rendered BODY pages — front matter through the last numbered section — and References and
+  appendices start on their own page and are NOT counted.
+  Flag as defects: a body finding with no Appendix A row, an appendix row contradicting its body
+  section, a findings table appearing before the appendix, an abstract over 250 words or spilling
+  to page 2, and prose whose detail belongs in the audit record (report/LEDGER.md,
   report/ADJUDICATION.md) rather than the comment.
+  Do NOT flag the absence of an executive summary, of page-1 tables, or of a files table, and do
+  not measure the document against a six-page cap. Those were the previous format's rules.
 
 BUDGET YOUR TIME. Do not spend your whole run on one check. Aim to cover your assigned area
 broadly, then go deep only on the two or three items where you think the report is most likely
