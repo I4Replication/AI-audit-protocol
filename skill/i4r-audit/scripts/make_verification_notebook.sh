@@ -82,7 +82,7 @@ for line in report.split("\n"):
     if m: cur_sec = f"Section {m.group(1)} — {m.group(2).strip()}"
     m = re.match(r"^##\s+(Appendix\s+A)\.?\s*(.*)$", line)
     if m: cur_sec = "Appendix A"
-    m = re.match(r"^##\s+(Abstract)\s*$", line)
+    m = re.match(r"^##\s+(Abstract|Executive summary)\s*$", line)
     if m: cur_sec = "Abstract"
 
 # re-walk, tracking the section each paragraph belongs to
@@ -92,7 +92,7 @@ for para in para_split(report):
     m = re.match(r"^##\s+(\d+)\.\s+(.*)$", first)
     if m: cur_sec = f"Section {m.group(1)}"
     elif re.match(r"^##\s+Appendix", first): cur_sec = "Appendix A"
-    elif re.match(r"^##\s+Abstract", first): cur_sec = "Abstract"
+    elif re.match(r"^##\s+(Abstract|Executive summary)", first): cur_sec = "Abstract"
     elif re.match(r"^##\s+", first): cur_sec = first.lstrip("# ").strip()
     flat = " ".join(para.split())
     m = re.match(r"\*\*([0-9]+\.[0-9]+|A[0-9]+)\.?\s+(.+?)\*\*(.*)$", flat)
@@ -100,10 +100,18 @@ for para in para_split(report):
         cid = "C-" + m.group(1)
         claims.append(dict(id=cid, head=m.group(2).strip(), body=m.group(3).strip(),
                            sec=cur_sec, full=flat))
+    # Merged page-1 format: findings are tagged inline as [claim N] inside a section body.
+    for cm in re.finditer(r"\[claim (\d+)\]", flat):
+        n = int(cm.group(1))
+        if any(c["id"] == f"C-{n}" for c in claims): continue
+        lo = flat.rfind(".", 0, cm.start()); lo = 0 if lo < 0 else lo + 1
+        hi = flat.find(".", cm.end()); hi = len(flat) if hi < 0 else hi + 1
+        sent = flat[lo:hi].strip()
+        claims.append(dict(id=f"C-{n}", head=sent, body="", sec=cur_sec, full=sent))
 
 # abstract sentences carrying a numeral
 NUMWORD = r"\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty-four|thirty)\b"
-am = re.search(r"##\s+Abstract\s*\n(.*?)(?=\n##\s)", report, re.S)
+am = re.search(r"##\s+(?:Abstract|Executive summary)\s*\n(.*?)(?=\n(?:##\s|\*\*Table))", report, re.S)
 if am:
     abst = " ".join(am.group(1).split())
     n = 0
@@ -120,6 +128,7 @@ def sortkey(c):
     # cross-reference is only meaningful once the body check has produced an observation.
     if tail.startswith("ABS."): return (3, 0, int(tail.split(".")[1]))
     if tail.startswith("A"):    return (2, int(tail[1:]), 0)
+    if "." not in tail:         return (1, int(tail), 0)
     a, b = tail.split(".")
     return (1, int(a), int(b))
 claims.sort(key=sortkey)
@@ -276,6 +285,21 @@ PKG_DIR <- local({
        "or run this notebook from the audit directory that contains pkg/.")
 })
 stopifnot(dir.exists(PKG_DIR))
+
+## The audit directory and the snippet directory, derived the same portable way as PKG_DIR.
+## Snippets are inlined verbatim into this notebook, so a snippet that needs a sibling file
+## (a shared loader, the paper text) has no other way to name one.
+AUDIT_DIR <- local({
+  e <- Sys.getenv("I4R_AUDIT_DIR", "")
+  if (nzchar(e) && dir.exists(e)) return(e)
+  normalizePath(dirname(PKG_DIR))
+})
+SNIPS_DIR <- local({
+  e <- Sys.getenv("I4R_SNIPS_DIR", "")
+  if (nzchar(e) && dir.exists(e)) return(e)
+  cand <- file.path(AUDIT_DIR, "verification_snippets")
+  if (dir.exists(cand)) normalizePath(cand) else cand
+})
 
 ## ---- read-only guard -------------------------------------------------------
 ## pkg/ is the authors' deposit. In calibration an auditor's own scripts grew the archive by

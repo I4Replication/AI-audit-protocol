@@ -28,3 +28,24 @@ Merged from the JP branch (`Skill JP/i4r-audit`, superset pipeline) and the Brun
   quiet afternoon.
 - Old comments (15 in the registry) predate the page-1 format and the claims-script handoff; they
   are NOT republished (team decision: no backfill).
+
+## Format revision, 2026-08-22
+
+The Bruno page-1 format (executive summary + two summary tables on the opening page) was exercised
+for the first time on the Philyaw audit and was rejected on delivery. It does not read like an
+academic comment: a comment is a paper, and a reader should meet the argument in prose before an
+inventory table. Reverted toward the JP structure, keeping Bruno's ten-page cap and his measured
+page-count gate:
+
+| Piece | Now |
+|---|---|
+| Opening | `## Abstract`, ≤250 words, prose only. No executive summary |
+| §1 | Introduction (was: scope and method as a bare heading) |
+| Findings table | **Appendix A**, last page. Blocked anywhere earlier by `check_consistency.sh` §3a-ii |
+| Last numbered section | Conclusion |
+| Front matter | Unchanged — the Original study and Replication package lines were the part that worked |
+| Page cap | Unchanged at 10, measured on the built document |
+
+`check_consistency.sh` §3a now gates the abstract (≤250 words, no table) and §4 reads findings-table
+rows from the appendix rather than page 1. Both directions self-tested against planted violations.
+Backups: `reference/report_structure.md.bak`, `scripts/check_consistency.sh.bak`, `SKILL.md.bak`.
