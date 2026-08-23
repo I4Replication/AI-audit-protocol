@@ -200,6 +200,52 @@ print("  ok: no code/timestamp pairing and no per-participant listing (both dete
 PY
 [ $? -ne 0 ] && viol=1
 
+# 3b. OPAQUE PER-ROW IDENTIFIERS, in any format. Check 3 above knows only the code shapes of the
+# audits it was written for. On audit A12 a deposit keyed by Qualtrics response ids put
+# 5,546 of them across nine staged files and check 3 passed, because none of them looks like
+# anything it was taught. That is the scope failure this skill warns about, committed by the skill.
+#
+# So this check knows no formats. It looks for tokens with the SHAPE of an opaque row key -- long,
+# mixed case, containing digits -- and flags a file holding many DISTINCT ones, which is what a
+# per-participant listing is and what prose never is. Hex-only tokens are excluded so that hashes
+# and commit ids do not trip it.
+python3 - "$R" <<'IDPY'
+import re, pathlib, sys
+R = pathlib.Path(sys.argv[1])
+TOKEN = re.compile(r"\b(?:[A-Za-z]{1,4}_)?(?=[A-Za-z0-9]*[A-Z])(?=[A-Za-z0-9]*[a-z])"
+                   r"(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{12,}\b")
+HEXONLY = re.compile(r"\A[0-9a-fA-F]+\Z")
+THRESHOLD = 20
+
+def ids(text):
+    return {t for t in TOKEN.findall(text) if not HEXONLY.match(t.split("_")[-1])}
+
+# self-test both ways; controls are out of range so one can never be mistaken for real data
+POS = "\n".join("R_%dZzAaBbCcDd%03d" % (i, i) for i in range(30))
+if len(ids(POS)) < THRESHOLD:
+    print("  FAIL: the opaque-identifier detector does not fire on a planted listing"); sys.exit(1)
+NEG = "The response identifier R_9ZzAaBbCcDd999 appears once, in prose, which is fine."
+if len(ids(NEG)) >= THRESHOLD:
+    print("  FAIL: the opaque-identifier detector fires on prose"); sys.exit(1)
+if ids("a" * 40) or ids("deadbeefcafe1234"):
+    print("  FAIL: the opaque-identifier detector fires on a hash or a flat string"); sys.exit(1)
+
+bad = []
+for f in sorted(R.rglob("*")):
+    if not f.is_file() or "pkg_manifest" in f.name: continue
+    try: t = f.read_text(errors="ignore")
+    except Exception: continue
+    n = len(ids(t))
+    if n >= THRESHOLD: bad.append((str(f.relative_to(R)), n))
+if bad:
+    print("  FAIL: %d file(s) hold a per-row identifier listing in an unrecognised format:" % len(bad))
+    for b, n in bad[:10]: print("    %s  (%d distinct identifiers)" % (b, n))
+    print("    Withhold the file and keep the script that regenerates it.")
+    sys.exit(1)
+print("  ok: no opaque per-row identifier listing (detector self-tested, threshold %d)" % THRESHOLD)
+IDPY
+[ $? -ne 0 ] && viol=1
+
 # 4. no absolute home path naming a real account. Placeholders are fine and are what an auditor
 # should write; a real username is a disclosure. Self-tested in both directions.
 python3 - "$R" <<'PY'
