@@ -104,9 +104,26 @@ for para in para_split(report):
     for cm in re.finditer(r"\[claim (\d+)\]", flat):
         n = int(cm.group(1))
         if any(c["id"] == f"C-{n}" for c in claims): continue
-        lo = flat.rfind(".", 0, cm.start()); lo = 0 if lo < 0 else lo + 1
-        hi = flat.find(".", cm.end()); hi = len(flat) if hi < 0 else hi + 1
-        sent = flat[lo:hi].strip()
+        # A tag sits either INSIDE its sentence ("... 59 of 72 [claim 6] rows ...") or AFTER that
+        # sentence's full stop ("... 59 of 72 rows. [claim 6]"). Both occur. Taking the text that
+        # follows the tag unconditionally attaches every claim to the NEXT sentence, which is an
+        # off-by-one that survives every gate: the notebook still has one section per tag, so the
+        # count is right and the content is wrong. Decide by looking at what precedes the tag.
+        # Sentence ends are terminators followed by whitespace or end-of-text. A bare `.` will
+        # not do: "0.58" and "p = .0004" are the substance of these claims, and splitting on the
+        # decimal point silently truncates the sentence to its own tail.
+        ends = [m.end() for m in re.finditer(r"[.!?](?=\s|$)", flat)]
+        befo = [e for e in ends if e <= cm.start()]
+        lo   = befo[-1] if befo else 0
+        lead = flat[lo:cm.start()].strip()
+        if lead:
+            afte = [e for e in ends if e > cm.end()]
+            sent = flat[lo:(afte[0] if afte else len(flat))]
+        else:
+            # nothing but whitespace between the previous full stop and the tag: the tag trails
+            # its own sentence, so that sentence is the one before `lo`.
+            sent = flat[(befo[-2] if len(befo) > 1 else 0):lo]
+        sent = re.sub(r"\s*\[claim \d+\]\s*", " ", sent).strip()
         claims.append(dict(id=f"C-{n}", head=sent, body="", sec=cur_sec, full=sent))
 
 # abstract sentences carrying a numeral
@@ -520,7 +537,13 @@ w("```{r summary, error=TRUE}")
 # Unfinished stubs are counted as failures by name. A stub calls stop(), but chunks run with
 # error=TRUE so that one bad section cannot hide the rest -- which means a stub would otherwise
 # leave no trace in the summary at all. Naming them here closes that hole.
+w("## Claims the generator left as TODO stubs. This is a STARTING POINT, not a standing verdict:")
+w("## the next line removes any claim that has since acquired a real expect()/judgement()/")
+w("## unverifiable() record, so writing a check clears the stub automatically. Without this the")
+w("## summary reports a fully written notebook as entirely unverified.")
 w("STUB_CLAIMS <- c(" + ", ".join(f'"{i}"' for i in stub_ids) + ")")
+w("STUB_CLAIMS <- setdiff(STUB_CLAIMS,")
+w("  unique(c(vapply(.V$exp, function(e) e$id, character(1)), names(.V$state))))")
 
 summary_r = r'''
 declared <- .V$order

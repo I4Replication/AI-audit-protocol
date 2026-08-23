@@ -312,6 +312,16 @@ write_event () {
             exit_status: $p.exit_status,
             passed: ($p.exit_status == 0),
             log_path: ($p.log_path // null) }]
+        # finalize checks the ROUND record, not gates_run, when it asks whether the consistency
+        # gate ran for every round. Recording the gate here and nowhere else made a fully compliant
+        # audit fail that check with no way to satisfy it except a second round_result event.
+        # Project it onto the round too, so one gate call is enough.
+        | (if $p.gate == "check_consistency" and $p.round != null then
+             .rounds = [ .rounds[]? | if .round == $p.round then
+                 .consistency_check_run = true
+                 | .consistency_check_exit = $p.exit_status
+               else . end ]
+           else . end)
 
       elif $type == "delivery" then
         .delivery = ((.delivery // {}) + {

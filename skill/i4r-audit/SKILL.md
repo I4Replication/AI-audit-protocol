@@ -617,3 +617,61 @@ regenerated artefact over an edited one.
 | Two detectors disagree on a count and both look right | The adjudication tested whether a token appears in the article as a **substring**; the notebook tested whether it appears as a **word**. The substring test is more permissive and silently excluded a token occurring inside a longer word, giving 4 where the word test gave 5 | Report both counts with their rules when the difference is a genuine ambiguity, rather than picking one. Same family as the encoding and scope failures above: the pattern was fine, the *absence test* was not |
 | A page-cap fix nibbles for an hour and never lands | Each small prose cut was reabsorbed because the last body page was already full; the cap only moved when a whole structural element moved | When over the cap, cut structure (merge sections, move a table to the ledger), not sentences |
 | The staging gate tells you to overwrite the current draft with a stale one | `stage_release.sh` refuses unless `REPORT_final.md` is byte-identical to the highest-numbered `REPORT_v*.md`, and its remedy line says to copy the snapshot over the final — which would discard every round since that snapshot | Cut a NEW `REPORT_v<n>.md` from the current final instead. The gate is right that they differ; its suggested direction is backwards |
+
+## Failure modes — Gomez audit (2026-08-22), first controlled model A/B
+
+This run put five Sonnet 5 and five Opus 5 auditors on one paper over byte-identical prompts. The
+comparison is at `report/COMPARISON.md` in that audit; what follows is what the run taught the
+skill.
+
+| What happened | Why it matters | What to do |
+|---|---|---|
+| A diagnostic I called "constant-free" was not. The ratio of antegrade to retrograde shear looked like it cancelled every unknown, and did not: retrograde shear rate falls below the viscosity cap on many rows, so viscosity differs between channels. | It reached the right answer for a reason that does not hold, and it deviated by up to 47 cm/s on rows where the answer was independently known. | Every diagnostic gets a self-test on rows whose answer is known by another route, **before** any zero from it is believed. The self-test is what caught this; without it the finding would have shipped on bad reasoning. |
+| Three auditor headline counts were wrong as stated while their findings were right: "11 of 12" abstract figures (really 15 of 16), "70 of 72" retrograde Reynolds (really 61 of 72), "23 of 24 exactly" (really 18 exactly, 23 within the printed rounding). | A comment that carries an unverified count is wrong in public even when its finding is sound. | Re-derive every number that enters the comment. Do not carry an auditor's count across, however confident the report sounds. |
+| `make_verification_notebook.sh` anchored each `[claim N]` to the sentence **after** the tag. Every section had the wrong claim text. | It passes every gate — one section per tag, so the count is right and the content is wrong. | Fixed: the extractor now decides by what precedes the tag, and sentence boundaries no longer split on decimal points. Self-tested both placements. |
+| The generator baked `STUB_CLAIMS` at generation time, so a notebook with a real check for all 37 claims still reported all 37 as unwritten stubs. | The stub gate is the notebook's whole point; a stub list that never clears makes it uninformative rather than strict. | Fixed: the emitted list is now filtered at runtime against what `expect()`/`judgement()`/`unverifiable()` actually recorded. Self-tested in both directions. |
+| `check_consistency.sh` blocks any numbered table in the body, which also catches a legitimate results table whose first column happens to be numbered. | Correct behaviour, surprising in the moment. | Give body tables a non-numeric first column. Reserve numbering for Appendix A. |
+| `stage_release.sh` blocked on `/Users/jsmith/data` inside the PII detector's own positive-control fixture. | The fixture is not a leak, but weakening the gate for it would be worse than the false positive. | Assemble such literals at runtime so the detector still sees the string and the released file does not contain it. Two real leaks in auditor scripts were found in the same sweep, which is why the gate stays strict. |
+| I invented a first author in `PAPER.txt`. It propagated into the audit id and all ten auditor prompts. | The Opus privacy auditor caught it; the Sonnet one wrote "Corrections to the brief: None" while naming the correct author elsewhere in the same report. | Area 5 stays on the stronger model. Its real job is catching the coordinator's errors, not enumerating files. |
+| My pre-registered discriminator did not discriminate. Both arms gave the correct three-part answer on the paired/unpaired question, and both located the `paired = F` calls more precisely than my ground truth did. | A ground truth written before the run is only useful if a null result is reported as readily as a hit. | Record it. `ADJUDICATION.md` A6 and A11 log both places my ground truth was wrong and the arms were right. |
+
+**Model assignment, from the measured result.** Run Sonnet for area 3 (text-vs-data is enumeration
+against a fixed corpus; Sonnet's report was ~90% of Opus's at a fraction of the cost). Run Opus for
+areas 1, 2, 4 and 5 — every conclusion-changing finding in this audit came from those areas, and
+area 5 carries the brief-correction duty. The pattern across all ten reports: **Sonnet localises,
+Opus explains**, and causes are where conclusion-changing findings live.
+
+### What round-1 critique caught on the same audit
+
+The A/B above was run with full coordinator verification of every conclusion-changing claim before
+the critics saw anything. The round still refuted three claims and narrowed twelve. That is the
+argument for the stage, so the specifics are worth keeping.
+
+| What the critique caught | Why coordinator verification missed it |
+|---|---|
+| **The coordinator "corrected" an auditor and was wrong.** Opus-2 reported 70 of 72 retrograde Reynolds numbers reproducing. I rebuilt the viscosity with its shear-rate term hardcoded at the Methods' cap of 100 s⁻¹, got 61, and logged the auditor as overstating. The cap binds on **all 72 antegrade rows and only 62 retrograde ones**, so the shortcut reproduced antegrade *exactly* and corrupted retrograde. | The shortcut was validated on the channel where it happens to be exact. Detector scope has five axes and this was the regime axis: same formula, same file, different operating range. A simplification that reproduces one channel to 0.01% feels verified. |
+| Three claims stated as established fact were conditional: which column is authoritative in the frozen-velocity finding, whether the duplicated pairs are the same people, and whether the Methods' wording requires model-based contrasts. | Verifying that a computation is right is not the same as verifying that the sentence built on it is warranted. The arithmetic was correct in all three cases; the epistemic status was not. |
+| "The paper silently uses a second turbulence rule" — it does not; it defines a pulsatile critical Reynolds number and reports against it. | I checked the Methods' fixed thresholds against the Results' claim and stopped there, without reading the two paragraphs that introduce the criterion actually used. |
+| "No power column exists" — the column is named `workload`. | The detector's positive control fired, so the zero looked validated. The control proves the search *runs*; it does not prove the search *terms* cover the target. Add a term-coverage check, not just a control. |
+
+**Rules this adds.**
+
+1. When you re-derive an auditor's number and disagree, the disagreement is a finding about one of
+   you and you do not yet know which. Re-derive by a second, structurally different route before
+   recording the auditor as wrong. Both of my coordinator errors on this audit were corrections of
+   a correct auditor.
+2. A simplification of a published formula must be validated in **every regime the data occupy**,
+   not just the one you tested. Check whether a cap, floor or branch changes state across the rows.
+3. Separate "the arithmetic is right" from "the sentence is warranted". State the conditional when
+   the deposit cannot choose between two readings, and give the consequence of the reading you can
+   compute rather than presenting it as the correction.
+4. Run the critique stage even when you believe the comment is verified. On this audit the
+   coordinator had personally re-derived every conclusion-changing claim, and the round still
+   found four things wrong in about forty minutes of critic time.
+
+**Two script defects fixed while filing this audit.** `stage_release.sh` told the operator to copy
+the old snapshot over `REPORT_final.md` when the two differ, which discards the round just
+finished; it now names the correct direction and says when the reverse is right. And a
+`log_event.sh gate` event recorded only into `compliance.gates_run`, while `finalize_run.sh` checks
+the round record — so a compliant audit could not satisfy the consistency-gate check with one call.
+The gate event now projects onto both.
