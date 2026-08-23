@@ -675,3 +675,22 @@ finished; it now names the correct direction and says when the reverse is right.
 `log_event.sh gate` event recorded only into `compliance.gates_run`, while `finalize_run.sh` checks
 the round record — so a compliant audit could not satisfy the consistency-gate check with one call.
 The gate event now projects onto both.
+
+## Failure modes — Kritzler audit (2026-08-23), second model A/B
+
+Second controlled A/B, this time on a **clean** paper: a preregistered survey with a
+reproducible-manuscript deposit. Where the first A/B measured which model finds more on a broken
+paper, this one measured which invents less on a sound one. Comparison at `report/COMPARISON.md`.
+
+| What happened | Why it matters | What to do |
+|---|---|---|
+| **The critique stage found the biggest thing, and ten auditors did not.** Both headline results depend on pooling across sports; the classification is a cluster-level predictor, and under three standard sport-aware specifications both effects fall above the paper's own α. A fan-out of ten across two model tiers missed it. | The fan-out asks "is this number right?". This paper's problem was "is this the right model?", and enumeration does not reach it. | **Do not trade critique rounds for auditor breadth.** On a paper whose arithmetic is clean, the marginal return on the adversarial stage exceeds the marginal return on a second five auditors. |
+| **Opus's errors concentrated in its refutations, not its findings.** Four Opus claims failed verification against none of Sonnet's, and two were the same item: one auditor reported hard-coded country figures as reproducing, another *refuted* the discrepancy by inventing a double-rounding mechanism for a passage with no rounding code. | A refutation is the claim a coordinator is least likely to re-check, because it says there is nothing to look at. A confident wrong mechanism closes the question; an honest miss leaves it open. | **Re-derive an Opus report's refuted hypotheses, not just its findings.** That one rule would have caught three of the four errors here. |
+| A detector was scoped to the code shapes of previous audits, so `stage_release.sh` passed a staging area holding 5,546 Qualtrics identifiers and a converted copy of the raw participant data. | Self-tested successfully against its own controls and reported clean on a directory full of the thing it exists to catch. The same failure the audit was reporting about the paper. | Fixed: new check 3b knows no formats, and blocks any file with twenty or more distinct opaque row keys by shape. Self-tested both ways and against hashes. |
+| Both arms shared one `work/` directory. One Opus auditor confirmed its file **was** overwritten by the other arm and renamed its artefacts. | Same-name collisions make a cited evidence file possibly the other arm's, and blindness is weaker than claimed. Contamination pushes arms toward agreement, so measured gaps are a lower bound. | Give each arm `work/<arm>/`. One line in setup. |
+| Knitting inside `pkg/` made papaja regenerate a deposited file. Two auditors in two arms noticed independently; one disclosed a lapse it had committed itself. | Discipline caught what permissions should have prevented. | `chmod -R a-w` the deposit after the manifest; tell auditors to copy the Rmd into `work/` before knitting. |
+| My predicted discriminator failed for the second time running. | Two A/Bs, two wrong predictions, both times the arms outperformed my ground truth. | Keep writing the ground truth first and keep reporting the nulls. A discriminator that fails is a result about the coordinator, not a wasted step. |
+
+**On a clean paper the arms converge.** All ten auditors reproduced the sample; none reported a
+false discrepancy on a correct paper. The area split from the first A/B stands, but it matters less
+here than the critique budget does.
