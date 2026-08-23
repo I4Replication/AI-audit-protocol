@@ -39,8 +39,12 @@ if [ -n "$LATEST" ]; then
     echo "FATAL: report/REPORT_final.md missing. Copy REPORT_v${LATEST}.md to it first."; exit 1
   fi
   if ! cmp -s "$V" "$A/report/REPORT_final.md"; then
-    echo "FATAL: report/REPORT_final.md differs from REPORT_v${LATEST}.md — it is stale."
-    echo "       cp report/REPORT_v${LATEST}.md report/REPORT_final.md   then re-run."; exit 1
+    echo "FATAL: report/REPORT_final.md and REPORT_v${LATEST}.md differ."
+    echo "  If REPORT_final.md is the newer one -- the usual case, because a critique round edits"
+    echo "  it in place -- cut a new snapshot and re-run. Do NOT copy the snapshot over the final:"
+    echo "  that discards the round you just finished."
+    echo "       cp report/REPORT_final.md report/REPORT_v$((LATEST+1)).md   then re-run."
+    echo "  Only if REPORT_final.md is genuinely the stale one is the reverse copy right."; exit 1
   fi
   echo "  ok: REPORT_final.md matches REPORT_v${LATEST}.md"
 fi
