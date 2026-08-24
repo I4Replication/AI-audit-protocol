@@ -265,7 +265,7 @@ records your software versions and per-phase costs automatically &mdash; you nev
   <tr><td style="font-family:inherit;font-size:8.5pt">My laptop slept / crashed mid-run. Is the audit ruined?</td>
       <td>No. Everything on disk survives. Reopen Claude Code in the same folder and re-state the goal; completed auditors and critics are detected and skipped, and a half-finished critique round resumes when re-invoked with the same round number.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">I need to abandon a paper halfway. What do I do?</td>
-      <td><code>reserve_paper.sh release "&lt;paper-dir&gt;"</code> so a colleague can take it. If you forget, the claim shows STALE after 7 days and can be force-released &mdash; but releasing beats being nagged.</td></tr>
+      <td>Easiest: just tell Claude &ldquo;release my reservation on this paper&rdquo; in the session. Or run <code>reserve_paper.sh release "&lt;paper-dir&gt;"</code> yourself. Either way a colleague can take it immediately; if you forget, the claim shows STALE after 7 days and can be force-released &mdash; but releasing beats being nagged.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">The package has no code at all. Still auditable?</td>
       <td>Yes &mdash; that is itself a finding. The auditors work from the data and the printed statistics, the checks are written in R, and the claims script's no-code tail carries one manual check per claim.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">The paper used SPSS / Stata, which I don't own.</td>
@@ -273,9 +273,9 @@ records your software versions and per-phase costs automatically &mdash; you nev
   <tr><td style="font-family:inherit;font-size:8.5pt">How do I know it's actually done?</td>
       <td>Three signs, all required: finalize prints its <span style="color:#2d7a39;font-weight:600">ok:</span> lines ending in &ldquo;filed into &hellip;/registry/&hellip;&rdquo;; the paper's folder appears in Completed reports with exactly four files; your reservation is gone from <code>reservations/</code>.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">Do I read the comment before it counts?</td>
-      <td>Yes. You are the human in the loop: read the final PDF, especially findings marked retraction or corrigendum material, and the adjudication log's re-run decisions. The coordinator (Abel) reads every comment again before anything is submitted &mdash; but &ldquo;someone else will catch it&rdquo; is not a control.</td></tr>
+      <td>You can, and a skim of the retraction/corrigendum findings never hurts &mdash; but this is a pilot: every report will be assigned to a replicator who verifies each claim manually, and the coordinator reads every comment before anything is submitted. Your job is to produce the report cleanly, not to referee it.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">Can I edit the comment by hand?</td>
-      <td>Edit <code>report/REPORT_final.md</code>, never the .docx/.pdf, then ask the session to rebuild &mdash; the gates re-run on every build and will catch a format drift. Never renumber claims: the number joins the report, the appendix table, the claims script, and the survey.</td></tr>
+      <td><b>No &mdash; do not edit the reports.</b> The pipeline's gates, records, and claim numbering all assume the text the machinery produced; a hand edit breaks the joins and skips the checks. If something looks wrong, tell Claude what you saw and let the pipeline regenerate, or flag it in the team channel.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">The critics found problems with the audit itself. Is that bad?</td>
       <td>That is the design working. Across the calibration audits, most blocking criticisms were defects in our own draft, not the paper &mdash; caught before publication instead of after. An audit whose critique rounds find nothing is the suspicious one.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">Codex asks me to log in again / says quota exceeded.</td>
