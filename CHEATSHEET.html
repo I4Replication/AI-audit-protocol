@@ -133,17 +133,20 @@
   </ul>
 </div>
 
-<h2><span class="n">3</span>Step zero, every time: reserve your paper</h2>
-<p>Six people work this tree at once. The reservation is what stops two of you burning a day on the same paper.</p>
+<h2><span class="n">3</span>Reservations — automatic, but know what they look like</h2>
+<p>Six people work this tree at once. <b>The skill claims the paper for you the moment an audit starts</b> and
+aborts cleanly if someone else holds it — you never reserve by hand before running. The commands below are for
+checking the board, claiming a paper ahead of time, or giving one back.</p>
 <div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — claim a paper</span></div>
 <pre><span class="p">$</span> export I4R_OWNER=yourname@yourmachine   <span class="cm"># once per shell; defaults to user@host</span>
-<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/reserve_paper.sh claim \
-    "&lt;discipline-root&gt;/&lt;Journal&gt;/&lt;Paper folder&gt;"
-claim written; waiting 15s for sync conflicts ...
-<span class="ok">RESERVED: Example Paper Title (2024)  ->  .../reservations/Journal_of_Example_Studies_Example_Paper_Title_2024_.json</span>
 
-<span class="cm"># what a collision looks like — this is the system working, not an error. Pick another paper:</span>
-<span class="no">REFUSED: reserved by ana@macbook since 2026-08-24T20:06:32Z</span>
+<span class="cm"># what the AUTOMATIC claim looks like when the audit starts (you do nothing):</span>
+  [reserve] claim written; waiting 15s for sync conflicts ...
+  <span class="ok">[reserve] RESERVED: Example Paper Title (2024)  ->  .../reservations/Journal_of_Example_Studies_Example_Paper_Title_2024_.json</span>
+
+<span class="cm"># and when someone else already holds the paper — the audit stops before doing any work:</span>
+  <span class="no">[reserve] REFUSED: reserved by ana@macbook since 2026-08-24T20:06:32Z</span>
+  <span class="no">FATAL: could not reserve this paper — someone else holds it or a conflict is unresolved.</span>
 
 <span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/reserve_paper.sh list "&lt;discipline-root&gt;"
          ana@macbook                   0d  Journal_of_Example_Studies_Example_Paper_Title_2024_
@@ -151,15 +154,14 @@ claim written; waiting 15s for sync conflicts ...
 <p>The 15-second wait lets Dropbox surface a same-moment competing claim as a &ldquo;conflicted copy&rdquo; &mdash; the
 <b>earlier timestamp wins automatically</b>. A 7-day-old claim with no completed report shows
 <code>STALE</code>; release it with <code>release &lt;paper-dir&gt; --force</code> only after checking with its owner.
-Your own reservation is released for you when the finished audit is filed.</p>
+Your reservation is claimed at start and released at filing — both automatic.</p>
 
 <h2><span class="n">4</span>Run the audit</h2>
 <p>Open a terminal <b>in the paper's folder</b>, start Claude Code with Opus&nbsp;5 selected, and paste (adjust the two paths):</p>
 <div class="card"><span class="lbl">Paste into Claude Code</span><br>
 /i4r-audit<br>
 Audit this paper. The article PDF is ./paper.pdf and the replication package is ./package.zip.
-Run the whole pipeline to completion without stopping for approval: I already hold the
-reservation. Set up the workspace, run all five auditors, synthesize with a ledger, run the
+Run the whole pipeline to completion without stopping for approval. Set up the workspace, run all five auditors, synthesize with a ledger, run the
 critique rounds to the production default, build the deliverable, generate the claims script,
 and file the result with publish_completed.sh.</div>
 
