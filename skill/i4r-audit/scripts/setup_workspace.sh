@@ -2,6 +2,32 @@
 # setup_workspace.sh <audit-dir> <paper.pdf> <package.zip|dir>
 set -euo pipefail
 DIR="${1:?audit dir}"; PAPER="${2:?paper pdf}"; PKG="${3:?package zip or dir}"
+
+# ---- automatic reservation (2026-08-24): the audit claims its own paper before touching it ----
+# The paper dir is the audit dir's parent; the discipline tree is two levels up. If the audit is
+# running OUTSIDE the shared tree (fixtures, tmp dirs, one-off jobs) there is no reservations
+# root to write into, so the claim degrades to a warning. Inside the tree, a refusal ABORTS:
+# someone else is already on this paper. I4R_SKIP_RESERVE=1 bypasses (say why in run notes).
+if [ "${I4R_SKIP_RESERVE:-0}" != "1" ]; then
+  # the paper dir may not exist yet on a fresh workspace; a failed cd must not kill the run
+  PDIR="$(cd "$(dirname "$DIR")" 2>/dev/null && pwd || true)"
+  RROOT="${PDIR:+$(dirname "$(dirname "$PDIR")")}"
+  RESV="$(cd "$(dirname "$0")" && pwd)/reserve_paper.sh"
+  # the discipline root is recognised by its markers, not by merely having subdirectories —
+  # otherwise a tmp-dir fixture two levels deep would scatter reservations into random parents
+  if [ -x "$RESV" ] && { [ -d "$RROOT/reservations" ] || [ -d "$RROOT/Completed reports" ]; }; then
+    set +e; OUT="$("$RESV" claim "$PDIR" 2>&1)"; RC=$?; set -e
+    echo "$OUT" | sed 's/^/  [reserve] /'
+    if [ $RC -ne 0 ]; then
+      echo "FATAL: could not reserve this paper — someone else holds it or a conflict is unresolved."
+      echo "       Pick another paper, or resolve per the message above. (I4R_SKIP_RESERVE=1 overrides.)"
+      exit 1
+    fi
+  else
+    echo "  [reserve] outside the shared tree — no reservation written (fixtures/tmp are exempt)"
+  fi
+fi
+
 mkdir -p "$DIR"/{pkg,paper,work,report,critique}
 cp "$PAPER" "$DIR/paper/paper.pdf"
 if [ -d "$PKG" ]; then cp -R "$PKG"/. "$DIR/pkg/"; else unzip -q -o "$PKG" -d "$DIR/pkg"; fi
