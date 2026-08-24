@@ -71,6 +71,10 @@ for f in "$(basename "$PDF")" "$(basename "$CLAIMS")" run.json comment.json; do
 done
 n=$(find "$DEST" -type f ! -name .DS_Store | wc -l | tr -d ' ')
 [ "$n" -eq 4 ] || { echo "FATAL: destination holds $n files, must be exactly 4"; exit 1; }
+# a filed audit releases its reservation so the pool stays accurate (2026-08-24)
+SKILLDIR="$(cd "$(dirname "$0")" && pwd)"
+[ -x "$SKILLDIR/reserve_paper.sh" ] && "$SKILLDIR/reserve_paper.sh" release "$PAPER_DIR" --force || true
+
 echo "published: $DEST"
 echo "  $(basename "$PDF")  (hash-verified)"
 echo "  $(basename "$CLAIMS")  (hash-verified)"

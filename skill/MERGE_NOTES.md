@@ -49,3 +49,19 @@ page-count gate:
 `check_consistency.sh` §3a now gates the abstract (≤250 words, no table) and §4 reads findings-table
 rows from the appendix rather than page 1. Both directions self-tested against planted violations.
 Backups: `reference/report_structure.md.bak`, `scripts/check_consistency.sh.bak`, `SKILL.md.bak`.
+
+## Addendum 2026-08-24 — team-run features
+
+Added for the six-researcher concurrent run:
+- **`reserve_paper.sh`** — advisory paper reservations in `<root>/reservations/`, Dropbox-race-aware
+  (conflict copies detected, earliest `claimed_at` wins; 7-day STALE flags; 8-check selftest).
+  `publish_completed.sh` releases the reservation when the audit is filed.
+- **`capture_environment.sh`** + `run.json` `environment` field (schema extended) — OS, R + notebook
+  packages, Python + readers, pandoc, LibreOffice, Codex CLI versions recorded at init; finalize
+  warns when missing. Captured live, never reconstructed.
+- **`CHEATSHEET.md`/`.pdf`** — team setup + run guide with verbatim captures and a timeline figure.
+
+**Process note, on the record:** a 2026-08-24 Dropbox sync briefly overwrote the 2026-08-22 edits to
+`SKILL.md` and `publish_completed.sh`. Both were recovered intact from this repository's history —
+which is the argument for keeping the skill under version control rather than only in a synced
+folder. The Dropbox copies now match the repo plus the additions above.

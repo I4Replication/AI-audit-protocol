@@ -199,6 +199,9 @@ if __name__ == "__main__":
             print("     ... and %d more" % (len(errors) - 25))
         sys.exit(1)
     print("  ok: %s validates against %s" % (sys.argv[1].split("/")[-1], sys.argv[2].split("/")[-1]))
+    if sys.argv[1].endswith("run.json") and not json.load(open(sys.argv[1])).get("environment"):
+        print("  WARN: run.json carries no environment record — capture_environment.sh was never run;")
+        print("        software versions for this audit are now unrecoverable (pre-2026-08-24 audits only)")
     sys.exit(0)
 PYV
   return $?
