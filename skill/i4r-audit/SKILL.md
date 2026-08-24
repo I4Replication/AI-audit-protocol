@@ -41,12 +41,34 @@ asking?* If yes, run it.
 
 ## Before starting
 
+**Step zero, before touching any paper: reserve it.** Six people audit this tree concurrently, and
+the reservation file is the only thing standing between you and duplicating someone's day:
+
+```bash
+bash scripts/reserve_paper.sh claim "<discipline-root>/<Journal>/<Paper>"   # yours, or REFUSED
+bash scripts/reserve_paper.sh list  "<discipline-root>"                    # who holds what; STALE flags
+```
+
+Set `I4R_OWNER=yourname@yourmachine` (or accept the `user@host` default). The tree syncs by Dropbox,
+not a lock server, so the claim waits a grace window and backs off automatically if a competing
+claim predates it (Dropbox surfaces the race as a "conflicted copy" — earliest `claimed_at` wins).
+A claim older than 7 days with no completed report shows STALE in `list`; release it with
+`release <paper-dir> --force` only after checking with the owner. `publish_completed.sh` releases
+your reservation automatically when the finished audit is filed.
+
 Confirm you have: the paper (PDF and extractable text), the complete replication package, and any
 supplement. Extract the archive into `pkg/` and the paper into `paper/`. Then:
 
 ```bash
 bash scripts/setup_workspace.sh <audit-dir> <paper.pdf> <package.zip>
 ```
+
+`init_run.sh` records the machine's software state — OS, R and its notebook packages, Python and
+its readers, pandoc, LibreOffice, the Codex CLI — into `run.json`'s `environment` field at init,
+because versions reconstructed later describe a different machine (the Codex CLI alone changed
+twice in one week of audits). If the capture warns, fix it before Phase 1; finalize treats a
+missing environment as a defect in the record.
+
 
 Read `reference/checklist.md` — the eleven-item audit checklist distilled from published I4R
 comments — before briefing anyone.
