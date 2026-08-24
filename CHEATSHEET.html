@@ -157,13 +157,19 @@ checking the board, claiming a paper ahead of time, or giving one back.</p>
 Your reservation is claimed at start and released at filing — both automatic.</p>
 
 <h2><span class="n">4</span>Run the audit</h2>
-<p>Open a terminal <b>in the paper's folder</b>, start Claude Code with Opus&nbsp;5 selected, and paste (adjust the two paths):</p>
-<div class="card"><span class="lbl">Paste into Claude Code</span><br>
-/i4r-audit<br>
-Audit this paper. The article PDF is ./paper.pdf and the replication package is ./package.zip.
-Run the whole pipeline to completion without stopping for approval. Set up the workspace, run all five auditors, synthesize with a ledger, run the
-critique rounds to the production default, build the deliverable, generate the claims script,
-and file the result with publish_completed.sh.</div>
+<p>Open a terminal <b>in the paper's folder</b> and start Claude Code. Two settings before you paste anything:
+type <code>/model</code>, pick <b>Opus&nbsp;5</b>, and set the reasoning effort to <b>max</b> &mdash; the audit's
+sub-agents carry their own settings, but the coordinator's ceiling is whatever you select here, and a missed
+finding costs more than the extra thinking. Then prompt through <b><code>/goal</code></b> rather than a plain
+message: a goal keeps Claude working until its stated condition is met, restarting after every pause instead of
+stopping to report progress. Phrase the goal on the <b>deliverable</b>, not the input path &mdash; long sessions
+compact their history, and &ldquo;the audit is filed&rdquo; stays checkable when a path reference no longer is.</p>
+<div class="card"><span class="lbl">Paste into Claude Code &mdash; after /model &rarr; Opus 5, effort max</span><br>
+/goal Audit the paper in this folder end to end. The article PDF is ./paper.pdf and the
+replication package is ./package.zip. Run the whole pipeline without stopping for approval:
+workspace, five auditors, ledger and synthesis, critique rounds to the production default,
+verification notebook, deliverable, claims script. Done means: finalize_run.sh reports the
+registry pair filed, and publish_completed.sh has copied the four files into Completed reports.</div>
 
 <div class="tl">
   <div class="seg" style="flex:0.9"><b>setup</b>~5 min<br><i>environment recorded</i></div>
@@ -178,7 +184,28 @@ and file the result with publish_completed.sh.</div>
 <p>You mostly watch. Two moments need a human: the coordinator may surface an <b>adjudication it re-ran</b>
 (read it &mdash; that is the audit's core), and any <b>gate FAIL</b> stops the pipeline with an explanation.</p>
 
-<h2><span class="n">5</span>What lands where</h2>
+<h2><span class="n">5</span>While it runs: how to check on it</h2>
+<div class="twocol">
+<div>
+<p><b>Watch without interrupting.</b> Everything narrates into files as it happens; a second terminal shows where the run is:</p>
+<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal &mdash; second window, read-only</span></div>
+<pre><span class="p">$</span> ls audit/report/            <span class="cm"># auditor reports appear one by one</span>
+<span class="p">$</span> tail -f audit/critique_round1.log
+  [run ] critic_stats attempt 1/3 14:43:53
+  [ok  ] critic_data:  76 lines (exit 0)</pre></div>
+</div>
+<div>
+<p><b>Overnight:</b> run <code>caffeinate -i</code> in another tab &mdash; a sleeping Mac pauses everything
+mid-round (harmless; it resumes on wake). If you must take the machine, close the terminal: re-running the
+same round later <b>resumes</b> &mdash; completed critics are skipped, nothing repeats.</p>
+<p><b>Interject freely.</b> A <code>/goal</code> session answers questions mid-run (&ldquo;what did auditor&nbsp;2
+find?&rdquo;) without derailing the pipeline.</p>
+<p><b>Read the adjudications.</b> When the coordinator re-runs a disputed computation it says so &mdash; that
+is the audit's core, and it deserves your eyes more than any other output.</p>
+</div>
+</div>
+
+<h2><span class="n">6</span>What lands where</h2>
 <div class="twocol">
 <div>
 <div class="tree">
@@ -203,7 +230,7 @@ and file the result with publish_completed.sh.</div>
 </div>
 </div>
 
-<h2><span class="n">6</span>When something goes wrong</h2>
+<h2><span class="n">7</span>When something goes wrong</h2>
 <table class="trb">
   <tr><th style="width:34%">You see</th><th>It means / do this</th></tr>
   <tr><td>FATAL: the Codex workspace is OUT OF CREDITS</td>
@@ -227,6 +254,35 @@ and file the result with publish_completed.sh.</div>
 <div class="cost"><b>Costs, so nobody is surprised:</b> roughly 2&ndash;3M tokens per audit on the Claude side, 45&ndash;60-minute
 critique rounds on the GPT side, 4&ndash;6 hours wall-clock end to end. The machine is busy; you are not. <code>run.json</code>
 records your software versions and per-phase costs automatically &mdash; you never fill a form.</div>
+
+<h2><span class="n">8</span>FAQ</h2>
+<table class="trb">
+  <tr><th style="width:34%">Question</th><th>Answer</th></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">Which paper do I pick?</td>
+      <td>Any paper in the journal folders with a replication package that <code>reserve_paper.sh list</code> shows as free and that is not in Completed reports. The reservation claim at startup enforces both.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">Can I run two audits at once?</td>
+      <td>Yes &mdash; separate terminals, separate paper folders. The binding constraints are Codex credits and your machine's memory; two is comfortable, three is pushing it.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">My laptop slept / crashed mid-run. Is the audit ruined?</td>
+      <td>No. Everything on disk survives. Reopen Claude Code in the same folder and re-state the goal; completed auditors and critics are detected and skipped, and a half-finished critique round resumes when re-invoked with the same round number.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">I need to abandon a paper halfway. What do I do?</td>
+      <td><code>reserve_paper.sh release "&lt;paper-dir&gt;"</code> so a colleague can take it. If you forget, the claim shows STALE after 7 days and can be force-released &mdash; but releasing beats being nagged.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">The package has no code at all. Still auditable?</td>
+      <td>Yes &mdash; that is itself a finding. The auditors work from the data and the printed statistics, the checks are written in R, and the claims script's no-code tail carries one manual check per claim.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">The paper used SPSS / Stata, which I don't own.</td>
+      <td>Fine for producing the audit: authors' code is carried verbatim into the claims file (in its own language) and the audit's own checks are R. Only the external verifier may need the original tool, and only for author-code blocks.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">How do I know it's actually done?</td>
+      <td>Three signs, all required: finalize prints its <span style="color:#2d7a39;font-weight:600">ok:</span> lines ending in &ldquo;filed into &hellip;/registry/&hellip;&rdquo;; the paper's folder appears in Completed reports with exactly four files; your reservation is gone from <code>reservations/</code>.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">Do I read the comment before it counts?</td>
+      <td>Yes. You are the human in the loop: read the final PDF, especially findings marked retraction or corrigendum material, and the adjudication log's re-run decisions. The coordinator (Abel) reads every comment again before anything is submitted &mdash; but &ldquo;someone else will catch it&rdquo; is not a control.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">Can I edit the comment by hand?</td>
+      <td>Edit <code>report/REPORT_final.md</code>, never the .docx/.pdf, then ask the session to rebuild &mdash; the gates re-run on every build and will catch a format drift. Never renumber claims: the number joins the report, the appendix table, the claims script, and the survey.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">The critics found problems with the audit itself. Is that bad?</td>
+      <td>That is the design working. Across the calibration audits, most blocking criticisms were defects in our own draft, not the paper &mdash; caught before publication instead of after. An audit whose critique rounds find nothing is the suspicious one.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">Codex asks me to log in again / says quota exceeded.</td>
+      <td>Open the ChatGPT app, log in, confirm the workspace has credits, then re-run the round. The skill's probe stops before burning retries, so nothing was lost.</td></tr>
+  <tr><td style="font-family:inherit;font-size:8.5pt">Who pays for the tokens?</td>
+      <td>The institute's accounts on both sides. Costs are metered per phase into <code>run.json</code> automatically &mdash; which is also how we will report cost per audit in the paper, so don't disable it.</td></tr>
+</table>
 
 </body>
 </html>
