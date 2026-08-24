@@ -41,20 +41,25 @@ asking?* If yes, run it.
 
 ## Before starting
 
-**Step zero, before touching any paper: reserve it.** Six people audit this tree concurrently, and
-the reservation file is the only thing standing between you and duplicating someone's day:
+**Reservations are automatic.** Six people audit this tree concurrently; `setup_workspace.sh`
+claims the paper for you the moment the audit starts, and **aborts with FATAL if someone else holds
+it** — pick another paper, no work is lost because none was done. `publish_completed.sh` releases
+the claim when the finished audit is filed. Set `I4R_OWNER=yourname@yourmachine` once per shell (or
+accept the `user@host` default). The tree syncs by Dropbox, not a lock server, so the claim waits a
+grace window and backs off automatically if a competing claim predates it (Dropbox surfaces the
+race as a "conflicted copy" — earliest `claimed_at` wins).
+
+Manual commands exist for everything around the automatic claim:
 
 ```bash
-bash scripts/reserve_paper.sh claim "<discipline-root>/<Journal>/<Paper>"   # yours, or REFUSED
-bash scripts/reserve_paper.sh list  "<discipline-root>"                    # who holds what; STALE flags
+bash scripts/reserve_paper.sh list  "<discipline-root>"       # who holds what; 7-day STALE flags
+bash scripts/reserve_paper.sh claim "<paper-dir>"             # claim ahead of time, before starting
+bash scripts/reserve_paper.sh release "<paper-dir>"           # give a paper back untouched
 ```
 
-Set `I4R_OWNER=yourname@yourmachine` (or accept the `user@host` default). The tree syncs by Dropbox,
-not a lock server, so the claim waits a grace window and backs off automatically if a competing
-claim predates it (Dropbox surfaces the race as a "conflicted copy" — earliest `claimed_at` wins).
-A claim older than 7 days with no completed report shows STALE in `list`; release it with
-`release <paper-dir> --force` only after checking with the owner. `publish_completed.sh` releases
-your reservation automatically when the finished audit is filed.
+Release a STALE claim with `release <paper-dir> --force` only after checking with its owner.
+Fixture and tmp-dir runs outside the shared tree are exempt (no reservations root to write into);
+`I4R_SKIP_RESERVE=1` overrides the gate entirely — say why in the run notes.
 
 Confirm you have: the paper (PDF and extractable text), the complete replication package, and any
 supplement. Extract the archive into `pkg/` and the paper into `paper/`. Then:
