@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>i4r-audit — team cheat sheet</title>
+<style>
+  @page { size: letter; margin: 13mm 13mm 15mm 13mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 9.6pt/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1e2430; }
+  .band { background: #14304f; color: #fff; border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; }
+  .band h1 { font-size: 17pt; font-weight: 700; letter-spacing: -0.3px; }
+  .band p { color: #b8cbe0; font-size: 8.8pt; margin-top: 3px; }
+  .band code { color: #ffd479; background: rgba(255,255,255,.14); font-family: "SF Mono", Menlo, monospace; font-size: 8.4pt; }
+  h2 { font-size: 11.5pt; color: #14304f; margin: 13px 0 6px; padding-bottom: 2px;
+       border-bottom: 2px solid #14304f; break-after: avoid; }
+  h2 .n { display: inline-block; background: #14304f; color: #fff; border-radius: 4px;
+          width: 17px; height: 17px; text-align: center; font-size: 9.5pt; line-height: 17px;
+          margin-right: 6px; vertical-align: 1px; }
+  p { margin: 4px 0; }
+  code { font-family: "SF Mono", Menlo, monospace; font-size: 8.6pt; background: #eef1f6;
+         border-radius: 3px; padding: 0 3px; }
+  /* prerequisites table */
+  table.prereq { width: 100%; border-collapse: collapse; font-size: 8.8pt; }
+  table.prereq th { background: #14304f; color: #fff; text-align: left; padding: 4px 8px; font-size: 8.4pt; }
+  table.prereq td { border-bottom: 1px solid #dde3ec; padding: 5px 8px; vertical-align: top; }
+  table.prereq tr:nth-child(even) td { background: #f5f7fa; }
+  table.prereq td:first-child { width: 30%; font-weight: 600; }
+  table.prereq td:nth-child(2) { width: 38%; }
+  table.prereq code { white-space: normal; word-break: break-all; }
+  /* terminal mockups */
+  .term { background: #14171c; border-radius: 8px; margin: 7px 0; overflow: hidden;
+          break-inside: avoid; box-shadow: 0 1px 3px rgba(0,0,0,.28); }
+  .tbar { background: #262b33; padding: 5px 10px; display: flex; align-items: center; gap: 5px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .r { background: #ff5f57; } .y { background: #febc2e; } .g { background: #28c840; }
+  .tbar .ttl { color: #8a93a3; font: 7.6pt Menlo, monospace; margin-left: 8px; }
+  .term pre { padding: 8px 12px; font: 8.2pt/1.5 "SF Mono", Menlo, monospace;
+              color: #d6dde8; white-space: pre-wrap; word-break: break-word; }
+  .term .p  { color: #56d364; }       /* prompt */
+  .term .ok { color: #7ce38b; }
+  .term .no { color: #ff7b72; }
+  .term .wl { color: #e3b341; }
+  .term .cm { color: #7d8590; }
+  /* callout */
+  .rules { border: 2px solid #b42318; background: #fef3f2; border-radius: 8px;
+           padding: 9px 13px; margin: 8px 0; break-inside: avoid; }
+  .rules h3 { color: #b42318; font-size: 10pt; margin-bottom: 4px; }
+  .rules li { margin: 3px 0 3px 16px; font-size: 9.2pt; }
+  .rules b { color: #b42318; }
+  /* prompt card */
+  .card { border: 1.5px solid #14304f; border-left: 6px solid #14304f; background: #f2f6fb;
+          border-radius: 6px; padding: 8px 12px; margin: 7px 0;
+          font: 8.4pt/1.55 "SF Mono", Menlo, monospace; break-inside: avoid; }
+  .card .lbl { font: 700 8pt "Helvetica Neue", sans-serif; color: #14304f;
+               text-transform: uppercase; letter-spacing: .6px; }
+  /* timeline */
+  .tl { display: flex; margin: 9px 0 2px; break-inside: avoid; }
+  .seg { text-align: center; padding: 6px 2px 5px; border: 1.5px solid #14304f;
+         border-right: none; font-size: 8pt; line-height: 1.3; background: #e8eef6; }
+  .seg:first-child { border-radius: 6px 0 0 6px; }
+  .seg:last-child  { border-radius: 0 6px 6px 0; border-right: 1.5px solid #14304f; }
+  .seg b { display: block; font-size: 8.4pt; color: #14304f; }
+  .seg i { color: #5a6a80; font-style: normal; font-size: 7.6pt; }
+  .seg.hot { background: #14304f; } .seg.hot b, .seg.hot i { color: #fff; }
+  .tlnote { text-align: center; color: #5a6a80; font-size: 8.2pt; margin-bottom: 4px; }
+  /* folder tree */
+  .tree { background: #f5f7fa; border: 1px solid #dde3ec; border-radius: 6px; padding: 8px 12px;
+          font: 8.4pt/1.55 "SF Mono", Menlo, monospace; break-inside: avoid; }
+  .tree .d { color: #14304f; font-weight: 700; } .tree .c { color: #5a6a80; }
+  /* troubleshooting */
+  table.trb { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  table.trb th { background: #14304f; color: #fff; text-align: left; padding: 4px 8px; font-size: 8.2pt; }
+  table.trb tr { break-inside: avoid; }
+  table.trb td { border-bottom: 1px solid #dde3ec; padding: 4px 8px; vertical-align: top; }
+  table.trb tr:nth-child(even) td { background: #f5f7fa; }
+  table.trb td:first-child { width: 34%; font-family: "SF Mono", Menlo, monospace; font-size: 7.9pt; }
+  .cost { background: #f0f6ef; border: 1.5px solid #2d7a39; border-radius: 8px;
+          padding: 8px 13px; margin-top: 9px; font-size: 9.2pt; break-inside: avoid; }
+  .cost b { color: #2d7a39; }
+  .twocol { display: flex; gap: 12px; } .twocol > div { flex: 1; }
+  .pagebreak { break-before: page; }
+</style>
+</head>
+<body>
+
+<div class="band">
+  <h1>i4r-audit &mdash; team cheat sheet</h1>
+  <p>Set up once, then: reserve a paper &rarr; run the audit &rarr; file the result. Every dark window below is a
+  <b style="color:#fff">verbatim capture from a real run</b>, not an illustration. Your audit's exact gate set is stamped
+  into its <code>run.json</code> as <code>gates-&lt;hash&gt;</code>.</p>
+</div>
+
+<h2><span class="n">1</span>What you need (one-time, ~30 minutes)</h2>
+<table class="prereq">
+  <tr><th style="width:30%">Thing</th><th style="width:38%">Where / how</th><th>Why</th></tr>
+  <tr><td>Claude Code, on an account that can run Opus&nbsp;5</td>
+      <td><code>npm install -g @anthropic-ai/claude-code</code>, then run <code>claude</code> and log in</td>
+      <td>The coordinator and the five auditors run here</td></tr>
+  <tr><td>ChatGPT desktop app, logged in, workspace <b>with credits</b></td>
+      <td>chatgpt.com/download &mdash; the Codex CLI ships inside the app; nothing extra to install</td>
+      <td>The four adversarial critics run on GPT&nbsp;5.6 Terra through it. <b>No credits = no critique rounds</b> &mdash; the skill detects this and stops before wasting one</td></tr>
+  <tr><td>R &ge; 4.4 with the notebook packages</td>
+      <td><code>install.packages(c("haven", "lavaan", "psych", "rmarkdown", "knitr", "readxl", "jsonlite"))</code></td>
+      <td>The verification notebook re-derives every number in the comment</td></tr>
+  <tr><td>Python 3 with the readers</td>
+      <td><code>pip3 install pyreadstat pandas scipy numpy statsmodels jsonschema openpyxl</code></td>
+      <td>Auditors cross-read every data format two ways</td></tr>
+  <tr><td>pandoc + LibreOffice</td>
+      <td><code>brew install pandoc</code> &middot; libreoffice.org</td>
+      <td>Builds the .docx and measures the real page count against the 10-page cap</td></tr>
+  <tr><td>The shared Dropbox discipline folder, synced locally</td>
+      <td>Ask the coordinator for the invite</td>
+      <td>Papers, packages, reservations, and completed reports live in one tree</td></tr>
+  <tr><td>The skill itself</td><td>Next section</td><td></td></tr>
+</table>
+
+<h2><span class="n">2</span>Install and prove it works</h2>
+<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — install + self-tests</span></div>
+<pre><span class="p">$</span> unzip i4r-audit.zip && cp -R i4r-audit ~/.claude/skills/
+<span class="p">$</span> chmod +x ~/.claude/skills/i4r-audit/scripts/*.sh
+<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/make_claims_script.sh --selftest
+<span class="ok">SELFTEST OK: 12 checks — R fallback, Stata-primary naming, author-inline, R-embedded, severity, tail</span>
+<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/reserve_paper.sh --selftest
+<span class="ok">SELFTEST OK: 8 checks — claim, contention, idempotence, foreign release, conflict copy, completed guard, stale flag</span></pre></div>
+<p>If either prints <code>FAIL</code>, stop and ask in the team channel before running anything.</p>
+
+<div class="rules">
+  <h3>The three iron rules</h3>
+  <ul>
+    <li><b>Never contact the paper's authors or the journal.</b> All correspondence goes through I4R &mdash; no exceptions, not even a &ldquo;quick clarifying question.&rdquo;</li>
+    <li><b>Cannot verify a RETRACTION- or CORRIGENDUM-level claim after honest study? Return the paper</b> and take another. Never skip it; never let the AI decide for you.</li>
+    <li><b>Never name the discipline</b> in anything a replicator will see &mdash; every document is reused verbatim for the next cohort.</li>
+  </ul>
+</div>
+
+<h2><span class="n">3</span>Step zero, every time: reserve your paper</h2>
+<p>Six people work this tree at once. The reservation is what stops two of you burning a day on the same paper.</p>
+<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — claim a paper</span></div>
+<pre><span class="p">$</span> export I4R_OWNER=yourname@yourmachine   <span class="cm"># once per shell; defaults to user@host</span>
+<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/reserve_paper.sh claim \
+    "&lt;discipline-root&gt;/&lt;Journal&gt;/&lt;Paper folder&gt;"
+claim written; waiting 15s for sync conflicts ...
+<span class="ok">RESERVED: Example Paper Title (2024)  ->  .../reservations/Journal_of_Example_Studies_Example_Paper_Title_2024_.json</span>
+
+<span class="cm"># what a collision looks like — this is the system working, not an error. Pick another paper:</span>
+<span class="no">REFUSED: reserved by ana@macbook since 2026-08-24T20:06:32Z</span>
+
+<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/reserve_paper.sh list "&lt;discipline-root&gt;"
+         ana@macbook                   0d  Journal_of_Example_Studies_Example_Paper_Title_2024_
+<span class="wl">  STALE  carol@lab-imac               9d  Another_Journal_Old_Claim_</span></pre></div>
+<p>The 15-second wait lets Dropbox surface a same-moment competing claim as a &ldquo;conflicted copy&rdquo; &mdash; the
+<b>earlier timestamp wins automatically</b>. A 7-day-old claim with no completed report shows
+<code>STALE</code>; release it with <code>release &lt;paper-dir&gt; --force</code> only after checking with its owner.
+Your own reservation is released for you when the finished audit is filed.</p>
+
+<h2><span class="n">4</span>Run the audit</h2>
+<p>Open a terminal <b>in the paper's folder</b>, start Claude Code with Opus&nbsp;5 selected, and paste (adjust the two paths):</p>
+<div class="card"><span class="lbl">Paste into Claude Code</span><br>
+/i4r-audit<br>
+Audit this paper. The article PDF is ./paper.pdf and the replication package is ./package.zip.
+Run the whole pipeline to completion without stopping for approval: I already hold the
+reservation. Set up the workspace, run all five auditors, synthesize with a ledger, run the
+critique rounds to the production default, build the deliverable, generate the claims script,
+and file the result with publish_completed.sh.</div>
+
+<div class="tl">
+  <div class="seg" style="flex:0.9"><b>setup</b>~5 min<br><i>environment recorded</i></div>
+  <div class="seg hot" style="flex:2.4"><b>five auditors</b>40&ndash;60 min<br><i>parallel, one question each</i></div>
+  <div class="seg" style="flex:2.0"><b>ledger + synthesis</b>1&ndash;2 h<br><i>every finding dispositioned</i></div>
+  <div class="seg hot" style="flex:1.8"><b>critique rd 1</b>45&ndash;60 min<br><i>4 critics attack the audit</i></div>
+  <div class="seg" style="flex:1.6"><b>critique rd 2</b>~40 min<br><i>2 critics, scoped</i></div>
+  <div class="seg" style="flex:1.5"><b>build + file</b>20&ndash;40 min<br><i>notebook, gates, publish</i></div>
+</div>
+<p class="tlnote">total 4&ndash;6 hours wall-clock, almost all unattended &mdash; start one before lunch and one overnight</p>
+
+<p>You mostly watch. Two moments need a human: the coordinator may surface an <b>adjudication it re-ran</b>
+(read it &mdash; that is the audit's core), and any <b>gate FAIL</b> stops the pipeline with an explanation.</p>
+
+<h2><span class="n">5</span>What lands where</h2>
+<div class="twocol">
+<div>
+<div class="tree">
+<span class="d">&lt;Paper folder&gt;/</span><br>
+&nbsp;&nbsp;audit/ <span class="c">&mdash; full working record: reports, ledger,</span><br>
+&nbsp;&nbsp;<span class="c">adjudication, critique rounds, notebook, run.json</span><br>
+&nbsp;&nbsp;I4R_comment_&lt;Author&gt;_&lt;Year&gt;.pdf<br>
+<span class="d">&lt;discipline-root&gt;/</span><br>
+&nbsp;&nbsp;<span class="d">Completed reports/&lt;Journal&gt;/&lt;Paper&gt;/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">exactly 4 files: PDF &middot; claims script &middot;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">comment.json &middot; run.json</span><br>
+&nbsp;&nbsp;reservations/ <span class="c">&mdash; your claim vanishes on filing</span>
+</div>
+</div>
+<div>
+<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — a clean finalize</span></div>
+<pre><span class="ok">ok:</span> run.json validates against run.schema.json
+<span class="ok">ok:</span> comment.json validates against comment.schema.json
+<span class="ok">ok:</span> the notebook knitted with every claim reproducing
+<span class="ok">ok:</span> filed into .../registry/&lt;audit-id&gt;
+     (index now holds N audits)</pre></div>
+</div>
+</div>
+
+<h2><span class="n">6</span>When something goes wrong</h2>
+<table class="trb">
+  <tr><th style="width:34%">You see</th><th>It means / do this</th></tr>
+  <tr><td>FATAL: the Codex workspace is OUT OF CREDITS</td>
+      <td>The probe caught an empty balance <b>before</b> burning a round. Workspace owner refills; re-run the same round command.</td></tr>
+  <tr><td>FATAL: the critic model '&hellip;' is rejected</td>
+      <td>The ChatGPT app updated and changed its default model (three versions in ten days). Nothing to fix locally &mdash; the skill pins the model. Report it in the channel.</td></tr>
+  <tr><td>[fail] critic_x attempt N: exit 1, no output file</td>
+      <td>The real error is at the bottom of <code>critique/round_N/log_*_try*.txt</code> &mdash; usually credits or network.</td></tr>
+  <tr><td>REFUSED: reserved by &hellip;</td>
+      <td>Someone holds the paper. Pick another; check <code>reserve_paper.sh list</code>.</td></tr>
+  <tr><td>&hellip;conflicted copy&hellip; in a claim result</td>
+      <td>Two claims raced through Dropbox. The output already names the winner (earliest timestamp); the loser picks another paper.</td></tr>
+  <tr><td>FAIL: abstract is N words / findings table in body / table-vs-tags mismatch</td>
+      <td>The comment drifted from the format (a comment is a paper: Abstract &le;250 words on page&nbsp;1, findings table in Appendix&nbsp;A). The skill fixes and rebuilds; if you edited by hand, undo and let it.</td></tr>
+  <tr><td>WARNING: no PDF page count</td>
+      <td>LibreOffice is missing, so the 10-page body cap is unverified. Install it (item 5) and rebuild.</td></tr>
+  <tr><td>R notebook exits nonzero</td>
+      <td><b>A claim genuinely failed to reproduce &mdash; that is a finding, not a bug.</b> Read <code>verification_summary.csv</code>. Never &ldquo;fix&rdquo; the check to pass.</td></tr>
+</table>
+
+<div class="cost"><b>Costs, so nobody is surprised:</b> roughly 2&ndash;3M tokens per audit on the Claude side, 45&ndash;60-minute
+critique rounds on the GPT side, 4&ndash;6 hours wall-clock end to end. The machine is busy; you are not. <code>run.json</code>
+records your software versions and per-phase costs automatically &mdash; you never fill a form.</div>
+
+</body>
+</html>
