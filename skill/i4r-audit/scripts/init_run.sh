@@ -376,4 +376,9 @@ self_test () {
 
 if [ "${1:-}" = "--self-test" ]; then self_test; exit $?; fi
 main "$@"
-exit $?
+rc=$?
+# record the machine state the audit will actually run on (team requirement 2026-08-24)
+if [ $rc -eq 0 ] && [ -n "${1:-}" ] && [ -f "${1}/run.json" ]; then
+  bash "$(cd "$(dirname "$0")" && pwd)/capture_environment.sh" "$1" || echo "WARNING: environment capture failed — record it manually before finalize"
+fi
+exit $rc
