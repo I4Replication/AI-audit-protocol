@@ -74,6 +74,47 @@ for f in common.txt synth.txt role_stats.txt role_data.txt role_fairness.txt rol
   [ -s "$P/$f" ] || { echo "FATAL: missing prompt file $P/$f"; exit 1; }
 done
 mkdir -p "$OUT"
+
+# ---- ROUND_STATUS: the round's completion contract, written on EVERY exit path.
+#
+# WHY THIS EXISTS. This script announces its three outcomes only in prose, on stdout, and the
+# wordings differ ("synthesis SKIPPED", "CRITIQUE.md written", "FATAL: ..."). A coordinator waiting
+# on a round therefore had nothing to poll but the log text — and in a 2026-08-26 audit a
+# background waiter grepped for "synthesis skipped" against a log that says "synthesis SKIPPED".
+# The round had finished in 17 minutes; the waiter polled the completed job for a further 22 hours,
+# which was 90% of that audit's entire elapsed time. Nothing was broken and nothing was lost — the
+# finished reports sat on disk the whole time and no one looked at them.
+#
+# The lesson is not "match the case". It is that a completion signal must be a machine-readable
+# artefact with a fixed shape, not prose that a human happens to also read. The trap fires on every
+# exit — success, FATAL, kill, or an unexpected error — so a round can never finish silently. A
+# waiter that finds no ROUND_STATUS after the process is gone learns something real: the script died
+# before it could even name its output directory.
+_write_round_status() {
+  _rc=$?
+  _reports=$(ls "$OUT"/critic_*.md 2>/dev/null | wc -l | tr -d " ")
+  if [ -s "$OUT/CRITIQUE.md" ]; then _syn=written
+  elif [ "${present:-0}" -gt 0 ] 2>/dev/null && { [ "${SYNTH:-auto}" = "0" ] || { [ "${SYNTH:-auto}" = "auto" ] && [ "${present:-0}" -le 2 ]; }; }; then _syn=skipped
+  else _syn=not_reached; fi
+  [ "$_rc" -eq 0 ] && _out=complete || _out=failed
+  {
+    echo "round=${ROUND}"
+    echo "exit=${_rc}"
+    echo "outcome=${_out}"
+    echo "critic_reports=${_reports}"
+    echo "synthesis=${_syn}"
+    echo "ended_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$OUT/ROUND_STATUS.tmp" && mv -f "$OUT/ROUND_STATUS.tmp" "$OUT/ROUND_STATUS"
+}
+# EXIT alone does NOT fire when the shell is killed by a signal, so a round terminated with SIGTERM
+# (a timeout, a Ctrl-C, a reboot) would leave no status behind and look like the pre-trap silence
+# this whole mechanism exists to abolish. Converting the signals into an ordinary exit makes the
+# EXIT trap run for them too.
+trap _write_round_status EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
+
 cp "$REPORT" "$WS/report/REPORT_TO_REVIEW.md"
 
 NAMES="stats data fairness completeness"
