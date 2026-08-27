@@ -227,6 +227,38 @@ citation, and a critic produced a fluent, confident critique of findings that we
 bash scripts/run_critique.sh <round-number>     # needs AUDIT_DIR set
 ```
 
+**If you background a round, wait for it with the helper — never by grepping its log.**
+
+```bash
+bash scripts/run_critique.sh 3 > work/round3.log 2>&1 &
+bash scripts/wait_for_round.sh <audit-dir> 3 --pid $!    # blocks, verifies, exits non-zero on failure
+```
+
+`run_critique.sh` writes `critique/round_N/ROUND_STATUS` from an EXIT trap — on success, on FATAL,
+and on being killed — so a round can never finish silently. `wait_for_round.sh` waits on the
+*process*, enforces a deadline, and then reads that file rather than inferring success from the
+fact that the process is gone.
+
+**The 22-hour stall this replaces.** In one audit the coordinator hand-rolled a waiter
+that polled the driver log for `synthesis skipped`. The log says `synthesis SKIPPED`. The round had
+finished in 17 minutes; the waiter polled a job that no longer existed for another 22 hours — about
+90% of that audit's entire elapsed time — and only stopped because the user asked what was taking so
+long. Nothing crashed and nothing was lost. Every artefact was correct and on disk the whole time.
+
+The lesson is not "match the case". Three rules generalise, and they apply to every long job this
+protocol waits on, not just critique rounds:
+
+1. **Wait on the process, not on its output.** A process either exists or it does not. Log text is a
+   human artefact that gets reworded, recased, buffered, or never printed on the path that actually
+   happened.
+2. **Never poll without a deadline.** An unbounded wait turns "I misread the signal" into "the
+   session is gone".
+3. **Verify the outcome; do not infer it.** Exit means the job *stopped*, not that it *succeeded*.
+
+Before arming any waiter, ask what it prints if the job crashes one second from now. If the answer
+is "nothing", it is the wrong waiter however careful its pattern is — its silence and its success
+look identical.
+
 **Runtime, and how to keep it sane.** In calibration the critique loop took **11.7 hours across seven
 rounds** — about 94% of total pipeline time. Phase 1's five auditors run in parallel and cost ~45
 minutes; the serial critique loop is the whole problem. Four levers, in order of payoff:

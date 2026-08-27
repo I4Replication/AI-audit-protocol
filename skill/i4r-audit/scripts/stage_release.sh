@@ -124,13 +124,43 @@ PY
 [ $? -ne 0 ] && viol=1
 
 # 2. no data files at all in the release
-n=$(find "$R" -type f \( -name '*.mat' -o -name '*.csv' -o -name '*.xlsx' -o -name '*.sav' \) | wc -l | tr -d ' ')
+#
+# The extension list must cover SERIALIZED formats, not just the text and spreadsheet ones. In one
+# audit a full verbatim copy of the participant-level data survived a scrub as work/02_d.rds
+# precisely because every scanner in the pipeline was looking at text: a .rds is a gzipped R object,
+# so it matches no grep, shows no identifier, and reads as a 40 KB binary blob. The same is true of
+# .rdata/.rda, .omv (a zip whose strings.bin holds the identifier values), .dta, .parquet, .feather
+# and .pkl. A gate that only knows .csv certifies these as clean.
+DATA_EXT=( '*.mat' '*.csv' '*.xlsx' '*.xls' '*.sav' '*.rds' '*.RDS' '*.rdata' '*.RData' '*.rda' \
+           '*.omv' '*.dta' '*.parquet' '*.feather' '*.pkl' '*.pickle' '*.h5' '*.hdf5' '*.jasp' )
+# Built as a find argument vector, not mapfile: macOS ships bash 3.2, where mapfile does not exist
+# and would leave the array empty — a detector reporting "0 data files" for the same reason it
+# reports it on a clean release. That is the exact shape of failure this file warns about at the
+# top, so the list is materialised through a plain find into a temp file instead.
+find_args=(); for e in "${DATA_EXT[@]}"; do find_args+=( -o -name "$e" ); done
+find_args=( "${find_args[@]:1}" )   # drop the leading -o
+
+__hits_file=$(mktemp)
+find "$R" -type f \( "${find_args[@]}" \) > "$__hits_file" 2>/dev/null
+n=$(wc -l < "$__hits_file" | tr -d ' ')
 if [ "$n" != "0" ]; then
-  echo "  FAIL: $n data file(s) present in the release:"; find "$R" -type f \( -name '*.mat' -o -name '*.csv' \) | head -5
+  echo "  FAIL: $n data file(s) present in the release:"; sed -n '1,8p' "$__hits_file" | sed 's/^/    /'
   viol=1
 else
-  echo "  ok: no .mat/.csv/.xlsx/.sav anywhere in the release"
+  echo "  ok: no data file in any of ${#DATA_EXT[@]} formats (text, spreadsheet AND serialized)"
 fi
+rm -f "$__hits_file"
+
+# 2b. Self-test the detector both ways, so it can never silently stop matching: a serialized
+#     control must trip it, an ordinary .md must not. Controls live outside $R and are never staged.
+__st=$(mktemp -d); printf 'x' > "$__st/control.rds"; printf 'x' > "$__st/innocent.md"
+__pos=$(find "$__st" -type f \( "${find_args[@]}" \) 2>/dev/null | wc -l | tr -d ' ')
+if [ "$__pos" != "1" ]; then
+  echo "  FAIL: data-file detector self-test failed (matched $__pos of 1 serialized control)"; viol=1
+else
+  echo "  ok: data-file detector self-tested (.rds control caught, .md control ignored)"
+fi
+rm -rf "$__st"
 
 # 3. Per-participant result listings and code/timestamp pairings. Both self-tested.
 #
