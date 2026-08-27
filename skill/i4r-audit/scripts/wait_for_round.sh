@@ -37,34 +37,34 @@ if [ "${1:-}" = "--selftest" ]; then
   # (a) a completed, successful round is reported and accepted
   printf 'round=7\nexit=0\noutcome=complete\ncritic_reports=2\nsynthesis=skipped\n' \
     > "$T/critique/round_7/ROUND_STATUS"
-  out=$("$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
+  out=$(bash "$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
   [ $rc -eq 0 ] || { echo "FAIL: completed round reported rc=$rc"; bad=1; }
   echo "$out" | grep -q "synthesis=skipped" || { echo "FAIL: status not echoed"; bad=1; }
   # (b) THE ORIGINAL BUG: lowercase/uppercase must not matter, because nothing greps prose
   printf 'round=7\nexit=0\noutcome=complete\ncritic_reports=2\nsynthesis=SKIPPED\n' \
     > "$T/critique/round_7/ROUND_STATUS"
-  "$0" "$T" 7 --timeout-min 1 >/dev/null 2>&1 \
+  bash "$0" "$T" 7 --timeout-min 1 >/dev/null 2>&1 \
     || { echo "FAIL: case of a status VALUE changed the verdict"; bad=1; }
   # (c) a failed round must exit non-zero, not be mistaken for success
   printf 'round=7\nexit=1\noutcome=failed\ncritic_reports=0\nsynthesis=not_reached\n' \
     > "$T/critique/round_7/ROUND_STATUS"
-  "$0" "$T" 7 --timeout-min 1 >/dev/null 2>&1
+  bash "$0" "$T" 7 --timeout-min 1 >/dev/null 2>&1
   [ $? -ne 0 ] || { echo "FAIL: a failed round was reported as success"; bad=1; }
   # (d) a vanished driver that wrote no status must be reported, never waited on forever
   rm -f "$T/critique/round_7/ROUND_STATUS"
-  out=$("$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
+  out=$(bash "$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
   [ $rc -ne 0 ] || { echo "FAIL: missing ROUND_STATUS treated as success"; bad=1; }
   echo "$out" | grep -q "no ROUND_STATUS" || { echo "FAIL: missing status not explained"; bad=1; }
   # (d2) a pre-trap round (reports present, no status) is NOT reported as a crash
   echo x > "$T/critique/round_7/critic_stats.md"
-  out=$("$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
+  out=$(bash "$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
   [ $rc -eq 5 ] || { echo "FAIL: legacy round not distinguished (rc=$rc)"; bad=1; }
   echo "$out" | grep -q "predates" || { echo "FAIL: legacy round not explained"; bad=1; }
   rm -f "$T/critique/round_7/critic_stats.md"
 
   # (e) the deadline must fire rather than poll forever
   sleep 120 & sp=$!; disown 2>/dev/null || true
-  start=$(date +%s); "$0" "$T" 7 --pid $sp --timeout-min 0 >/dev/null 2>&1; rc=$?
+  start=$(date +%s); bash "$0" "$T" 7 --pid $sp --timeout-min 0 >/dev/null 2>&1; rc=$?
   el=$(( $(date +%s) - start )); kill $sp 2>/dev/null
   [ $rc -eq 3 ] || { echo "FAIL: timeout did not return rc=3 (got $rc)"; bad=1; }
   [ $el -lt 30 ] || { echo "FAIL: timeout took ${el}s to fire"; bad=1; }
