@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "audit_id": "20260827-example-a1b2c3",
+  "enumeration_scheme": "v1.0",
+  "findings": [
+    {
+      "id": "F1",
+      "claim": "The reported value differs from the rerun output.",
+      "claim_ref": "results, primary outcome",
+      "impact": "value_wrong",
+      "verification_tier": 2,
+      "paper_only": false,
+      "confidence": "CONFIRMED",
+      "evidence": {
+        "artifact": "work/check_primary.txt",
+        "operation": "run the bounded primary-outcome check",
+        "expected": 10,
+        "observed": 9,
+        "tolerance_note": "Exact integer comparison."
+      },
+      "disclosure_flag": false,
+      "remedy_class": "one_number",
+      "remedy_description": "Correct the printed value.",
+      "remedy_verified": true,
+      "changes_conclusion": false,
+      "verification": {
+        "verifiers": [
+          {"verifier": "reviewer-a", "outcome": "reproduced"},
+          {"verifier": "reviewer-b", "outcome": "reproduced"}
+        ]
+      },
+      "provenance": {
+        "origin_role": "auditor_reproduction",
+        "independently_found_by": ["auditor_reproduction"],
+        "agreed_after_seeing": ["critic_stats"],
+        "round_introduced": 0,
+        "auditor_report": "report/01_reproduction.md"
+      }
+    }
+  ]
+}

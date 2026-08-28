@@ -16,7 +16,7 @@ echo "== 1. disclosure sweep =="
 # Real rows put a timepoint or a measurement between them, so that pattern silently returns zero.
 # Test co-occurrence on the same LINE, and self-test the pattern before trusting a clean result.
 python3 - "$R" <<'PYSWEEP'
-import sys, re, pathlib
+import sys, re, pathlib, collections
 # \b fails against an underscore: `_` is a word character, so \bMSTE_AC_P12\b never fires
 # on the very identifier form this hunts. The shipped positive control used a form WITHOUT a
 # leading underscore run, so it passed while the detector was blind — a positive control
@@ -177,20 +177,26 @@ PY2
 
 echo "== 4. appendix findings table vs body claim tags =="
 python3 - "$R" <<'PYX'
-import sys, re, pathlib
+import collections, sys, re, pathlib
 s = pathlib.Path(sys.argv[1]).read_text()
 bad = 0
 # self-test the two extractors on planted forms before trusting either
 assert re.search(r"^\|\s*(\d+)\s*\|", "| 3 | a finding | none |", re.M), "table-row extractor inert"
 assert re.search(r"\[claim (\d+)\]", "text [claim 7] more"), "tag extractor inert"
-# rows come from the PAGE-1 findings table only — a body table with a numeric first column
-# (a results table) must not read as phantom findings
 # rows come from the APPENDIX findings table only — a body table with a numeric first column
 # (a results table) must not read as phantom findings
 mapp = re.search(r"^## Appendix", s, re.M)
 appendix = s[mapp.start():] if mapp else ""
-rows = set(int(m) for m in re.findall(r"^\|\s*(\d+)\s*\|", appendix, re.M))
-tags = set(int(m) for m in re.findall(r"\[claim (\d+)\]", s))
+body = s[:mapp.start()] if mapp else s
+row_values = [int(m) for m in re.findall(r"^\|\s*(\d+)\s*\|", appendix, re.M)]
+tag_values = [int(m) for m in re.findall(r"\[claim (\d+)\]", body)]
+rows, tags = set(row_values), set(tag_values)
+duplicate_rows = sorted(k for k, n in collections.Counter(row_values).items() if n != 1)
+duplicate_tags = sorted(k for k, n in collections.Counter(tag_values).items() if n != 1)
+if duplicate_rows:
+    print(f"  FAIL: appendix finding IDs must occur exactly once; duplicates: {duplicate_rows}"); bad = 1
+if duplicate_tags:
+    print(f"  FAIL: body claim tags must occur exactly once; duplicates: {duplicate_tags}"); bad = 1
 if not rows and not tags:
     print("  (no findings table and no claim tags — pre-handoff draft; nothing to cross-check)")
 elif not rows:
@@ -201,7 +207,26 @@ else:
     missing_tags = sorted(rows - tags); orphan_tags = sorted(tags - rows)
     if missing_tags: print(f"  FAIL: findings-table rows never tagged in the body: {missing_tags}"); bad = 1
     if orphan_tags:  print(f"  FAIL: [claim N] tags with no appendix findings-table row: {orphan_tags}"); bad = 1
-    if not bad: print(f"  ok: {len(rows)} findings-table rows and body tags agree (extractors self-tested)")
+    if not missing_tags and not orphan_tags and row_values != tag_values:
+        print("  FAIL: Appendix-A rows and body claim tags are not in the same canonical order")
+        print(f"        appendix: {row_values}")
+        print(f"        body:     {tag_values}"); bad = 1
+    # The last Appendix-A column is Section. Reject pointers to a body section that does not exist.
+    body_sections = set(int(n) for n in re.findall(r"^##\s+(\d+)\.", body, re.M))
+    missing_sections = []
+    for line in appendix.splitlines():
+        m = re.match(r"^\|\s*(\d+)\s*\|", line)
+        if not m:
+            continue
+        cells = [x.strip() for x in line.strip().strip("|").split("|")]
+        sec = re.search(r"(?:Section|§)?\s*(\d+)", cells[-1], re.I) if cells else None
+        if not sec or int(sec.group(1)) not in body_sections:
+            missing_sections.append((int(m.group(1)), cells[-1] if cells else ""))
+    if missing_sections:
+        print("  FAIL: appendix rows cite a missing or invalid body section: " +
+              ", ".join(f"{fid}->{sec or '<blank>'}" for fid, sec in missing_sections)); bad = 1
+    if not bad:
+        print(f"  ok: {len(rows)} findings-table rows, body tags, and section pointers join exactly once")
 sys.exit(bad)
 PYX
 [ $? -ne 0 ] && fail=1

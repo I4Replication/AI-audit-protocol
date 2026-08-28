@@ -93,12 +93,12 @@
 <h2><span class="n">1</span>What you need (one-time, ~30 minutes)</h2>
 <table class="prereq">
   <tr><th style="width:30%">Thing</th><th style="width:38%">Where / how</th><th>Why</th></tr>
-  <tr><td>Claude Code, on an account that can run Opus&nbsp;5</td>
+  <tr><td>Claude Code, on an account that can run Sonnet&nbsp;5</td>
       <td><code>npm install -g @anthropic-ai/claude-code</code>, then run <code>claude</code> and log in</td>
       <td>The coordinator and the five auditors run here</td></tr>
   <tr><td>ChatGPT desktop app, logged in, workspace <b>with credits</b></td>
       <td>chatgpt.com/download &mdash; the Codex CLI ships inside the app; nothing extra to install</td>
-      <td>The four adversarial critics run on GPT&nbsp;5.6 Terra through it. <b>No credits = no critique rounds</b> &mdash; the skill detects this and stops before wasting one</td></tr>
+      <td>Ordinary adversarial critics run on GPT&nbsp;5.6 Terra/high; targeted adjudication uses Terra/max. <b>No credits = no critique rounds</b> &mdash; the skill detects this and stops before wasting one</td></tr>
   <tr><td>R &ge; 4.4 with the notebook packages</td>
       <td><code>install.packages(c("haven", "lavaan", "psych", "rmarkdown", "knitr", "readxl", "jsonlite"))</code></td>
       <td>The verification notebook re-derives every number in the comment</td></tr>
@@ -158,28 +158,28 @@ Your reservation is claimed at start and released at filing — both automatic.<
 
 <h2><span class="n">4</span>Run the audit</h2>
 <p>Open a terminal <b>in the paper's folder</b> and start Claude Code. Two settings before you paste anything:
-type <code>/model</code>, pick <b>Opus&nbsp;5</b>, and set the reasoning effort to <b>max</b> &mdash; the audit's
+type <code>/model</code>, pick <b>Sonnet&nbsp;5</b>, and set the reasoning effort to <b>max</b> &mdash; the audit's
 sub-agents carry their own settings, but the coordinator's ceiling is whatever you select here, and a missed
 finding costs more than the extra thinking. Then prompt through <b><code>/goal</code></b> rather than a plain
 message: a goal keeps Claude working until its stated condition is met, restarting after every pause instead of
 stopping to report progress. Phrase the goal on the <b>deliverable</b>, not the input path &mdash; long sessions
 compact their history, and &ldquo;the audit is filed&rdquo; stays checkable when a path reference no longer is.</p>
-<div class="card"><span class="lbl">Paste into Claude Code &mdash; after /model &rarr; Opus 5, effort max</span><br>
+<div class="card"><span class="lbl">Paste into Claude Code &mdash; after /model &rarr; Sonnet 5, effort max</span><br>
 /goal Audit the paper in this folder end to end. The article PDF is ./paper.pdf and the
 replication package is ./package.zip. Run the whole pipeline without stopping for approval:
-workspace, five auditors, ledger and synthesis, critique rounds to the production default,
+workspace, five auditors, findings-registry projection and adjudication, critique rounds to the production default,
 verification notebook, deliverable, claims script. Done means: finalize_run.sh reports the
-registry pair filed, and publish_completed.sh has copied the four files into Completed reports.</div>
+registry pair filed, and publish_completed.sh has copied the six-file release into Completed reports.</div>
 
 <div class="tl">
   <div class="seg" style="flex:0.9"><b>setup</b>~5 min<br><i>environment recorded</i></div>
   <div class="seg hot" style="flex:2.4"><b>five auditors</b>40&ndash;60 min<br><i>parallel, one question each</i></div>
-  <div class="seg" style="flex:2.0"><b>ledger + synthesis</b>1&ndash;2 h<br><i>every finding dispositioned</i></div>
+  <div class="seg" style="flex:2.0"><b>registry + adjudication</b>1&ndash;2 h<br><i>every finding dispositioned</i></div>
   <div class="seg hot" style="flex:1.8"><b>critique rd 1</b>45&ndash;60 min<br><i>4 critics attack the audit</i></div>
   <div class="seg" style="flex:1.6"><b>critique rd 2</b>~40 min<br><i>2 critics, scoped</i></div>
   <div class="seg" style="flex:1.5"><b>build + file</b>20&ndash;40 min<br><i>notebook, gates, publish</i></div>
 </div>
-<p class="tlnote">total 4&ndash;6 hours wall-clock, almost all unattended &mdash; start one before lunch and one overnight</p>
+<p class="tlnote">historical baseline 4&ndash;6 hours; the v2 optimization target is 2.6&ndash;3.9 hours, subject to benchmark gates</p>
 
 <p>You mostly watch. Two moments need a human: the coordinator may surface an <b>adjudication it re-ran</b>
 (read it &mdash; that is the audit's core), and any <b>gate FAIL</b> stops the pipeline with an explanation.</p>
@@ -190,9 +190,9 @@ registry pair filed, and publish_completed.sh has copied the four files into Com
 <p><b>Watch without interrupting.</b> Everything narrates into files as it happens; a second terminal shows where the run is:</p>
 <div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal &mdash; second window, read-only</span></div>
 <pre><span class="p">$</span> ls audit/report/            <span class="cm"># auditor reports appear one by one</span>
-<span class="p">$</span> tail -f audit/critique_round1.log
-  [run ] critic_stats attempt 1/3 14:43:53
-  [ok  ] critic_data:  76 lines (exit 0)</pre></div>
+<span class="p">$</span> python3 -m json.tool audit/critique/round_1/ROUND_STATUS.json
+  &quot;outcome&quot;: &quot;running&quot;
+  &quot;detail&quot;: &quot;model probe accepted; critics running&quot;</pre></div>
 </div>
 <div>
 <p><b>Overnight:</b> run <code>caffeinate -i</code> in another tab &mdash; a sleeping Mac pauses everything
@@ -215,8 +215,8 @@ is the audit's core, and it deserves your eyes more than any other output.</p>
 &nbsp;&nbsp;I4R_comment_&lt;Author&gt;_&lt;Year&gt;.pdf<br>
 <span class="d">&lt;discipline-root&gt;/</span><br>
 &nbsp;&nbsp;<span class="d">Completed reports/&lt;Journal&gt;/&lt;Paper&gt;/</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">exactly 4 files: PDF &middot; claims script &middot;</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">comment.json &middot; run.json</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">exactly 6 files: PDF &middot; claims script &middot; comment.json &middot;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">run.json &middot; finalization receipt &middot; release manifest</span><br>
 &nbsp;&nbsp;reservations/ <span class="c">&mdash; your claim vanishes on filing</span>
 </div>
 </div>
@@ -251,8 +251,8 @@ is the audit's core, and it deserves your eyes more than any other output.</p>
       <td><b>A claim genuinely failed to reproduce &mdash; that is a finding, not a bug.</b> Read <code>verification_summary.csv</code>. Never &ldquo;fix&rdquo; the check to pass.</td></tr>
 </table>
 
-<div class="cost"><b>Costs, so nobody is surprised:</b> roughly 2&ndash;3M tokens per audit on the Claude side, 45&ndash;60-minute
-critique rounds on the GPT side, 4&ndash;6 hours wall-clock end to end. The machine is busy; you are not. <code>run.json</code>
+<div class="cost"><b>Historical planning baseline:</b> roughly 2&ndash;3M Claude-side tokens and 4&ndash;6 hours wall-clock.
+The optimized target is at least 30% fewer tokens and 35% less wall time, subject to paired benchmark gates. The machine is busy; you are not. <code>run.json</code>
 records your software versions and per-phase costs automatically &mdash; you never fill a form.</div>
 
 <h2><span class="n">8</span>FAQ</h2>
@@ -271,7 +271,7 @@ records your software versions and per-phase costs automatically &mdash; you nev
   <tr><td style="font-family:inherit;font-size:8.5pt">The paper used SPSS / Stata, which I don't own.</td>
       <td>Fine for producing the audit: authors' code is carried verbatim into the claims file (in its own language) and the audit's own checks are R. Only the external verifier may need the original tool, and only for author-code blocks.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">How do I know it's actually done?</td>
-      <td>Three signs, all required: finalize prints its <span style="color:#2d7a39;font-weight:600">ok:</span> lines ending in &ldquo;filed into &hellip;/registry/&hellip;&rdquo;; the paper's folder appears in Completed reports with exactly four files; your reservation is gone from <code>reservations/</code>.</td></tr>
+      <td>Three signs, all required: finalize prints its <span style="color:#2d7a39;font-weight:600">ok:</span> lines ending in &ldquo;filed into &hellip;/registry/&hellip;&rdquo;; the paper's folder appears in Completed reports with exactly six files; your reservation is gone from <code>reservations/</code>.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">Do I read the comment before it counts?</td>
       <td>You can, and a skim of the retraction/corrigendum findings never hurts &mdash; but this is a pilot: every report will be assigned to a replicator who verifies each claim manually, and the coordinator reads every comment before anything is submitted. Your job is to produce the report cleanly, not to referee it.</td></tr>
   <tr><td style="font-family:inherit;font-size:8.5pt">Can I edit the comment by hand?</td>

@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "audit_id": "20260827-example-a1b2c3",
+  "rounds_run": 2,
+  "round_cap": 2,
+  "stopping_reason": "cap",
+  "stopping_reason_detail": null,
+  "model_assignments": [
+    {
+      "role": "critic_stats",
+      "role_class": "critic",
+      "round": 1,
+      "model_id": "provider-model-version",
+      "model_family": "family-a",
+      "provider": "provider-a",
+      "source": "observed"
+    }
+  ],
+  "tokens": [
+    {
+      "role": "critic_stats",
+      "round": 1,
+      "obtainable": true,
+      "input_tokens": 100,
+      "output_tokens": 20,
+      "cached_input_tokens": 50,
+      "reasoning_tokens": null,
+      "total_tokens": 120,
+      "source": "api_response"
+    }
+  ]
+}

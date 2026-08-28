@@ -1,131 +1,184 @@
 #!/bin/bash
-# wait_for_round.sh <audit-dir> <round> [--pid N] [--timeout-min M] [--selftest]
-#
-# Blocks until a critique round is genuinely finished, then reports what happened and exits
-# non-zero if the round failed. Use this instead of hand-rolling a wait.
-#
-# WHY THIS EXISTS — the failure it replaces, which cost 22 hours.
-#
-# run_critique.sh announces its outcome in prose ("=== Round 2: synthesis SKIPPED ==="). In the
-# 2026-08-26 audit the coordinator backgrounded a waiter that polled the driver log for the
-# string "synthesis skipped". The log says "SKIPPED". The grep never matched. Round 2 had finished
-# in 17 minutes; the waiter kept polling a job that no longer existed for a further 22 hours, which
-# was roughly 90% of that audit's total elapsed time. Nothing crashed, nothing was lost, and every
-# artefact was correct and sitting on disk — the loop simply had no way to learn that.
-#
-# Three rules follow, and this script exists to make all three automatic:
-#
-#   1. WAIT ON THE PROCESS, NOT ON ITS OUTPUT. A process either exists or it does not. Log text is
-#      a human artefact that gets reworded, recased, buffered, or never printed at all on the path
-#      that actually happened.
-#   2. NEVER POLL WITHOUT A DEADLINE. An unbounded wait converts "I misread the signal" into "the
-#      session is gone". The timeout is what turned a 22-hour stall into a 40-minute one.
-#   3. VERIFY THE OUTCOME, DO NOT INFER IT. Process exit means the round STOPPED, not that it
-#      SUCCEEDED. run_critique.sh writes critique/round_N/ROUND_STATUS on every exit path; this
-#      script reads it. Its absence after the process is gone is itself a finding — the driver died
-#      before it could name its own output directory.
-#
-# The general form of the bug is worth stating, because it recurs in every audit that watches a long
-# job: a detector whose silence is indistinguishable from "not yet". Before waiting on anything, ask
-# what this waiter prints if the job crashed one second from now. If the answer is "nothing", the
-# waiter is wrong however careful its pattern is.
+# Wait for one exact run_critique invocation and verify its machine-readable terminal state.
+# Never searches the process table by command text and never infers success from prose logs.
 set -uo pipefail
 
-if [ "${1:-}" = "--selftest" ]; then
-  T=$(mktemp -d); bad=0
-  mkdir -p "$T/critique/round_7"
-  # (a) a completed, successful round is reported and accepted
-  printf 'round=7\nexit=0\noutcome=complete\ncritic_reports=2\nsynthesis=skipped\n' \
-    > "$T/critique/round_7/ROUND_STATUS"
-  out=$(bash "$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
-  [ $rc -eq 0 ] || { echo "FAIL: completed round reported rc=$rc"; bad=1; }
-  echo "$out" | grep -q "synthesis=skipped" || { echo "FAIL: status not echoed"; bad=1; }
-  # (b) THE ORIGINAL BUG: lowercase/uppercase must not matter, because nothing greps prose
-  printf 'round=7\nexit=0\noutcome=complete\ncritic_reports=2\nsynthesis=SKIPPED\n' \
-    > "$T/critique/round_7/ROUND_STATUS"
-  bash "$0" "$T" 7 --timeout-min 1 >/dev/null 2>&1 \
-    || { echo "FAIL: case of a status VALUE changed the verdict"; bad=1; }
-  # (c) a failed round must exit non-zero, not be mistaken for success
-  printf 'round=7\nexit=1\noutcome=failed\ncritic_reports=0\nsynthesis=not_reached\n' \
-    > "$T/critique/round_7/ROUND_STATUS"
-  bash "$0" "$T" 7 --timeout-min 1 >/dev/null 2>&1
-  [ $? -ne 0 ] || { echo "FAIL: a failed round was reported as success"; bad=1; }
-  # (d) a vanished driver that wrote no status must be reported, never waited on forever
-  rm -f "$T/critique/round_7/ROUND_STATUS"
-  out=$(bash "$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
-  [ $rc -ne 0 ] || { echo "FAIL: missing ROUND_STATUS treated as success"; bad=1; }
-  echo "$out" | grep -q "no ROUND_STATUS" || { echo "FAIL: missing status not explained"; bad=1; }
-  # (d2) a pre-trap round (reports present, no status) is NOT reported as a crash
-  echo x > "$T/critique/round_7/critic_stats.md"
-  out=$(bash "$0" "$T" 7 --timeout-min 1 2>&1); rc=$?
-  [ $rc -eq 5 ] || { echo "FAIL: legacy round not distinguished (rc=$rc)"; bad=1; }
-  echo "$out" | grep -q "predates" || { echo "FAIL: legacy round not explained"; bad=1; }
-  rm -f "$T/critique/round_7/critic_stats.md"
+usage() {
+  echo "usage: wait_for_round.sh <audit-dir> <round> [--pid N] [--invocation ID] [--timeout-min M] [--poll-seconds S]" >&2
+  exit 2
+}
 
-  # (e) the deadline must fire rather than poll forever
-  sleep 120 & sp=$!; disown 2>/dev/null || true
-  start=$(date +%s); bash "$0" "$T" 7 --pid $sp --timeout-min 0 >/dev/null 2>&1; rc=$?
-  el=$(( $(date +%s) - start )); kill $sp 2>/dev/null
-  [ $rc -eq 3 ] || { echo "FAIL: timeout did not return rc=3 (got $rc)"; bad=1; }
-  [ $el -lt 30 ] || { echo "FAIL: timeout took ${el}s to fire"; bad=1; }
-  rm -rf "$T"
-  [ $bad -eq 0 ] && echo "  ok: wait_for_round self-test (success, case-independence, failure, missing status, deadline)"
-  exit $bad
-fi
-
-DIR="${1:?usage: wait_for_round.sh <audit-dir> <round> [--pid N] [--timeout-min M]}"
-ROUND="${2:?round number}"
+DIR="${1:-}"
+ROUND="${2:-}"
+[ -n "$DIR" ] && [ -n "$ROUND" ] || usage
 shift 2
-PID=""; TIMEOUT_MIN=90
+
+PID=""
+INVOCATION=""
+TIMEOUT_MIN=90
+POLL_SECONDS="${I4R_WAIT_POLL_SECONDS:-2}"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --pid) PID="$2"; shift 2 ;;
-    --timeout-min) TIMEOUT_MIN="$2"; shift 2 ;;
-    *) echo "unknown argument: $1" >&2; exit 2 ;;
+    --pid) [ $# -ge 2 ] || usage; PID="$2"; shift 2 ;;
+    --invocation) [ $# -ge 2 ] || usage; INVOCATION="$2"; shift 2 ;;
+    --timeout-min) [ $# -ge 2 ] || usage; TIMEOUT_MIN="$2"; shift 2 ;;
+    --poll-seconds) [ $# -ge 2 ] || usage; POLL_SECONDS="$2"; shift 2 ;;
+    *) usage ;;
   esac
 done
 
-STATUS="$DIR/critique/round_${ROUND}/ROUND_STATUS"
-deadline=$(( $(date +%s) + TIMEOUT_MIN * 60 ))
-
-alive() {
-  if [ -n "$PID" ]; then kill -0 "$PID" 2>/dev/null
-  else pgrep -f "run_critique.sh $ROUND" >/dev/null 2>&1
-  fi
-}
-
-while alive; do
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    echo "TIMEOUT: round $ROUND still running after ${TIMEOUT_MIN} min." >&2
-    echo "  The driver is alive; this waiter is not going to keep polling silently." >&2
-    echo "  Check: tail critique/round_${ROUND}/log_*try*.txt — a round is normally 15-75 min." >&2
-    exit 3
-  fi
-  sleep 15
-done
-
-if [ ! -f "$STATUS" ]; then
-  # Discriminate two very different causes of a missing status file. A round that produced critic
-  # reports but no ROUND_STATUS almost certainly predates the EXIT trap (added 2026-08-27) rather
-  # than having died: several audits were already in flight in the shared tree when it landed, and
-  # reporting those as crashes would be a false alarm of exactly the kind this script exists to
-  # prevent.
-  _n=$(ls "$DIR/critique/round_${ROUND}"/critic_*.md 2>/dev/null | wc -l | tr -d " ")
-  if [ "$_n" -gt 0 ]; then
-    echo "round $ROUND is not running and wrote no ROUND_STATUS, but $_n critic report(s) exist." >&2
-    echo "  This round most likely predates the ROUND_STATUS contract (added 2026-08-27) rather" >&2
-    echo "  than having failed. Read the reports and judge them directly; rounds started after" >&2
-    echo "  that date always write the file." >&2
-    exit 5
-  fi
-  echo "ABNORMAL: round $ROUND is no longer running and wrote no ROUND_STATUS." >&2
-  echo "  run_critique.sh writes it from an EXIT trap, so its absence means the driver died before" >&2
-  echo "  it resolved its output directory — a bad AUDIT_DIR, a rejected critic model, or an" >&2
-  echo "  out-of-credits workspace (all of which exit before that point). Read its stdout." >&2
-  exit 4
+case "$ROUND" in ''|*[!0-9]*) usage ;; esac
+[ "$ROUND" -ge 1 ] || usage
+case "$TIMEOUT_MIN" in ''|*[!0-9]*) usage ;; esac
+case "$POLL_SECONDS" in ''|*[!0-9]*) usage ;; esac
+[ "$POLL_SECONDS" -ge 1 ] || usage
+if [ -n "$PID" ]; then
+  case "$PID" in ''|*[!0-9]*) usage ;; esac
+  [ "$PID" -ge 1 ] || usage
+fi
+if [ -n "$INVOCATION" ]; then
+  case "$INVOCATION" in *[!A-Za-z0-9._-]*) usage ;; esac
 fi
 
-echo "round $ROUND finished:"
-sed 's/^/  /' "$STATUS"
-outcome=$(sed -n 's/^outcome=//p' "$STATUS")
-[ "$outcome" = "complete" ] || { echo "round $ROUND did NOT complete cleanly." >&2; exit 1; }
+OUT="$DIR/critique/round_${ROUND}"
+POINTER="$OUT/CURRENT_INVOCATION"
+deadline=$(( $(date +%s) + TIMEOUT_MIN * 60 ))
+dead_observations=0
+
+is_alive() {
+  check_pid="$1"
+  [ -n "$check_pid" ] && kill -0 "$check_pid" 2>/dev/null
+}
+
+read_status() {
+  status_file="$1"
+  python3 - "$status_file" "$INVOCATION" "$ROUND" <<'PY'
+import json, pathlib, sys
+path, invocation, round_text = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+try:
+    obj = json.loads(path.read_text())
+    required = {
+        "status_version", "invocation_id", "round", "pid", "outcome", "exit_code",
+        "expected_roles", "completed_roles", "quorum_met", "adjudication",
+    }
+    if not required.issubset(obj):
+        raise ValueError("required fields missing")
+    if obj["status_version"] != "i4r-round-status-2":
+        raise ValueError("unsupported status version")
+    if obj["invocation_id"] != invocation or obj["round"] != int(round_text):
+        raise ValueError("status identity mismatch")
+    if obj["outcome"] not in ("running", "complete", "failed"):
+        raise ValueError("invalid outcome")
+    if not isinstance(obj["pid"], int) or obj["pid"] < 1:
+        raise ValueError("invalid pid")
+    if not isinstance(obj["quorum_met"], bool):
+        raise ValueError("invalid quorum flag")
+    if not isinstance(obj["expected_roles"], list) or not isinstance(obj["completed_roles"], list):
+        raise ValueError("invalid role lists")
+    allowed = {"stats", "data", "fairness", "completeness"}
+    expected = set(obj["expected_roles"])
+    completed = set(obj["completed_roles"])
+    if not expected or not expected <= allowed or not completed <= allowed:
+        raise ValueError("status contains an empty or unknown role set")
+    if int(round_text) == 1 and expected != allowed:
+        raise ValueError("round 1 does not name the exact four-role quorum")
+    if int(round_text) >= 2 and (
+        "completeness" not in expected or not expected & {"stats", "data", "fairness"}
+    ):
+        raise ValueError("later round lacks completeness plus a specialist")
+    if len(obj["expected_roles"]) != len(set(obj["expected_roles"])):
+        raise ValueError("duplicate expected role")
+    if len(obj["completed_roles"]) != len(set(obj["completed_roles"])):
+        raise ValueError("duplicate completed role")
+    if obj["quorum_met"] != (expected == completed):
+        raise ValueError("quorum flag disagrees with exact role sets")
+    if obj["outcome"] == "running" and obj["exit_code"] is not None:
+        raise ValueError("running status must have null exit_code")
+    if obj["outcome"] != "running" and (
+        not isinstance(obj["exit_code"], int) or isinstance(obj["exit_code"], bool)
+    ):
+        raise ValueError("terminal status must have an integer exit_code")
+except Exception as exc:
+    print(f"invalid ROUND_STATUS.json: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+print(obj["outcome"])
+print(obj["pid"])
+print("true" if obj["quorum_met"] else "false")
+print("" if obj["exit_code"] is None else obj["exit_code"])
+print(obj.get("detail") or "")
+PY
+}
+
+while :; do
+  if [ -z "$INVOCATION" ] && [ -s "$POINTER" ]; then
+    candidate=$(sed -n '1p' "$POINTER" 2>/dev/null || true)
+    case "$candidate" in
+      ''|*[!A-Za-z0-9._-]*)
+        echo "ABNORMAL: invalid invocation id in $POINTER" >&2
+        exit 4
+        ;;
+      *) INVOCATION="$candidate" ;;
+    esac
+  fi
+
+  if [ -n "$INVOCATION" ]; then
+    STATUS="$OUT/invocations/$INVOCATION/ROUND_STATUS.json"
+    if [ -s "$STATUS" ]; then
+      if ! status_info=$(read_status "$STATUS"); then
+        echo "ABNORMAL: status for invocation $INVOCATION is malformed or belongs to another run." >&2
+        exit 4
+      fi
+      outcome=$(printf '%s\n' "$status_info" | sed -n '1p')
+      status_pid=$(printf '%s\n' "$status_info" | sed -n '2p')
+      quorum=$(printf '%s\n' "$status_info" | sed -n '3p')
+      status_exit=$(printf '%s\n' "$status_info" | sed -n '4p')
+      detail=$(printf '%s\n' "$status_info" | sed -n '5p')
+      if [ -n "$PID" ] && [ "$status_pid" != "$PID" ]; then
+        echo "ABNORMAL: requested pid $PID but invocation $INVOCATION belongs to pid $status_pid." >&2
+        exit 4
+      fi
+      if [ "$outcome" = complete ]; then
+        echo "round $ROUND invocation $INVOCATION finished:"
+        python3 -m json.tool "$STATUS" | sed 's/^/  /'
+        if [ "$quorum" = true ] && { [ -z "$status_exit" ] || [ "$status_exit" -eq 0 ]; }; then
+          exit 0
+        fi
+        echo "round $ROUND stopped without the exact role quorum." >&2
+        exit 1
+      fi
+      if [ "$outcome" = failed ]; then
+        echo "round $ROUND invocation $INVOCATION failed${detail:+: $detail}" >&2
+        python3 -m json.tool "$STATUS" | sed 's/^/  /' >&2
+        exit 1
+      fi
+      watch_pid="$status_pid"
+    else
+      watch_pid="$PID"
+    fi
+  else
+    watch_pid="$PID"
+  fi
+
+  if [ -n "$watch_pid" ] && is_alive "$watch_pid"; then
+    dead_observations=0
+  elif [ -n "$watch_pid" ]; then
+    dead_observations=$((dead_observations + 1))
+    if [ "$dead_observations" -ge 2 ]; then
+      echo "ABNORMAL: invocation ${INVOCATION:-unknown} is no longer running and has no terminal status." >&2
+      exit 4
+    fi
+  elif [ -z "$INVOCATION" ]; then
+    echo "ABNORMAL: no CURRENT_INVOCATION exists and no --pid was supplied for round $ROUND." >&2
+    exit 4
+  elif [ -z "$watch_pid" ]; then
+    echo "ABNORMAL: invocation $INVOCATION has no status and no --pid was supplied." >&2
+    exit 4
+  fi
+
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "TIMEOUT: round $ROUND invocation ${INVOCATION:-not-yet-published} did not finish within ${TIMEOUT_MIN} min." >&2
+    echo "  The driver was not killed; inspect $OUT and the invocation-scoped status." >&2
+    exit 3
+  fi
+  sleep "$POLL_SECONDS"
+done

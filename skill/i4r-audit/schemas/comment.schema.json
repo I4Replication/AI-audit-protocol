@@ -392,6 +392,32 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "claim", "impact", "verification_tier", "paper_only", "disclosure_flag", "remedy_class", "changes_conclusion", "provenance"],
+      "allOf": [
+        {
+          "description": "Strict finding semantics added in schema v2. Standards-compliant validators enforce these fields even for legacy records; the bundled v1 normalizer fails rather than inventing any missing value.",
+          "required": ["evidence", "confidence"],
+          "properties": {
+            "impact": {"type": "string", "enum": ["none", "unverifiable", "value_wrong", "conclusion_narrowed", "conclusion_unsupported", "conclusion_contradicted", "artefact_of_construction"]},
+            "verification_tier": {"type": "integer", "minimum": 1, "maximum": 5},
+            "evidence": {"type": "object"},
+            "confidence": {"type": "string", "enum": ["CONFIRMED", "LIKELY", "SPECULATIVE"]}
+          }
+        },
+        {
+          "if": {
+            "required": ["impact"],
+            "properties": {"impact": {"const": "unverifiable"}}
+          },
+          "then": {
+            "required": ["unverifiable_reason", "blocked_tier", "unverifiable_basis"],
+            "properties": {
+              "unverifiable_reason": {"type": "string"},
+              "blocked_tier": {"type": "integer", "minimum": 1, "maximum": 5},
+              "unverifiable_basis": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      ],
       "properties": {
         "id": {"description": "REQUIRED. Short identifier unique within this comment, e.g. 'F3'. Stable once published: author_response references it.", "type": "string", "minLength": 1},
         "claim": {"description": "REQUIRED. The finding in ONE line, in plain words, leading with the problem rather than the method. Must not contain a participant identifier or any quasi-identifier. Must state the observable and the discrepancy, never a cause: 'the deposited data yield X, the article reports Y', not 'the authors changed Y to X' (Rule 3).", "type": "string", "minLength": 1},
@@ -422,15 +448,21 @@
           "minimum": 1,
           "maximum": 5
         },
+        "unverifiable_basis": {
+          "description": "Required when impact is 'unverifiable'. A concise, evidence-bound explanation of what was sought, what was attempted, and why the intended check remains blocked. This is distinct from the categorical unverifiable_reason and must not speculate about absent materials.",
+          "type": ["string", "null"],
+          "minLength": 1
+        },
         "check_nature": {"description": "Was the check deterministic, deterministic within a tolerance, or a judgement? T4-T5 findings are judgement-heavy by construction and should say so, because a contestable check needs to be stated explicitly enough to be disagreed with (Rule 4).", "type": ["string", "null"], "enum": ["deterministic", "deterministic_with_tolerance", "judgement", null]},
         "claim_ref": {"description": "Which published claim this bears on, e.g. 'section 4.1, main result' or 'abstract, sentence 3'. Needed for the claims_affected roll-up: three findings against three independent claims is materially different from three against one.", "type": ["string", "null"]},
         "evidence": {
           "description": "The reproduction path. Rule 4: a finding no second verifier could re-derive from the comment is not admissible at any tier. These four fields are that path in machine-readable form.",
           "type": ["object", "null"],
           "additionalProperties": false,
+          "required": ["artifact", "operation"],
           "properties": {
-            "artifact": {"description": "What was inspected, e.g. 'deposit/code/main_analysis.R + deposit/data/analysis.csv'.", "type": ["string", "null"]},
-            "operation": {"description": "What was done to it, e.g. 'execute as supplied, unmodified, R 4.4.1'.", "type": ["string", "null"]},
+            "artifact": {"description": "What was inspected, e.g. 'deposit/code/main_analysis.R + deposit/data/analysis.csv'.", "type": "string", "minLength": 1},
+            "operation": {"description": "What was done to it, e.g. 'execute as supplied, unmodified, R 4.4.1'.", "type": "string", "minLength": 1},
             "expected": {"description": "What the article says the result is. Free-form: a number, a string, or an object of several quantities."},
             "observed": {"description": "What the artifact actually yields. Same form as expected."},
             "tolerance_note": {"description": "Required in practice for any near-match: state the observed difference and why it is or is not attributable to floating point, seed, platform or solver version. Rule 6 -- do not round a contestable difference away.", "type": ["string", "null"]}
