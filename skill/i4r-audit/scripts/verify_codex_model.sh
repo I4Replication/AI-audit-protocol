@@ -1,102 +1,45 @@
 #!/bin/bash
-# verify_codex_model.sh <expected-model> <since-epoch> [audit-slug] [until-epoch] [expected-effort]
-#
-# Also reports the reasoning effort recorded per session. NOTE the asymmetry: the recorded MODEL is
-# what actually served the session, but the recorded EFFORT is merely what was requested — the CLI
-# writes the string through regardless of validity. An invalid effort is rejected by the API at
-# request time, so a session that produced output at all did not silently downgrade its effort.
-#
-# Confirms every Codex session in the window [since-epoch, until-epoch] actually ran on
-# <expected-model>. Pass until-epoch — the round's end stamp — whenever one is available: an
-# open-ended window sweeps in every later session on the machine and reports them as mismatches,
-# which is a false alarm rather than a downgrade.
-#
-# WHY THIS EXISTS. A ChatGPT plan that has hit its quota can silently serve a different, cheaper model
-# instead of refusing the request. The Codex CLI's stdout — which is all run_critique.sh captures —
-# does NOT record which model served the session, so a downgrade mid-round is invisible in the audit
-# record. The consequence is not a slow round; it is a round whose findings get attributed to a model
-# that never produced them. The session rollouts under ~/.codex/sessions DO record the model, so this
-# script reads those instead of trusting the logs.
-#
-# Exits non-zero if any session used something other than the expected model, so a caller can treat a
-# silent downgrade as a hard failure rather than a footnote.
+# verify_codex_model.sh <audit-dir> [role|all] [exact-observed-model] [exact-effort]
+# Verify canonical, invocation-scoped model identity rather than sweeping global session files.
 set -uo pipefail
-EXPECTED="${1:?usage: verify_codex_model.sh <expected-model> <since-epoch> [audit-slug]}"
-SINCE="${2:?since-epoch (seconds); e.g. the value stamped at round start}"
-SLUG="${3:-}"
-UNTIL="${4:-0}"
-EXP_EFFORT="${5:-}"
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-
-python3 - "$EXPECTED" "$SINCE" "$SLUG" "$ROOT" "$UNTIL" "$EXP_EFFORT" <<'PY'
-import json, pathlib, sys, datetime, re
-expected, since, slug, root = sys.argv[1], int(sys.argv[2]), sys.argv[3], pathlib.Path(sys.argv[4])
-until = int(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] not in ("", "0") else None
-exp_effort = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None
-base = pathlib.Path.home() / ".codex" / "sessions"
-if not base.exists():
-    print(f"WARN: {base} not found — cannot verify the serving model. Treat model attribution as UNVERIFIED.")
-    raise SystemExit(0)
-
-KNOWN = ("gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-lune", "luna", "terra", "o3")
-rows, bad = [], []
-for f in sorted(base.rglob("*.jsonl")):
-    mt = f.stat().st_mtime
-    if mt < since or (until and mt > until):
-        continue
-    model, turns, effort = None, 0, None
-    for line in f.open(errors="replace"):
-        try:
-            d = json.loads(line)
-        except Exception:
-            continue
-        if model is None:
-            s = json.dumps(d)
-            for k in KNOWN:
-                if f'"{k}"' in s:
-                    model = k
-                    break
-        if effort is None:
-            m = re.search(r'reasoning_effort"\s*:\s*"([a-z]+)"', json.dumps(d), re.I)
-            if m:
-                effort = m.group(1)
-        if d.get("type") in ("response_item", "event_msg", "turn_context"):
-            turns += 1
-    # A rejected request never gets a model recorded; it also did no work, so it is not a downgrade.
-    if model is None and turns <= 8:
-        continue
-    rows.append((f.name[8:27], model or "UNRECORDED", turns, effort or "-"))
-    if model != expected:
-        bad.append((f.name, model or "UNRECORDED", turns))
-
-win = f"{datetime.datetime.fromtimestamp(since):%Y-%m-%d %H:%M}" + (f" to {datetime.datetime.fromtimestamp(until):%H:%M}" if until else " onward (UNBOUNDED — pass until-epoch to avoid false alarms)")
-print(f"expected model: {expected}   window: {win}")
-for started, model, turns, effort in rows:
-    flag = "  " if model == expected else "<-- MISMATCH"
-    eflag = "" if (not exp_effort or effort == exp_effort) else f"  <-- effort requested {effort!r}, expected {exp_effort!r}"
-    print(f"  {started}  {model:16s} {turns:5d} turns  effort={effort:8s}{flag}{eflag}")
-total = sum(r[2] for r in rows)
-print(f"  {len(rows)} session(s), {total} model turns total")
-
-if slug:
-    log = root / "audits" / "runs.jsonl"
-    if log.parent.exists():
-        import time
-        with log.open("a") as fh:
-            fh.write(json.dumps({
-                "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "epoch": int(time.time()), "event": "note", "audit": slug,
-                "key": "codex_model_verified",
-                "value": f"{len(rows)} sessions, {total} turns, all {expected}" if not bad
-                         else f"MISMATCH: {bad}",
-            }) + "\n")
-
+AUDIT="${1:?usage: verify_codex_model.sh <audit-dir> [role|all] [exact-observed-model] [exact-effort]}"
+ROLE="${2:-all}"
+EXPECTED="${3:-}"
+EXPECTED_EFFORT="${4:-}"
+HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+python3 - "$AUDIT" "$ROLE" "$EXPECTED" "$EXPECTED_EFFORT" "$HERE" <<'PY'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1]).resolve(); role=sys.argv[2]; expected=sys.argv[3]
+expected_effort=sys.argv[4]
+sys.path.insert(0,sys.argv[5]); import record_invocation
+ledger=root/"invocations.jsonl"
+if not ledger.is_file(): raise SystemExit(f"FAIL: canonical ledger missing: {ledger}")
+rows=[]
+for number,line in enumerate(ledger.read_text().splitlines(),1):
+    if not line.strip(): continue
+    try:
+        row=json.loads(line); record_invocation.validate_record(row,root)
+    except Exception as exc: raise SystemExit(f"FAIL: invocation line {number}: {exc}")
+    if row["provider_call"] and row["status"]=="completed" and (role=="all" or row["role"]==role):
+        rows.append(row)
+if not rows: raise SystemExit(f"FAIL: no completed provider calls match role={role!r}")
+bad=[]
+for row in rows:
+    problems=[]
+    if row["model_source"]!="observed": problems.append("model_source is not observed")
+    if not row["observed_model"]: problems.append("observed model ID missing")
+    if expected and row["observed_model"]!=expected:
+        problems.append(f"observed {row['observed_model']!r}, expected exact {expected!r}")
+    if expected_effort and row["reasoning_effort"]!=expected_effort:
+        problems.append(
+            f"effort {row['reasoning_effort']!r}, expected exact {expected_effort!r}"
+        )
+    if problems: bad.append((row["invocation_id"],problems))
+    print(f"{row['invocation_id']}  role={row['role']}  requested={row['requested_model']}  "
+          f"served={row['observed_model']}  effort={row['reasoning_effort']}  session={row['session_id'] or '-'}")
 if bad:
-    print(f"\nFAIL: {len(bad)} session(s) did not run on {expected}:")
-    for name, model, turns in bad:
-        print(f"   {name}: {model} ({turns} turns)")
-    print("A silent plan downgrade invalidates model attribution for this round. Re-run the affected")
-    print("critics once quota is available, or record the actual model in the audit record.")
+    for invocation,problems in bad:
+        print(f"FAIL: {invocation}: {'; '.join(problems)}",file=sys.stderr)
     raise SystemExit(1)
-print(f"\nOK: every session ran on {expected} — no silent downgrade.")
+print(f"OK: {len(rows)} completed call(s) have exact observed model telemetry")
 PY

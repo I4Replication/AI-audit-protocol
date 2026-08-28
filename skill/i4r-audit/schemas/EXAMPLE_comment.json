@@ -458,6 +458,7 @@
       "verification_tier": 1,
       "blocked_tier": 3,
       "unverifiable_reason": "data_missing",
+      "unverifiable_basis": "The complete deposited package was searched and all serialized objects were inventoried; only derived summaries were present, so the published figure's underlying series could not be checked or regenerated.",
       "expected_verifier_hours": 0.25,
       "actual_verifier_hours": 0.3,
       "paper_only": false,

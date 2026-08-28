@@ -1,0 +1,65 @@
+{
+  "schema_version": "i4r-benchmark-input-1",
+  "records": [
+    {
+      "case_id": "seed-statistical-conclusion",
+      "source": "seeded",
+      "failure_domains": ["statistics"],
+      "ground_truth": {
+        "substantive_finding_ids": ["STAT-1", "STAT-2"],
+        "conclusion_changing_ids": ["STAT-1"],
+        "disclosure_critical_ids": []
+      },
+      "baseline": null,
+      "optimized": null
+    },
+    {
+      "case_id": "seed-data-integrity",
+      "source": "seeded",
+      "failure_domains": ["data"],
+      "ground_truth": {
+        "substantive_finding_ids": ["DATA-1", "DATA-2"],
+        "conclusion_changing_ids": ["DATA-2"],
+        "disclosure_critical_ids": []
+      },
+      "baseline": null,
+      "optimized": null
+    },
+    {
+      "case_id": "seed-privacy-disclosure",
+      "source": "seeded",
+      "failure_domains": ["privacy"],
+      "ground_truth": {
+        "substantive_finding_ids": ["PRIV-1"],
+        "conclusion_changing_ids": [],
+        "disclosure_critical_ids": ["PRIV-1"]
+      },
+      "baseline": null,
+      "optimized": null
+    },
+    {
+      "case_id": "seed-archive-remedy",
+      "source": "seeded",
+      "failure_domains": ["archive"],
+      "ground_truth": {
+        "substantive_finding_ids": ["ARCH-1", "ARCH-2"],
+        "conclusion_changing_ids": [],
+        "disclosure_critical_ids": ["ARCH-2"]
+      },
+      "baseline": null,
+      "optimized": null
+    },
+    {
+      "case_id": "seed-report-synchronization",
+      "source": "seeded",
+      "failure_domains": ["report_synchronization"],
+      "ground_truth": {
+        "substantive_finding_ids": ["SYNC-1", "SYNC-2"],
+        "conclusion_changing_ids": ["SYNC-1"],
+        "disclosure_critical_ids": []
+      },
+      "baseline": null,
+      "optimized": null
+    }
+  ]
+}

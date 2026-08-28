@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://i4r.example/schemas/v2/post-delta-gates.schema.json",
+  "title": "I4R post-delta whole-document gate receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version", "audit_id", "round", "required_gates", "completed_at",
+    "snapshot", "live_bindings", "gate_code", "privacy_scanned_paths", "gates"
+  ],
+  "properties": {
+    "receipt_version": {"const": "i4r-post-delta-gates-1"},
+    "audit_id": {"type": "string", "minLength": 3},
+    "round": {"type": "integer", "minimum": 2, "maximum": 5},
+    "required_gates": {
+      "const": ["consistency", "privacy", "checklist", "archive"]
+    },
+    "completed_at": {"type": "string", "format": "date-time"},
+    "snapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "fingerprint", "files"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^critique/round_[2-5]/post_delta/[0-9a-f]{64}$"},
+        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "files": {"type": "array", "minItems": 5, "items": {"$ref": "#/$defs/file"}}
+      }
+    },
+    "live_bindings": {
+      "type": "object", "minProperties": 9,
+      "required": [
+        "report", "findings", "diff_manifest", "package_manifest", "policy_snapshot",
+        "diff_before_report", "diff_after_report", "diff_before_findings", "diff_after_findings"
+      ],
+      "additionalProperties": {"$ref": "#/$defs/file"}
+    },
+    "gate_code": {
+      "type": "array", "minItems": 6, "maxItems": 6,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "privacy_scanned_paths": {
+      "type": "array", "minItems": 3, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "gates": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"$ref": "#/$defs/gate_base"}
+    }
+  },
+  "$defs": {
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "gate_base": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "status", "exit_status", "log"],
+      "properties": {
+        "name": {"type": "string"},
+        "status": {"type": "string", "enum": ["passed", "failed"]},
+        "exit_status": {"type": "integer"},
+        "log": {"$ref": "#/$defs/file"}
+      }
+    }
+  }
+}

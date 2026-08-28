@@ -15,8 +15,9 @@
 #   --audit-id ID           default: <yyyymmdd>-<basename of audit dir>-<8 hex of the dir path>
 #   --doi DOI               bare 10.xxxx/yyyy form; omit only if the paper truly has none
 #   --paper-title TITLE
-#   --round-cap N           default 5 (SKILL.md's default critique cap)
-#   --auditor-model ID      exact model id running the audit    (env AUDITOR_MODEL)
+#   --round-target N        required production rounds; default 2
+#   --round-cap N           hard safety cap; default 5
+#   --auditor-model ID      coordinator/Phase-1 model; must match policy (env AUDITOR_MODEL)
 #   --auditor-family F      e.g. claude                          (env AUDITOR_FAMILY)
 #   --auditor-provider P    e.g. anthropic                       (env AUDITOR_PROVIDER)
 #   --protocol-version V    (env PROTOCOL_VERSION)   default: derived from the skill directory
@@ -30,8 +31,9 @@
 # explicitly -- `&& echo OK` has swallowed failures in this toolkit before.
 set -uo pipefail
 
-SCHEMA_VERSION="1.0.0"
-DEFAULT_SKILL_DIR="${SKILL_DIR:-$HOME/.claude/skills/i4r-audit}"
+SCHEMA_VERSION="2.0.0"
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+DEFAULT_SKILL_DIR="${SKILL_DIR:-$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)}"
 
 # Absolute path to this script. The self-test re-invokes it, and "$0" alone is whatever the
 # caller typed -- a bare name resolves to nothing and every re-invocation exits 127, which a
@@ -59,7 +61,20 @@ scan_package () {
 import hashlib, json, pathlib, sys
 pkg = pathlib.Path(sys.argv[1])
 files, hist, total, lines = [], {}, 0, []
-if pkg.is_dir():
+cached = pkg.parent / "package_manifest.json"
+if cached.is_file():
+    try:
+        c = json.loads(cached.read_text())
+        for item in c.get("files", []):
+            rel, size, digest = item["path"], int(item["size"]), item["sha256"]
+            ext = pathlib.Path(rel).suffix.lower().lstrip(".")
+            files.append(rel); total += size
+            hist[ext] = hist.get(ext, {"count": 0, "bytes": 0})
+            hist[ext]["count"] += 1; hist[ext]["bytes"] += size
+            lines.append(digest + "  " + rel)
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        files, hist, total, lines = [], {}, 0, []
+if not files and pkg.is_dir():
     for p in sorted(pkg.rglob("*")):
         if not p.is_file() or p.is_symlink():
             continue
@@ -116,7 +131,7 @@ derive_gate_set_version () {
 # ---------------------------------------------------------------------- main
 main () {
   need_jq
-  DIR=""; AUDIT_ID=""; DOI=""; TITLE=""; CAP=5; FORCE=0
+  DIR=""; AUDIT_ID=""; DOI=""; TITLE=""; TARGET=2; CAP=5; FORCE=0
   AM="${AUDITOR_MODEL:-}"; AF="${AUDITOR_FAMILY:-}"; AP="${AUDITOR_PROVIDER:-}"
   PV=""; GV=""; SKILLD="$DEFAULT_SKILL_DIR"; PKGD=""
   while [ $# -gt 0 ]; do
@@ -124,6 +139,7 @@ main () {
       --audit-id) AUDIT_ID="${2:-}"; shift 2 ;;
       --doi) DOI="${2:-}"; shift 2 ;;
       --paper-title) TITLE="${2:-}"; shift 2 ;;
+      --round-target) TARGET="${2:-}"; shift 2 ;;
       --round-cap) CAP="${2:-}"; shift 2 ;;
       --auditor-model) AM="${2:-}"; shift 2 ;;
       --auditor-family) AF="${2:-}"; shift 2 ;;
@@ -140,6 +156,9 @@ main () {
   done
   [ -n "$DIR" ] || die "usage: init_run.sh <audit-dir> [options]  (--help for the list)"
   [ -d "$DIR" ] || die "$DIR is not a directory -- run setup_workspace.sh first"
+  case "$TARGET" in ''|*[!0-9]*) die "round target must be a positive integer" ;; esac
+  case "$CAP" in ''|*[!0-9]*) die "round cap must be a positive integer" ;; esac
+  [ "$TARGET" -ge 1 ] && [ "$CAP" -ge "$TARGET" ] || die "require 1 <= round-target <= round-cap"
 
   RUN="$DIR/run.json"
   if [ -f "$RUN" ] && [ "$FORCE" -ne 1 ]; then
@@ -147,17 +166,45 @@ main () {
        journal of everything logged so far. Pass --force only if you mean to start over."
   fi
 
-  [ -n "$PKGD" ] || PKGD="$DIR/pkg"
-  [ -n "$PV" ] || PV=$(derive_protocol_version "$SKILLD")
-  [ -n "$GV" ] || GV=$(derive_gate_set_version "$SKILLD")
-  [ -n "$AM" ] || AM="unrecorded"
-  [ -n "$AF" ] || AF="unrecorded"
-  [ -n "$AP" ] || AP="unrecorded"
-  if [ "$AM" = "unrecorded" ]; then
-    echo "WARNING: no --auditor-model given. Every differs_from_auditor_family flag in this run" >&2
-    echo "         will be computed against 'unrecorded' and will be meaningless." >&2
+  if [ "$FORCE" -eq 1 ] && [ -e "$DIR/pipeline-policy.snapshot.json" ]; then
+    [ ! -L "$DIR/pipeline-policy.snapshot.json" ] || die "refusing to archive a symlinked policy snapshot"
+    mv "$DIR/pipeline-policy.snapshot.json" \
+       "$DIR/pipeline-policy.snapshot.previous.$(date -u +%Y%m%dT%H%M%SZ).json" ||
+      die "could not archive the prior policy snapshot for forced reinitialization"
   fi
 
+  [ -n "$PKGD" ] || PKGD="$DIR/pkg"
+  python3 "$SCRIPT_DIR/record_invocation.py" --init-policy "$DIR" >/dev/null ||
+    die "could not create the immutable audit-scoped pipeline policy snapshot"
+  POLICY_TARGET=$(jq -r '.policy.critique.round_target // empty' "$DIR/pipeline-policy.snapshot.json")
+  POLICY_CAP=$(jq -r '.policy.critique.round_cap // empty' "$DIR/pipeline-policy.snapshot.json")
+  [ -n "$POLICY_TARGET" ] && [ -n "$POLICY_CAP" ] ||
+    die "audit-scoped policy snapshot lacks critique round target/cap"
+  [ "$TARGET" -eq "$POLICY_TARGET" ] && [ "$CAP" -eq "$POLICY_CAP" ] ||
+    die "canonical accuracy-safe policy requires round target $POLICY_TARGET and hard cap $POLICY_CAP"
+  POLICY_COORD_MODEL=$(jq -r '.policy.models.coordinator.requested_model // empty' "$DIR/pipeline-policy.snapshot.json")
+  POLICY_COORD_PROVIDER=$(jq -r '.policy.models.coordinator.provider // empty' "$DIR/pipeline-policy.snapshot.json")
+  POLICY_COORD_EFFORT=$(jq -r '.policy.models.coordinator.reasoning_effort // empty' "$DIR/pipeline-policy.snapshot.json")
+  [ -n "$POLICY_COORD_MODEL" ] && [ -n "$POLICY_COORD_PROVIDER" ] && [ -n "$POLICY_COORD_EFFORT" ] ||
+    die "audit-scoped policy snapshot lacks the coordinator model/provider/effort"
+  case "$POLICY_COORD_PROVIDER" in
+    anthropic) POLICY_COORD_FAMILY=claude ;;
+    openai) POLICY_COORD_FAMILY=gpt ;;
+    *) POLICY_COORD_FAMILY="$POLICY_COORD_PROVIDER" ;;
+  esac
+  [ -n "$AM" ] || AM="$POLICY_COORD_MODEL"
+  [ -n "$AP" ] || AP="$POLICY_COORD_PROVIDER"
+  [ -n "$AF" ] || AF="$POLICY_COORD_FAMILY"
+  [ "$AM" = "$POLICY_COORD_MODEL" ] ||
+    die "canonical baseline requires coordinator and Phase-1 model $POLICY_COORD_MODEL (got $AM)"
+  [ "$AP" = "$POLICY_COORD_PROVIDER" ] ||
+    die "canonical baseline requires provider $POLICY_COORD_PROVIDER (got $AP)"
+  [ "$AF" = "$POLICY_COORD_FAMILY" ] ||
+    die "canonical baseline requires model family $POLICY_COORD_FAMILY (got $AF)"
+  POLICY_SHA=$(shasum -a 256 "$DIR/pipeline-policy.snapshot.json" | cut -d' ' -f1)
+  [ ${#POLICY_SHA} -eq 64 ] || die "could not hash the audit-scoped pipeline policy snapshot"
+  [ -n "$PV" ] || PV=$(derive_protocol_version "$SKILLD")
+  [ -n "$GV" ] || GV=$(derive_gate_set_version "$SKILLD")
   START=$(now_utc)
   if [ -z "$AUDIT_ID" ]; then
     h=$(printf '%s' "$(cd "$DIR" && pwd)" | shasum -a 256 | cut -c1-8)
@@ -185,8 +232,9 @@ main () {
   jq -n \
     --arg sv "$SCHEMA_VERSION" --arg id "$AUDIT_ID" --argjson doi "$DOI_J" \
     --argjson title "$TITLE_J" --arg pv "$PV" --arg gv "$GV" --arg start "$START" \
-    --arg am "$AM" --arg af "$AF" --arg ap "$AP" --argjson cap "$CAP" \
-    --arg dir "$(cd "$DIR" && pwd)" --arg skill "$SKILLD" \
+    --arg am "$AM" --arg af "$AF" --arg ap "$AP" --arg ae "$POLICY_COORD_EFFORT" \
+    --argjson target "$TARGET" --argjson cap "$CAP" \
+    --arg skill "$(basename "$SKILLD")" --arg policysha "$POLICY_SHA" \
     --arg skillsha "$(cat $(ls "$SKILLD"/scripts/*.sh 2>/dev/null | sort) 2>/dev/null | shasum -a 256 | cut -d' ' -f1)" \
     --arg os "$(uname -sr)" --arg bash "${BASH_VERSION:-unknown}" \
     --argjson pkg "$PKGJSON" '
@@ -211,13 +259,20 @@ main () {
       registry: null,
       toolkit: { skill_path: $skill, skill_commit: null,
                  scripts_sha256: (if $skillsha == "" then null else $skillsha end),
+                 pipeline_policy_snapshot_sha256: $policysha,
                  host_os: $os, bash_version: $bash },
-      audit_dir: $dir,
+      # The run record already lives at the audit root, so an absolute
+      # workstation path adds no reproducibility while leaking an account
+      # name into internal copies.  Finalization resolves retained artifacts
+      # relative to run.json when this field is null.
+      audit_dir: null,
       started_at: $start,
       ended_at: null,
       wall_clock_seconds: null,
       active_seconds: null,
       status: "initialized",
+      coordinator_model: { configured_model: $am, served_model: null, family: $af,
+                           provider: $ap, effort: $ae, observed_from: null, declared_at: $start },
       auditor_model: { model_id: $am, family: $af, provider: $ap, declared_at: $start },
       phases: ( ["intake","fan_out","adjudication","critique","release"]
                 | map({key: ., value: {ran:false, started_at:null, ended_at:null,
@@ -232,17 +287,23 @@ main () {
       },
       settled_facts: { used: null, generated_after_round: null, path: null, entries: null,
                        spot_check_failures: null,
-                       notes: "Log with: log_event.sh settled used=true generated_after_round=2" },
+                       notes: "Generate after round 1; promotion requires two independent confirmations." },
       model_assignments: [],
+      invocations: [],
       tokens: [],
       costs: [],
       token_accounting: null,
       rounds: [],
       rounds_run: null,
+      round_target: $target,
       round_cap: $cap,
       stopping_reason: null,
       stopping_reason_detail: null,
       unreviewed_sections: [],
+      changed_claim_ids: [],
+      rereviewed_claim_ids: [],
+      unresolved_blocking_item_ids: [],
+      unresolved_conclusion_critical_item_ids: [],
       compliance: null,
       brief_corrections: { count: 0, items: [] },
       failure_events: [],
@@ -253,6 +314,7 @@ main () {
       notes: null,
       events: [ { seq: 1, at: $start, type: "init",
                   payload: { audit_id: $id, protocol_version: $pv, gate_set_version: $gv,
+                             pipeline_policy_snapshot_sha256: $policysha,
                              package_file_count: $pkg.file_count },
                   pid: null, source: "init_run.sh" } ]
     }
@@ -267,8 +329,13 @@ main () {
 
   # The journal mirrors every event. If run.json is ever lost or corrupted, this file is what the
   # projections are rebuilt from, so it is written separately and only ever appended to.
-  jq -c '.events[0]' "$RUN" >> "$DIR/run.events.jsonl"
+  if [ "$FORCE" -eq 1 ] && [ -s "$DIR/run.events.jsonl" ]; then
+    mv "$DIR/run.events.jsonl" "$DIR/run.events.previous.$(date -u +%Y%m%dT%H%M%SZ).jsonl"
+  fi
+  jq -c '.events[0]' "$RUN" > "$DIR/run.events.jsonl"
   if [ $? -ne 0 ]; then die "could not append the init event to the journal"; fi
+  : > "$DIR/invocations.jsonl"
+  if [ $? -ne 0 ]; then die "could not initialize the invocation telemetry ledger"; fi
 
   echo "=== run.json initialised ==="
   echo "  audit_id:          $AUDIT_ID"
@@ -276,6 +343,7 @@ main () {
   echo "  protocol_version:  $PV"
   echo "  gate_set_version:  $GV"
   echo "  auditor model:     $AM ($AF / $AP)"
+  echo "  critique rounds:   target $TARGET, hard cap $CAP"
   echo "  package:           $(printf '%s' "$PKGJSON" | jq -r '.file_count') files, $(printf '%s' "$PKGJSON" | jq -r '.total_bytes') bytes"
   echo "  package manifest:  work/pkg_manifest.txt (sha256 $(printf '%s' "$PKGJSON" | jq -r '.manifest_sha256 // "n/a"' | cut -c1-16)...)"
   echo "  written:           $RUN"
@@ -301,7 +369,7 @@ self_test () {
 
   # 1. a normal init succeeds and records the package correctly
   "$SELF" "$T/a" --audit-id t-1 --doi 10.1234/abc --round-cap 5 \
-       --auditor-model m-1 --auditor-family fam --auditor-provider prov \
+       --auditor-model sonnet-5 --auditor-family claude --auditor-provider anthropic \
        --protocol-version p1 --gate-set-version g1 > "$T/out1.txt" 2>&1
   rc=$?
   if [ "$rc" -ne 0 ]; then echo "  FAIL: init exited $rc"; cat "$T/out1.txt"; fails=1
@@ -368,6 +436,28 @@ self_test () {
     echo "  FAIL: empty package: exit $rc, file_count '$n'"; fails=1
   else echo "  ok: empty package handled (file_count 0)"; fi
 
+  # 6. Live v2 runs may not weaken the immutable accuracy-safe target or cap.
+  mkdir -p "$T/c/pkg" "$T/d/pkg"
+  "$SELF" "$T/c" --audit-id t-target --round-target 1 > "$T/out6.txt" 2>&1
+  rc=$?
+  if [ "$rc" -ne 2 ] || [ -e "$T/c/run.json" ]; then
+    echo "  FAIL: noncanonical round target should refuse with exit 2 before run creation (got $rc)"; fails=1
+  else echo "  ok: noncanonical round target is rejected by the policy snapshot"; fi
+  "$SELF" "$T/d" --audit-id t-cap --round-cap 4 > "$T/out7.txt" 2>&1
+  rc=$?
+  if [ "$rc" -ne 2 ] || [ -e "$T/d/run.json" ]; then
+    echo "  FAIL: noncanonical round cap should refuse with exit 2 before run creation (got $rc)"; fails=1
+  else echo "  ok: noncanonical round cap is rejected by the policy snapshot"; fi
+
+  # 7. Baseline identity is policy, not caller preference: Opus may not be substituted.
+  mkdir -p "$T/e/pkg"
+  "$SELF" "$T/e" --audit-id t-model --auditor-model opus-5 \
+       --auditor-family claude --auditor-provider anthropic > "$T/out8.txt" 2>&1
+  rc=$?
+  if [ "$rc" -ne 2 ] || [ -e "$T/e/run.json" ]; then
+    echo "  FAIL: noncanonical Opus baseline should refuse with exit 2 before run creation (got $rc)"; fails=1
+  else echo "  ok: Opus cannot replace the Sonnet coordinator/Phase-1 baseline"; fi
+
   rm -rf "$T"
   if [ "$fails" -ne 0 ]; then echo "SELF-TEST FAILED"; return 1; fi
   echo "SELF-TEST PASSED"
@@ -378,7 +468,7 @@ if [ "${1:-}" = "--self-test" ]; then self_test; exit $?; fi
 main "$@"
 rc=$?
 # record the machine state the audit will actually run on (team requirement 2026-08-24)
-if [ $rc -eq 0 ] && [ -n "${1:-}" ] && [ -f "${1}/run.json" ]; then
-  bash "$(cd "$(dirname "$0")" && pwd)/capture_environment.sh" "$1" || echo "WARNING: environment capture failed — record it manually before finalize"
+if [ $rc -eq 0 ] && [ -n "${DIR:-}" ] && [ -f "$DIR/run.json" ]; then
+  bash "$(cd "$(dirname "$0")" && pwd)/capture_environment.sh" "$DIR" || echo "WARNING: environment capture failed — record it manually before finalize"
 fi
 exit $rc

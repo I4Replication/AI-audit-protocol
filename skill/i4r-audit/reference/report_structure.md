@@ -1,5 +1,9 @@
 # I4R comment structure
 
+Pipeline models and review rounds are governed by
+[`config/pipeline-policy-v2.json`](../config/pipeline-policy-v2.json). This reference is authoritative
+only for the public comment's structure and rendering invariants.
+
 **A comment is a paper.** It reads like one: an abstract, numbered sections, a conclusion,
 references. It does not read like a briefing note. There is no executive summary, and no summary
 table on the opening page — a reader meets the argument first, in prose, and the machine-readable
@@ -83,10 +87,14 @@ caption text only — `build_docx.sh` supplies the `Table N.` prefix, so a capti
 One row per numbered finding: **#** · **Finding** (one line, plain words) · **Status**
 (CONFIRMED / LIKELY / SPECULATIVE) · **Changes a published conclusion?** (Yes / No) · **Section**.
 
-Every body finding has exactly one row, and every row is tagged in the body — `check_consistency.sh`
+Every included finding has exactly one row and one entry in the generated body cross-reference — `check_consistency.sh`
 §4 blocks release when they disagree. The table is an index to the argument, not a substitute for it,
 which is why it comes last: a reader who has finished the sections can use it to navigate, and a
 replicator can key the claims script to it. **It must never appear in the body or on page 1.**
+
+`scripts/generate_finding_artifacts.py --apply` renders the canonical block to
+`report/APPENDIX_A.md` from `work/findings.jsonl`. Replace the Appendix A block in `REPORT_final.md`
+with that generated text; do not maintain a second hand-written table.
 
 Where the deposit is large or its structure is itself a finding, a second appendix table lists one
 row per deposited object: File · Role (data / code / output) · Issue ("—" if none). Aggregate uncited
@@ -103,7 +111,8 @@ out; the full list lives in the ledger.
 
 ## Objectivity
 
-- Every finding is stated once in its body section and once in its appendix row — nowhere else.
+- Give every finding one detailed body treatment and one appendix row. The Abstract may summarize a
+  substantive finding, but it must not introduce a new claim or contradict the body.
 - No intensifiers or build-up ("strikingly", "remarkably", "it is worth noting"). Lead with the
   fact; the numbers carry the weight.
 - Every sentence carries a fact, a number, a file reference or a consequence.
@@ -117,10 +126,10 @@ comment. A comment is a document about the paper, not about how it was written.
 
 ## Claim tags (replicator handoff)
 
-Every finding statement in the body carries its claim number inline — `[claim 3]` — matching
-`comment.json` order, the appendix row, and the claims script. Write them into `REPORT_final.md`;
-`build_docx.sh` strips them from the published deliverable and prints the count, so the tags never
-reach the journal. One tag per finding, at the sentence that states it, not on every mention.
+The projection helper writes one ordered body cross-reference entry — `[claim 3]` — matching
+`comment.json`, the appendix row, and the claims script. `build_docx.sh` strips that generated block
+from the published deliverable and prints the count, so the tags never reach the journal. Do not
+scatter hand-keyed duplicates through the narrative.
 
 
 ## Prose

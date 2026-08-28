@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://i4replication.org/schemas/v2/findings-registry.schema.json",
+  "title": "I4R v2 findings registry envelope",
+  "description": "Optional final/export envelope around the canonical JSONL rows. Runtime uses one finding-row.schema.json object per line in work/findings.jsonl.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "audit_id", "policy_version", "source_comment_sha256", "report_sha256", "generated_at", "rows", "normalization"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "audit_id": {"type": "string", "minLength": 3},
+    "policy_version": {"type": "string", "minLength": 1},
+    "source_comment_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "report_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "generated_at": {"type": ["string", "null"], "format": "date-time"},
+    "rows": {"type": "array", "items": {"$ref": "finding-row.schema.json"}},
+    "normalization": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["source_schema_version", "adapter", "fields_unavailable"],
+      "properties": {
+        "source_schema_version": {"type": "string"},
+        "adapter": {"type": "string"},
+        "fields_unavailable": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

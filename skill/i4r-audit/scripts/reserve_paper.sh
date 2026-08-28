@@ -51,11 +51,20 @@ claim () {
     echo "REFUSED: reserved by $WHO"; return 1
   fi
   python3 - "$F" "$OWNER" "$DIR" <<'PY'
-import json, sys, datetime
-json.dump({"owner": sys.argv[2], "paper": sys.argv[3],
-           "claimed_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "status": "active"}, open(sys.argv[1], "w"), indent=2)
+import datetime, json, os, sys
+p=sys.argv[1]
+try:
+    fd=os.open(p, os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o644)
+except FileExistsError:
+    print("REFUSED: another local process created the reservation first")
+    raise SystemExit(3)
+with os.fdopen(fd,"w") as fh:
+    json.dump({"owner": sys.argv[2], "paper": sys.argv[3],
+               "claimed_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+               "status": "active"}, fh, indent=2)
+    fh.write("\n"); fh.flush(); os.fsync(fh.fileno())
 PY
+  [ $? -eq 0 ] || return 1
   # grace window: let Dropbox surface a same-window competing claim as a conflict copy
   [ "$GRACE" -gt 0 ] && { echo "claim written; waiting ${GRACE}s for sync conflicts ..."; sleep "$GRACE"; }
   CONFLICTS=$(find "$RES" -name "${SLUG}*conflicted copy*" 2>/dev/null)
@@ -63,10 +72,10 @@ PY
     # earliest claimed_at across all copies wins
     local MINE THEIRS
     MINE=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['claimed_at'])" "$F")
-    THEIRS=$(cat $CONFLICTS | python3 -c "import json,sys;print(min(json.loads(l)['claimed_at'] for l in [sys.stdin.read()] for json_ in [0] ) )" 2>/dev/null || true)
-    THEIRS=$(python3 - $CONFLICTS <<'PY'
-import json, sys
-print(min(json.load(open(f))["claimed_at"] for f in sys.argv[1:]))
+    THEIRS=$(python3 - "$RES" "$SLUG" <<'PY'
+import json, pathlib, sys
+files=list(pathlib.Path(sys.argv[1]).glob(sys.argv[2] + "*conflicted copy*"))
+print(min(json.load(open(f))["claimed_at"] for f in files))
 PY
 )
     if [ "$THEIRS" \< "$MINE" ]; then
