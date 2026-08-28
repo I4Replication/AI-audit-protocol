@@ -1,0 +1,312 @@
+{
+  "policy_id": "i4r-audit-pipeline-v2",
+  "effective_date": "2026-08-27",
+  "policy_source": "config/pipeline-policy-v2.json",
+  "models": {
+    "coordinator": {
+      "requested_model": "sonnet-5",
+      "spawn_alias": "sonnet",
+      "provider": "anthropic",
+      "reasoning_effort": "max"
+    },
+    "phase_1_auditors": {
+      "auditor_reproduction": {
+        "area": 1,
+        "requested_model": "sonnet-5",
+        "spawn_alias": "sonnet",
+        "provider": "anthropic",
+        "reasoning_effort": "max"
+      },
+      "auditor_data_integrity": {
+        "area": 2,
+        "requested_model": "sonnet-5",
+        "spawn_alias": "sonnet",
+        "provider": "anthropic",
+        "reasoning_effort": "max"
+      },
+      "auditor_text_vs_data": {
+        "area": 3,
+        "requested_model": "sonnet-5",
+        "spawn_alias": "sonnet",
+        "provider": "anthropic",
+        "reasoning_effort": "max"
+      },
+      "auditor_code_methods": {
+        "area": 4,
+        "requested_model": "sonnet-5",
+        "spawn_alias": "sonnet",
+        "provider": "anthropic",
+        "reasoning_effort": "max"
+      },
+      "auditor_privacy_archive": {
+        "area": 5,
+        "requested_model": "sonnet-5",
+        "spawn_alias": "sonnet",
+        "provider": "anthropic",
+        "reasoning_effort": "max"
+      }
+    },
+    "critics": {
+      "requested_model": "gpt-5.6-terra",
+      "provider": "openai",
+      "reasoning_effort": "high",
+      "must_differ_from_coordinator_family": true
+    },
+    "targeted_adjudicator": {
+      "requested_model": "gpt-5.6-terra",
+      "provider": "openai",
+      "reasoning_effort": "max",
+      "must_differ_from_coordinator_family": true
+    }
+  },
+  "phase_1": {
+    "required_roles": [
+      "auditor_reproduction",
+      "auditor_data_integrity",
+      "auditor_text_vs_data",
+      "auditor_code_methods",
+      "auditor_privacy_archive"
+    ],
+    "parallelism": 5,
+    "isolated_work_directories": true,
+    "package_is_read_only": true
+  },
+  "critique": {
+    "round_target": 2,
+    "round_cap": 5,
+    "max_attempts_per_role_total": 3,
+    "attempt_budget_scope": "across_parallel_serial_and_resumed_execution",
+    "completion_contract": "clean_process_exit_and_explicit_role_complete_status",
+    "model_probe": {
+      "requested_model": "gpt-5.6-terra",
+      "reasoning_effort": "high",
+      "cache_scope": "one_success_per_audit_model_and_effort",
+      "maximum_successful_provider_calls": 1,
+      "reuse_across_rounds": true
+    },
+    "round_1": {
+      "roles": [
+        "critic_stats",
+        "critic_data",
+        "critic_fairness",
+        "critic_completeness"
+      ],
+      "parallelism": 4,
+      "synthesis": "deterministic_merge_then_targeted_adjudication",
+      "runtime_adjudicate_mode": "auto",
+      "separate_adjudicator_model_invocations_default": "zero_without_triggers_one_when_triggered"
+    },
+    "later_rounds": {
+      "always_run": [
+        "critic_completeness"
+      ],
+      "default_total_critics": 2,
+      "specialist_router": {
+        "critic_fairness": [
+          "privacy_or_disclosure",
+          "licence_or_archive_remedy",
+          "impact_or_conclusion_language",
+          "author_attribution",
+          "benign_explanation_or_proportionality"
+        ],
+        "critic_stats": [
+          "statistic_or_quantitative_claim",
+          "estimator_or_model_specification",
+          "power_probability_or_interval",
+          "methods_or_inference"
+        ],
+        "critic_data": [
+          "sample_or_participant_count",
+          "exclusion_missingness_or_duplicate",
+          "raw_record_or_derived_outcome",
+          "file_manifest_or_repository_metadata"
+        ]
+      },
+      "fallback_specialist": "critic_fairness",
+      "specialist_selection": "always_choose_exactly_one_best_matching_specialist",
+      "cross_domain_rule": "add_specialists_only_when_multiple_domains_have_conclusion_changing_or_disclosure_critical_changes",
+      "ordinary_cross_domain_rule": "one_best_matching_specialist_only",
+      "scope": "changed_sections_plus_dependencies_and_global_consistency_checks",
+      "synthesis": "deterministic_merge_then_targeted_adjudication",
+      "routing_manifest": {
+        "explicit_environment_variable": "DIFF_MANIFEST",
+        "signals_in_precedence_order": [
+          "recommended_roles",
+          "positive_role_scores",
+          "domains_or_changed_claim_types_or_risk_tags"
+        ],
+        "required_scope_metadata": [
+          "changed_claim_ids",
+          "changed_sections"
+        ],
+        "explicit_missing_path_is_fatal": true,
+        "generated_packet_verifier": "scripts/verify_diff_packet.py",
+        "always_retain_completeness": true
+      },
+      "parallelism_default": "actual_routed_role_count",
+      "runtime_adjudicate_mode": "auto",
+      "separate_adjudicator_model_invocations_default": "zero_without_triggers_one_when_triggered",
+      "post_delta_gates": {
+        "required": [
+          "consistency",
+          "privacy",
+          "checklist",
+          "archive"
+        ],
+        "runner": "scripts/run_post_delta_gates.py",
+        "receipt": "critique/round_<N>/POST_DELTA_GATES.json",
+        "completion_contract": "all_four_pass_on_one_content_bound_snapshot",
+        "finalization_replays_latest_receipt": true
+      }
+    },
+    "settled_facts": {
+      "generate_after_round": 1,
+      "generation_timing": "immediately_after_round_1_integration",
+      "minimum_independent_confirmations": 2,
+      "minimum_distinct_model_families": 2,
+      "require_coordinator_approval": true,
+      "require_dependency_fingerprint": true,
+      "require_rerunnable_source_hashes": true,
+      "require_canonical_registry_hash_binding": true,
+      "require_current_report_hash_binding": true,
+      "require_valid_for_report_hash": true,
+      "require_spot_check_or_hash": true,
+      "inject_from_round": 2,
+      "runtime_registry_path": "work/findings.jsonl",
+      "runtime_row_schema": "schemas/v2/finding-row.schema.json",
+      "optional_export_envelope_schema": "schemas/v2/findings-registry.schema.json",
+      "generated_outputs": [
+        "SETTLED.json",
+        "SETTLED.md"
+      ]
+    },
+    "adjudication": {
+      "mode": "terra_targeted_on_policy_triggers",
+      "model_policy_ref": "models.targeted_adjudicator",
+      "deterministic_trigger_packet": "adjudication_packet.json",
+      "separate_model_default": "triggered_only",
+      "automatic_triggers": [
+        "conflicting_verdicts",
+        "disputed_conclusion_changing_claim",
+        "high_impact_finding_lacking_two_independent_evidence_records",
+        "failed_settled_fact_spot_check"
+      ],
+      "items_requiring_recomputation": [
+        "refuted_or_overstated_claim",
+        "new_finding",
+        "critic_disagreement",
+        "blocking_item",
+        "unverifiable_material_claim"
+      ],
+      "second_structurally_different_route_required_for": [
+        "conclusion_changing_claim",
+        "coordinator_auditor_disagreement",
+        "rejected_criticism"
+      ],
+      "confirmed_settled_items": "spot_check_unless_the_current_decision_depends_on_them"
+    },
+    "stopping": {
+      "review_scope_event": "review_scope",
+      "required_run_state_fields": [
+        "changed_claim_ids",
+        "rereviewed_claim_ids",
+        "unresolved_blocking_item_ids",
+        "unresolved_conclusion_critical_item_ids",
+        "unreviewed_sections"
+      ],
+      "target_complete": "after at least two completed rounds, every changed claim id received subsequent review and no unresolved blocking or conclusion-critical item remains",
+      "continue_after_target": "continue with routed critics when a changed claim id has not received subsequent review or a blocking or conclusion-critical item remains",
+      "converged": "after continuing beyond the target, a completed round returns no factual correction and no unresolved blocking or conclusion-critical item",
+      "cap_with_unresolved": "stop at round 5 and record every unresolved item and every section changed after its last adversarial review",
+      "aborted": "use only for a genuine blocker or failed run, never merely because the target of two rounds was reached"
+    }
+  },
+  "default_role_counts": {
+    "coordinator": 1,
+    "phase_1_subagents": 5,
+    "round_1_critics": 4,
+    "round_1_model_synthesizers": 0,
+    "round_2_critics": 2,
+    "default_external_codex_substantive_sessions": 6,
+    "default_targeted_adjudicator_sessions": 0,
+    "default_substantive_non_coordinator_invocations": 11,
+    "default_substantive_sessions_including_coordinator": 12,
+    "cold_start_provider_invocations_including_probe": 13,
+    "cold_start_critique_provider_invocations": 7,
+    "warm_probe_critique_provider_invocations": 6,
+    "normal_worst_case_critique_provider_invocations": 19,
+    "one_triggered_adjudicator_round_worst_case_provider_invocations": 22
+  },
+  "finding_source_of_truth": {
+    "runtime_registry": "work/findings.jsonl",
+    "row_schema": "schemas/v2/finding-row.schema.json",
+    "projection_command": "python3 scripts/generate_finding_artifacts.py <audit-dir> --apply",
+    "ledger_scope": "all_registry_rows",
+    "final_projection_scope": "final_status_coordinator_approved_and_included_rows",
+    "generated_outputs": [
+      "report/LEDGER.md",
+      "report/APPENDIX_A.md",
+      "claims_map.tsv",
+      "work/verification_plan.json",
+      "work/comment_findings.generated.json",
+      "verification_snippets/"
+    ]
+  },
+  "local_execution": {
+    "intake_manifest": "package_manifest.json",
+    "intake_manifest_reused_by": [
+      "critique",
+      "verification",
+      "post_delta_archive_gate",
+      "staging",
+      "finalization"
+    ],
+    "event_projection": {
+      "runner": "scripts/log_event.sh --batch <events.jsonl>",
+      "transaction": "one_lock_one_projection_one_run_json_rename",
+      "single_event_compatible": true
+    },
+    "environment_probes": {
+      "runner": "scripts/capture_environment.sh",
+      "parallel": true
+    },
+    "document_build_cache": {
+      "runner": "scripts/build_docx.sh",
+      "helper": "scripts/document_build_cache.py",
+      "default": "validated_content_addressed_cache",
+      "bypass_flag": "--no-cache",
+      "refresh_flag": "--refresh-cache"
+    },
+    "publication": "atomic_manifest_last"
+  },
+  "verification": {
+    "required_runner": "scripts/run_verification.sh",
+    "content_bound_manifest": "verification_manifest.json",
+    "allow_no_verification": false,
+    "release_stage_required_artifacts": [
+      "verification.Rmd",
+      "verification_status.txt",
+      "verification_summary.csv",
+      "verification_manifest.json"
+    ]
+  },
+  "publication": {
+    "primary_artifact_count": 5,
+    "primary_artifacts": [
+      "report/*.pdf",
+      "claims_script.*",
+      "run.json",
+      "comment.json",
+      "finalization_receipt.json"
+    ],
+    "manifest": "release-manifest.json",
+    "total_file_count": 6
+  },
+  "document": {
+    "abstract_max_words": 250,
+    "body_max_rendered_pages": 10,
+    "executive_summary": false,
+    "findings_table_location": "appendix_a",
+    "recommendations_section": false
+  }
+}

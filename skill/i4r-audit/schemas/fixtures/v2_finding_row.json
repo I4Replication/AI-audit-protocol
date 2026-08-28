@@ -1,0 +1,62 @@
+{
+  "schema_version": "2.0.0",
+  "id": "F1",
+  "claim": "The reported value differs from the rerun output.",
+  "domain": "statistics",
+  "source_location": {"path": "paper/paper.txt", "locator": "results, primary outcome"},
+  "claim_ref": "results, primary outcome",
+  "status": "confirmed",
+  "ledger_disposition": {"status": "INCLUDED", "target": null, "reason": null},
+  "coordinator_approved": true,
+  "impact": "value_wrong",
+  "impact_rank": 2,
+  "verification_tier": 2,
+  "paper_only": false,
+  "confidence": "CONFIRMED",
+  "evidence": {
+    "source_hashes": [
+      {"path": "work/check_primary.txt", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    ],
+    "rerun_command": "python work/check_primary.py",
+    "expected": 10,
+    "observed": 9,
+    "tolerance_basis": "Exact integer comparison."
+  },
+  "unverifiable_basis": null,
+  "verifications": [
+    {
+      "reviewer_id": "auditor_reproduction",
+      "invocation_id": "inv-auditor-reproduction-1",
+      "evidence_record": {"path": "report/01_reproduction.md", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+      "model_family": "claude",
+      "outcome": "confirmed"
+    },
+    {
+      "reviewer_id": "critic_stats",
+      "invocation_id": "inv-critic-stats-r1-1",
+      "evidence_record": {"path": "critique/round_1/critic_stats.json", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+      "model_family": "gpt",
+      "outcome": "confirmed"
+    }
+  ],
+  "dependencies": {
+    "environment_fingerprint": "sha256:environment-a",
+    "finding_ids": [],
+    "artifact_paths": ["work/check_primary.txt", "work/check_primary.py"]
+  },
+  "settled": {"approved": true, "valid_for_report_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+  "benign_explanations_ruled_out": ["The discrepancy is larger than the stated rounding precision."],
+  "report_section": "Section 3.1",
+  "verification_snippet": {"kind": "code", "path": "work/check_primary.py", "basis": "The bounded rerun produces the observed value exactly."},
+  "disclosure_flag": false,
+  "remedy": {"class": "one_number", "description": "Correct the printed value.", "verified": true},
+  "changes_conclusion": false,
+  "changes_conclusion_which": null,
+  "provenance": {
+    "origin_role": "auditor_reproduction",
+    "independently_found_by": ["auditor_reproduction", "critic_stats"],
+    "agreed_after_seeing": [],
+    "round_introduced": 0,
+    "source_records": ["report/01_reproduction.md"]
+  }
+}

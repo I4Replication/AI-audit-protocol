@@ -2,6 +2,17 @@
 # setup_workspace.sh <audit-dir> <paper.pdf> <package.zip|dir>
 set -euo pipefail
 DIR="${1:?audit dir}"; PAPER="${2:?paper pdf}"; PKG="${3:?package zip or dir}"
+[ -f "$PAPER" ] || { echo "FATAL: paper not found: $PAPER" >&2; exit 2; }
+[ -d "$PKG" ] || [ -f "$PKG" ] || { echo "FATAL: package not found: $PKG" >&2; exit 2; }
+
+# A populated intake directory can retain files that no longer exist in the source package.
+# Failing closed is cheaper than auditing a hybrid of two deposits.
+if [ "${I4R_ALLOW_EXISTING:-0}" != "1" ] && [ -d "$DIR/pkg" ] &&
+   [ -n "$(find "$DIR/pkg" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+  echo "FATAL: $DIR/pkg is not empty; choose a fresh audit directory" >&2
+  echo "       Set I4R_ALLOW_EXISTING=1 only for an explicitly documented recovery." >&2
+  exit 2
+fi
 
 # ---- automatic reservation (2026-08-24): the audit claims its own paper before touching it ----
 # The paper dir is the audit dir's parent; the discipline tree is two levels up. If the audit is
@@ -34,15 +45,47 @@ if [ -d "$PKG" ]; then cp -R "$PKG"/. "$DIR/pkg/"; else unzip -q -o "$PKG" -d "$
 # flatten a single wrapper directory
 inner=$(find "$DIR/pkg" -mindepth 1 -maxdepth 1 -type d | head -1)
 if [ "$(find "$DIR/pkg" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" = "1" ] && [ -n "$inner" ]; then
-  mv "$inner"/* "$DIR/pkg/" 2>/dev/null || true; rmdir "$inner" 2>/dev/null || true
+  # `mv "$inner"/*` misses dotfiles. Move every immediate entry explicitly.
+  find "$inner" -mindepth 1 -maxdepth 1 -exec mv {} "$DIR/pkg/" \;
+  rmdir "$inner"
 fi
 command -v pdftotext >/dev/null && pdftotext -layout "$DIR/paper/paper.pdf" "$DIR/paper/paper.txt" 2>/dev/null || true
+
+# One streaming inventory is reused by init, verification, staging and finalization.  The package
+# becomes read-only only after hashing; audit-created work belongs under work/.
+python3 - "$DIR/pkg" "$DIR/package_manifest.json" <<'PY'
+import collections, hashlib, json, os, pathlib, sys, tempfile
+root, out = pathlib.Path(sys.argv[1]).resolve(), pathlib.Path(sys.argv[2])
+rows, types = [], collections.Counter()
+for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(block)
+    stat = path.stat(); rel = path.relative_to(root).as_posix()
+    ext = path.suffix.lower().lstrip(".") or "<none>"; types[ext] += 1
+    rows.append({"path": rel, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+                 "sha256": h.hexdigest(), "extension": ext})
+tree = hashlib.sha256("".join(f"{r['path']}\0{r['sha256']}\n" for r in rows).encode()).hexdigest()
+payload = {"schema_version": "2.0.0", "algorithm": "sha256", "package_sha256": tree,
+           "file_count": len(rows), "file_types": dict(sorted(types.items())), "files": rows}
+fd, tmp = tempfile.mkstemp(prefix=out.name + ".", dir=out.parent)
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2, ensure_ascii=False); fh.write("\n"); fh.flush(); os.fsync(fh.fileno())
+os.replace(tmp, out)
+PY
+chmod -R a-w "$DIR/pkg"
 echo "=== workspace: $DIR ==="
-echo "package entries: $(find "$DIR/pkg" -type f | wc -l | tr -d ' ')"
+echo "package entries: $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["file_count"])' "$DIR/package_manifest.json")"
 echo "paper text:      $( [ -f "$DIR/paper/paper.txt" ] && wc -l < "$DIR/paper/paper.txt" || echo 'EXTRACTION FAILED — read the PDF directly')"
 echo ""
 echo "--- file types ---"
-find "$DIR/pkg" -type f | sed 's/.*\.//' | tr 'A-Z' 'a-z' | sort | uniq -c | sort -rn | head -12
+python3 - "$DIR/package_manifest.json" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1]))
+for ext, n in sorted(d["file_types"].items(), key=lambda x: (-x[1], x[0]))[:12]:
+    print(f"{n:6d} {ext}")
+PY
 echo ""
 echo "--- candidate analysis code ---"
 find "$DIR/pkg" -type f \( -name '*.R' -o -name '*.r' -o -name '*.qmd' -o -name '*.Rmd' -o -name '*.py' -o -name '*.do' -o -name '*.sps' -o -name '*.ipynb' \) | head -20

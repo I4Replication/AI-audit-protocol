@@ -1,8 +1,24 @@
 # The I4R audit checklist
 
+Model and role assignments are defined by
+[`config/pipeline-policy-v2.json`](../config/pipeline-policy-v2.json). This reference defines the
+checks, not which model runs them.
+
 Distilled from published I4R comments (papers A40, A46, A45 and A47) and from the
-audit A48 calibration run. Items 1–7 are what the published comments actually hunt for; 8–11
-were added from calibration.
+calibration run on paper A48. Items 1–7 come from the published comments; items 8–12 were added
+from calibration and production audits.
+
+## Role routing
+
+Coverage overlaps deliberately; each role approaches shared risks from a different evidence path.
+
+| Phase-1 area | Primary checklist items | Required cross-check |
+|---|---|---|
+| 1. Reproduction | 3, 8, 9, 10, 11 | Reproduce every reported headline value at printed precision |
+| 2. Data integrity | 1, 2, 4, 6 | Trace any anomaly into or out of published statistics |
+| 3. Text-vs-data | 3, 5, 9, 12 | Derive inputs from the article rather than a typed claim list |
+| 4. Code and methods | 4, 8, 10, 11 | Compare code behavior with Methods and dependency versions |
+| 5. Privacy and archive | 7, 10, 12 | Correct the shared brief and verify the live repository record |
 
 ## 1. Duplication and sample inflation
 Exact duplicate rows; near-duplicates; contiguous block duplication at every offset; repeat

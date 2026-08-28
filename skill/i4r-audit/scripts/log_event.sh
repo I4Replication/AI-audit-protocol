@@ -1,7 +1,9 @@
 #!/bin/bash
-# log_event.sh [--run <run.json>] <type> [key=value ...]     (or: log_event.sh --self-test)
+# log_event.sh [--run <run.json>] <type> [key=value ...]
+# log_event.sh [--run <run.json>] --batch <events.jsonl>     (or: log_event.sh --self-test)
 #
-# Appends ONE structured event to run.json's journal and projects it into the typed fields.
+# Appends one structured event, or an ordered JSONL batch, to run.json's journal and projects it
+# into the typed fields. A batch is one transaction: it takes one lock and rewrites run.json once.
 # Call it the moment something happens. Everything this records is unreconstructable later.
 #
 #   export RUN_JSON=<audit-dir>/run.json     # then --run can be omitted
@@ -25,11 +27,19 @@
 #   log_event.sh gate gate=check_consistency round=3 exit_status=$?   # capture $? IMMEDIATELY
 #   log_event.sh delivery artifact_path=report/comment.docx recipient='I4R editorial'
 #   log_event.sh human_effort phase=critique person_minutes=95   # self-reported; accumulates
-#   log_event.sh settled used=true generated_after_round=2 path=SETTLED.md entries=14
+#   log_event.sh settled used=true generated_after_round=1 path=SETTLED.md entries=14
+#   log_event.sh review_scope changed_claim_ids:='["F2"]' rereviewed_claim_ids:='["F2"]' \
+#                      unresolved_blocking_item_ids:='[]' \
+#                      unresolved_conclusion_critical_item_ids:='[]' unreviewed_sections:='[]'
 #
 # Values are typed automatically: bare integers and decimals become numbers, true/false become
 # booleans, `null` and the empty string become null, everything else is a string. Use `key:=<json>`
 # to pass raw JSON (arrays, objects).
+#
+# Batch input has exactly one JSON object per nonblank line:
+#   {"type":"phase_start","at":"2026-07-14T10:00:00Z","payload":{"phase":"fan_out"}}
+# `at` is optional. `payload` is required and already JSON-typed. The complete batch is validated
+# before the lock is taken; a malformed or unprojectable event leaves run.json unchanged.
 #
 # SAFE TO CALL REPEATEDLY AND CONCURRENTLY. Every write takes an exclusive lock, rewrites the file
 # through a temporary in the same directory, and renames it into place, so a reader never sees a
@@ -42,7 +52,7 @@ set -uo pipefail
 SELF="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/$(basename "$0")"
 LOCK_TIMEOUT="${LOCK_TIMEOUT:-60}"     # seconds to wait for the write lock
 
-TYPES="init phase_start phase_end round_start round_end round_result model tokens cost failure brief_correction gate delivery package records human_effort settled note finalize"
+TYPES="init phase_start phase_end round_start round_end round_result review_scope model tokens cost failure brief_correction gate delivery package records human_effort settled note finalize"
 PHASES="intake fan_out adjudication critique release"
 
 die () { echo "FATAL: log_event.sh: $*" >&2; exit 2; }
@@ -50,7 +60,11 @@ now_utc () { date -u +%Y-%m-%dT%H:%M:%SZ; }
 in_list () { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 LOCK=""
-release_lock () { [ -n "$LOCK" ] && rm -rf "$LOCK"; }
+BATCH_TMP=""
+release_lock () {
+  [ -n "$LOCK" ] && rm -rf "$LOCK"
+  [ -n "$BATCH_TMP" ] && rm -f "$BATCH_TMP"
+}
 
 acquire_lock () {
   local waited=0 limit owner age now_s lock_s
@@ -103,13 +117,104 @@ acquire_lock () {
   done
 }
 
+# Return the required payload keys for an event type. Keeping this in one function prevents the
+# single-event and batch validators from drifting apart.
+required_keys () {
+  case "$1" in
+    phase_start|phase_end) echo "phase" ;;
+    round_start|round_end|round_result) echo "round" ;;
+    review_scope) echo "changed_claim_ids rereviewed_claim_ids unresolved_blocking_item_ids unresolved_conclusion_critical_item_ids unreviewed_sections" ;;
+    model) echo "role model_id provider" ;;
+    tokens|cost) echo "role" ;;
+    failure) echo "kind detail" ;;
+    brief_correction) echo "description" ;;
+    gate) echo "gate exit_status" ;;
+    records) echo "artifact" ;;
+    human_effort) echo "phase person_minutes" ;;
+    settled) echo "used" ;;
+    *) echo "" ;;
+  esac
+}
+
+# Strict JSONL normalization. `jq -s` accepts pretty-printed or multiple values on one line, which
+# is not JSONL and makes line-specific failures ambiguous, so validate the framing first.
+normalize_batch () {
+  local INPUT="$1" OUTPUT="$2" spec="" type
+  for type in $TYPES; do spec="${spec}${type}:$(required_keys "$type");"; done
+  python3 - "$INPUT" "$OUTPUT" "$TYPES" "$PHASES" "$spec" <<'PYBATCH'
+import json, pathlib, sys
+
+source, target = map(pathlib.Path, sys.argv[1:3])
+types = set(sys.argv[3].split())
+phases = set(sys.argv[4].split())
+required = {}
+for item in sys.argv[5].split(";"):
+    if item:
+        event_type, keys = item.split(":", 1)
+        required[event_type] = keys.split()
+try:
+    raw = source.read_text(encoding="utf-8")
+except (OSError, UnicodeError) as exc:
+    raise SystemExit(f"FATAL: cannot read event batch {source}: {exc}")
+lines = raw.splitlines()
+if not lines:
+    raise SystemExit("FATAL: event batch is empty")
+out = []
+for number, line in enumerate(lines, 1):
+    if not line.strip():
+        raise SystemExit(f"FATAL: event batch line {number} is blank")
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"FATAL: event batch line {number} is not one JSON object: {exc.msg}")
+    if not isinstance(value, dict):
+        raise SystemExit(f"FATAL: event batch line {number} must be an object")
+    extra = sorted(set(value) - {"type", "payload", "at"})
+    if extra:
+        raise SystemExit(f"FATAL: event batch line {number} has unknown fields: {', '.join(extra)}")
+    if not isinstance(value.get("type"), str) or not value["type"]:
+        raise SystemExit(f"FATAL: event batch line {number} needs a nonempty string type")
+    if not isinstance(value.get("payload"), dict):
+        raise SystemExit(f"FATAL: event batch line {number} needs an object payload")
+    if "at" in value and (not isinstance(value["at"], str) or not value["at"]):
+        raise SystemExit(f"FATAL: event batch line {number} at must be a nonempty string")
+    event_type = value["type"]
+    if event_type not in types:
+        raise SystemExit(f"FATAL: event batch line {number} has unknown type {event_type!r}")
+    missing = [key for key in required[event_type] if key not in value["payload"]]
+    if missing:
+        raise SystemExit(
+            f"FATAL: event batch line {number} type {event_type!r} requires payload.{missing[0]}"
+        )
+    if event_type in {"phase_start", "phase_end", "human_effort"}:
+        phase = value["payload"].get("phase")
+        if phase not in phases:
+            raise SystemExit(f"FATAL: event batch line {number} has unknown phase {phase!r}")
+    out.append(json.dumps(value, sort_keys=True, separators=(",", ":")))
+try:
+    target.write_text("\n".join(out) + "\n", encoding="utf-8")
+except OSError as exc:
+    raise SystemExit(f"FATAL: cannot stage event batch: {exc}")
+print(len(out))
+PYBATCH
+}
+
 # ------------------------------------------------------------------- the write
-write_event () {
-  local RUN="$1" TYPE="$2"; shift 2
-  local DIRN JOURNAL TMP rc before after
+write_events () {
+  local RUN="$1" TYPE="$2" BATCH="$3" EVENT_COUNT="$4"; shift 4
+  local DIRN JOURNAL TMP JOURNAL_TMP ADDED rc before after
+  local -a MODE_ARGS
   DIRN=$(dirname "$RUN")
   JOURNAL="$DIRN/run.events.jsonl"
   TMP="$RUN.tmp.$$"
+  JOURNAL_TMP="$JOURNAL.tmp.$$"
+  ADDED="$DIRN/.run.events.added.$$"
+
+  if [ -n "$BATCH" ]; then
+    MODE_ARGS=(--arg batch_mode true --slurpfile batch "$BATCH" --arg type "")
+  else
+    MODE_ARGS=(--arg batch_mode false --argjson batch '[]' --arg type "$TYPE")
+  fi
 
   before=$(jq -r '.events | length' "$RUN" 2>/dev/null)
   if [ -z "$before" ]; then echo "FATAL: $RUN is unreadable or has no events array" >&2; return 1; fi
@@ -119,7 +224,8 @@ write_event () {
   # jq reads an empty stdin, and the output is an empty file -- which `jq empty` then
   # accepts, renaming a zero-byte file over the run record. Both halves of that are fixed
   # here: stdin for the input, and a real content check before the rename.
-  jq --arg now "$(now_utc)" --arg type "$TYPE" --arg pid "$$" --arg src "log_event.sh" \
+  jq --arg now "$(now_utc)" --arg pid "$$" --arg src "log_event.sh" \
+     "${MODE_ARGS[@]}" \
      '
     # ---- typed key=value parsing -------------------------------------------------
     def parse_kv:
@@ -145,11 +251,16 @@ write_event () {
       else (($b | fromdateiso8601) - ($a | fromdateiso8601)) | floor
       end;
 
-    ($ARGS.positional | parse_kv) as $p
-    | ($p.at // $now) as $t
-    # The outer parentheses are load-bearing: without them jq binds `as` tighter than `+`
-    # and the entire rest of the program becomes the right operand of the addition.
-    | ((((.events | map(.seq) | max) // 0) + 1)) as $seq
+    (if $batch_mode == "true" then $batch
+     else [{type: $type, payload: ($ARGS.positional | parse_kv)}]
+     end) as $items
+    | reduce $items[] as $event (.;
+      ($event.payload | del(.at)) as $p
+      | ($event.at // $event.payload.at // $now) as $t
+      | ($event.type) as $type
+      # The outer parentheses are load-bearing: without them jq binds `as` tighter than `+`
+      # and the entire rest of the program becomes the right operand of the addition.
+      | ((((.events | map(.seq) | max) // 0) + 1)) as $seq
 
     # ---- 1. the journal entry: always, whatever the type ---------------------------
     | .events += [{ seq: $seq, at: $t, type: $type,
@@ -166,7 +277,7 @@ write_event () {
                            unclassified_defects: null, items_accepted: null, items_contested: null,
                            integrated_at: null, integrated_before_delivery: null,
                            consistency_check_run: null, consistency_check_exit: null,
-                           character: null, notes: null }]
+                           character: null, factual_corrections: null, notes: null }]
              | .rounds |= sort_by(.round)
         end;
       def merge_round($r; $fields):
@@ -220,7 +331,7 @@ write_event () {
             ($p | del(.round, .at)
              | pick(["blocking_items","non_blocking_items","comment_defects","paper_defects",
                      "unclassified_defects","items_accepted","items_contested","integrated_at",
-                     "consistency_check_run","consistency_check_exit","character","notes",
+                     "consistency_check_run","consistency_check_exit","character","factual_corrections","notes",
                      "report_version_reviewed"])))
         # unclassified is derived, so a partial classification is visible rather than implied
         | .rounds |= map(
@@ -229,6 +340,14 @@ write_event () {
                and ($p | has("unclassified_defects") | not)
             then .unclassified_defects = (.blocking_items - .comment_defects - .paper_defects)
             else . end)
+
+      elif $type == "review_scope" then
+        .changed_claim_ids = ($p.changed_claim_ids | listify)
+        | .rereviewed_claim_ids = ($p.rereviewed_claim_ids | listify)
+        | .unresolved_blocking_item_ids = ($p.unresolved_blocking_item_ids | listify)
+        | .unresolved_conclusion_critical_item_ids =
+            ($p.unresolved_conclusion_critical_item_ids | listify)
+        | .unreviewed_sections = (($p.unreviewed_sections // []) | listify)
 
       elif $type == "model" then
         ( [ .model_assignments[] | select(.role == $p.role) ] | last ) as $prev
@@ -355,6 +474,7 @@ write_event () {
 
       else .        # note, init, finalize: journal only
       end
+    )
   ' --args "$@" < "$RUN" > "$TMP"
   rc=$?
   if [ "$rc" -ne 0 ]; then rm -f "$TMP"; echo "FATAL: jq projection failed (exit $rc)" >&2; return 1; fi
@@ -366,17 +486,42 @@ write_event () {
     rm -f "$TMP"; echo "FATAL: projection produced an empty file; original left untouched" >&2; return 1
   fi
   after=$(jq -r 'if type == "object" and (.events | type) == "array" then (.events | length) else "bad" end' "$TMP" 2>/dev/null)
-  if [ "$after" != "$((before + 1))" ]; then
+  if [ "$after" != "$((before + EVENT_COUNT))" ]; then
     rm -f "$TMP"
-    echo "FATAL: projection produced '$after' events, expected $((before + 1)); original left untouched" >&2
+    echo "FATAL: projection produced '$after' events, expected $((before + EVENT_COUNT)); original left untouched" >&2
     return 1
   fi
 
-  mv -f "$TMP" "$RUN"
-  if [ $? -ne 0 ]; then rm -f "$TMP"; echo "FATAL: could not rename the new run.json into place" >&2; return 1; fi
+  # Stage the complete journal update before committing run.json. This makes a batch visible in
+  # the append-only journal as a unit, rather than exposing a successful prefix when a later event
+  # fails projection. run.json remains the source of truth if the second rename itself is interrupted.
+  jq -c --argjson start "$before" '.events[$start:][]' "$TMP" > "$ADDED"
+  rc=$?
+  if [ "$rc" -ne 0 ] || [ "$(wc -l < "$ADDED" | tr -d ' ')" != "$EVENT_COUNT" ]; then
+    rm -f "$TMP" "$ADDED" "$JOURNAL_TMP"
+    echo "FATAL: could not stage all $EVENT_COUNT journal entries; original left untouched" >&2
+    return 1
+  fi
+  if [ -n "$BATCH" ]; then
+    if [ -f "$JOURNAL" ]; then
+      cp "$JOURNAL" "$JOURNAL_TMP" || { rm -f "$TMP" "$ADDED" "$JOURNAL_TMP"; return 1; }
+    else
+      : > "$JOURNAL_TMP" || { rm -f "$TMP" "$ADDED" "$JOURNAL_TMP"; return 1; }
+    fi
+    cat "$ADDED" >> "$JOURNAL_TMP" || { rm -f "$TMP" "$ADDED" "$JOURNAL_TMP"; return 1; }
+  fi
 
-  jq -c '.events[-1]' "$RUN" >> "$JOURNAL"
-  if [ $? -ne 0 ]; then echo "WARNING: run.json updated but the journal append failed" >&2; fi
+  mv -f "$TMP" "$RUN"
+  if [ $? -ne 0 ]; then rm -f "$TMP" "$ADDED" "$JOURNAL_TMP"; echo "FATAL: could not rename the new run.json into place" >&2; return 1; fi
+
+  if [ -n "$BATCH" ]; then
+    mv -f "$JOURNAL_TMP" "$JOURNAL"
+    if [ $? -ne 0 ]; then rm -f "$JOURNAL_TMP"; echo "WARNING: run.json updated but the journal batch publish failed" >&2; fi
+  else
+    cat "$ADDED" >> "$JOURNAL"
+    if [ $? -ne 0 ]; then echo "WARNING: run.json updated but the journal append failed" >&2; fi
+  fi
+  rm -f "$ADDED"
   return 0
 }
 
@@ -384,55 +529,55 @@ write_event () {
 main () {
   command -v jq >/dev/null; if [ $? -ne 0 ]; then die "jq is required but not on PATH"; fi
 
-  local RUN="${RUN_JSON:-}"
+  local RUN="${RUN_JSON:-}" BATCH="" EVENT_COUNT="" TYPE=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --run) RUN="${2:-}"; shift 2 ;;
-      -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+      --run) [ $# -ge 2 ] || die "--run requires a path"; RUN="$2"; shift 2 ;;
+      --batch) [ $# -ge 2 ] || die "--batch requires a JSONL path"; BATCH="$2"; shift 2 ;;
+      -h|--help) sed -n '2,48p' "$0"; exit 0 ;;
       *) break ;;
     esac
   done
   [ -n "$RUN" ] || die "no run.json given: pass --run <path> or set RUN_JSON"
   [ -f "$RUN" ] || die "$RUN does not exist -- run init_run.sh first"
-  [ $# -ge 1 ] || die "no event type given (one of: $TYPES)"
 
-  local TYPE="$1"; shift
-  in_list "$TYPE" "$TYPES" || die "unknown event type '$TYPE' (one of: $TYPES)"
+  if [ -n "$BATCH" ]; then
+    [ $# -eq 0 ] || die "--batch cannot be combined with a single event type or key=value arguments"
+    [ -f "$BATCH" ] || die "event batch $BATCH does not exist"
+    BATCH_TMP=$(mktemp "$(dirname "$RUN")/.run.events.batch.XXXXXX") || die "cannot stage the event batch beside run.json"
+    trap release_lock EXIT INT TERM
+    EVENT_COUNT=$(normalize_batch "$BATCH" "$BATCH_TMP")
+    [ $? -eq 0 ] && [ -n "$EVENT_COUNT" ] || die "event batch validation failed"
+  else
+    [ $# -ge 1 ] || die "no event type given (one of: $TYPES), and no --batch file given"
+    TYPE="$1"; shift
+    in_list "$TYPE" "$TYPES" || die "unknown event type '$TYPE' (one of: $TYPES)"
 
-  # Per-type required keys. Refusing here rather than writing a half-specified event is
-  # deliberate: an event that cannot be projected is an event nobody will notice is missing.
-  local need="" k found
-  case "$TYPE" in
-    phase_start|phase_end) need="phase" ;;
-    round_start|round_end|round_result) need="round" ;;
-    model) need="role model_id provider" ;;
-    tokens|cost) need="role" ;;
-    failure) need="kind detail" ;;
-    brief_correction) need="description" ;;
-    gate) need="gate exit_status" ;;
-    records) need="artifact" ;;
-    human_effort) need="phase person_minutes" ;;
-    settled) need="used" ;;
-  esac
-  for k in $need; do
-    found=0
-    for a in "$@"; do case "$a" in "$k="*|"$k:="*) found=1 ;; esac; done
-    [ "$found" -eq 1 ] || die "event type '$TYPE' requires $k=<value>"
-  done
-  if [ "$TYPE" = "phase_start" ] || [ "$TYPE" = "phase_end" ] || [ "$TYPE" = "human_effort" ]; then
-    for a in "$@"; do
-      case "$a" in
-        phase=*) in_list "${a#phase=}" "$PHASES" || die "unknown phase '${a#phase=}' (one of: $PHASES)" ;;
-      esac
+    # Per-type required keys. Refusing here rather than writing a half-specified event is
+    # deliberate: an event that cannot be projected is an event nobody will notice is missing.
+    local need="" k found
+    need=$(required_keys "$TYPE")
+    for k in $need; do
+      found=0
+      for a in "$@"; do case "$a" in "$k="*|"$k:="*) found=1 ;; esac; done
+      [ "$found" -eq 1 ] || die "event type '$TYPE' requires $k=<value>"
     done
+    if [ "$TYPE" = "phase_start" ] || [ "$TYPE" = "phase_end" ] || [ "$TYPE" = "human_effort" ]; then
+      for a in "$@"; do
+        case "$a" in
+          phase=*) in_list "${a#phase=}" "$PHASES" || die "unknown phase '${a#phase=}' (one of: $PHASES)" ;;
+        esac
+      done
+    fi
+    EVENT_COUNT=1
   fi
 
   LOCK="$RUN.lock"
   acquire_lock
   if [ $? -ne 0 ]; then die "timed out after ${LOCK_TIMEOUT}s waiting for the write lock on $RUN"; fi
-  write_event "$RUN" "$TYPE" "$@"
+  write_events "$RUN" "$TYPE" "$BATCH_TMP" "$EVENT_COUNT" "$@"
   local rc=$?
-  release_lock; LOCK=""
+  release_lock; LOCK=""; BATCH_TMP=""
   if [ "$rc" -ne 0 ]; then exit 1; fi
   return 0
 }
@@ -449,7 +594,7 @@ self_test () {
 
   mkdir -p "$T/a/pkg"; printf 'x\n' > "$T/a/pkg/f.csv"
   bash "$INIT" "$T/a" --audit-id t-1 --doi 10.1234/abc \
-       --auditor-model claude-test --auditor-family claude --auditor-provider anthropic \
+       --auditor-model sonnet-5 --auditor-family claude --auditor-provider anthropic \
        --protocol-version p1 --gate-set-version g1 > /dev/null 2>&1
   if [ $? -ne 0 ]; then echo "  FAIL: could not initialise a run to test against"; rm -rf "$T"; return 1; fi
   local RUN="$T/a/run.json"
@@ -506,6 +651,16 @@ self_test () {
     echo "  FAIL: round projection gave '$n', expected '5400/1/2'"; fails=1
   else echo "  ok: round wall clock 5400 s, unclassified derived as 1, critic list split"; fi
 
+  # 5b. changed-claim review scope is written as one complete snapshot
+  bash "$SELF" --run "$RUN" review_scope changed_claim_ids:='["F1","F2"]' \
+       rereviewed_claim_ids:='["F1"]' unresolved_blocking_item_ids:='["Q7"]' \
+       unresolved_conclusion_critical_item_ids:='[]' unreviewed_sections:='["Section 4"]' > /dev/null
+  n=$(jq -r '[(.changed_claim_ids|length),(.rereviewed_claim_ids|length),
+              (.unresolved_blocking_item_ids|length),(.unreviewed_sections|length)] | join("/")' "$RUN")
+  if [ "$n" != "2/1/1/1" ]; then
+    echo "  FAIL: review_scope projection gave '$n', expected 2/1/1/1"; fails=1
+  else echo "  ok: review_scope records changed, re-reviewed, and unresolved IDs atomically"; fi
+
   # 6. brief corrections keep their own count
   bash "$SELF" --run "$RUN" brief_correction raised_by=auditor_data_integrity \
        field='data inventory' description='brief missed pkg/data_wave2/' accepted=true > /dev/null
@@ -555,7 +710,69 @@ self_test () {
     echo "  FAIL: journal has $n lines, run.json has $after events"; fails=1
   else echo "  ok: journal and run.json agree ($n entries)"; fi
 
-  # 10. NEGATIVE CONTROLS -- each must refuse with exit 2 specifically
+  # 10. BATCH TRANSACTION. Ordered JSONL is projected under one lock and appears contiguously.
+  local BATCH="$T/events.jsonl" before_journal after_journal before_hash after_hash
+  printf '%s\n' \
+    '{"type":"note","at":"2026-07-14T17:00:00Z","payload":{"batch_index":1,"text":"first"}}' \
+    '{"type":"package","at":"2026-07-14T17:00:01Z","payload":{"batch_index":2,"inventory":"captured"}}' \
+    '{"type":"records","at":"2026-07-14T17:00:02Z","payload":{"batch_index":3,"artifact":"batch-test","present":true}}' \
+    > "$BATCH"
+  before=$(jq -r '.events | length' "$RUN")
+  before_journal=$(wc -l < "$T/a/run.events.jsonl" | tr -d ' ')
+  bash "$SELF" --run "$RUN" --batch "$BATCH" > /dev/null
+  rc=$?
+  after=$(jq -r '.events | length' "$RUN")
+  after_journal=$(wc -l < "$T/a/run.events.jsonl" | tr -d ' ')
+  n=$(jq -r '[.events[-3:][] | .payload.batch_index] | join(",")' "$RUN")
+  if [ "$rc" -ne 0 ] || [ "$after" != "$((before + 3))" ] || \
+     [ "$after_journal" != "$((before_journal + 3))" ] || [ "$n" != "1,2,3" ]; then
+    echo "  FAIL: ordered batch transaction rc=$rc events=$before->$after journal=$before_journal->$after_journal order=$n"; fails=1
+  else echo "  ok: three-event batch projected and journaled once, in order"; fi
+  n=$(jq -r '.package.inventory + "/" + .records_retained[-1].artifact' "$RUN")
+  if [ "$n" != "captured/batch-test" ]; then echo "  FAIL: batch typed projections gave '$n'"; fails=1
+  else echo "  ok: batch events update the same typed projections as single events"; fi
+  printf '%s\n' \
+    '{"type":"phase_start","at":"2026-07-14T18:00:00Z","payload":{"phase":"adjudication"}}' \
+    '{"type":"phase_end","at":"2026-07-14T18:02:30Z","payload":{"phase":"adjudication"}}' > "$BATCH"
+  bash "$SELF" --run "$RUN" --batch "$BATCH" > /dev/null
+  n=$(jq -r '.phases.adjudication.wall_clock_seconds' "$RUN")
+  if [ "$n" != "150" ]; then echo "  FAIL: dependent batch projections did not run in order (duration '$n')"; fails=1
+  else echo "  ok: later batch projections observe earlier events in the same transaction"; fi
+
+  # A failure anywhere in the batch must leave both authoritative record and journal byte-exact.
+  before_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
+  printf '%s\n' \
+    '{"type":"note","payload":{"text":"must not land"}}' \
+    '{"type":"gate","payload":{"gate":"stage_release"}}' > "$BATCH"
+  bash "$SELF" --run "$RUN" --batch "$BATCH" > /dev/null 2>&1
+  rc=$?
+  after_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
+  if [ "$rc" -ne 2 ] || [ "$before_hash" != "$after_hash" ]; then
+    echo "  FAIL: invalid middle event was not rejected atomically (rc $rc)"; fails=1
+  else echo "  ok: invalid middle event rejects the whole batch without mutation"; fi
+
+  printf '%s\n' \
+    '{"type":"note","payload":{"text":"must not land either"}}' \
+    '{not-json}' > "$BATCH"
+  bash "$SELF" --run "$RUN" --batch "$BATCH" > /dev/null 2>&1
+  rc=$?
+  after_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
+  if [ "$rc" -ne 2 ] || [ "$before_hash" != "$after_hash" ]; then
+    echo "  FAIL: malformed JSONL was not rejected atomically (rc $rc)"; fails=1
+  else echo "  ok: malformed JSONL rejects the whole batch without mutation"; fi
+
+  # Structurally valid JSON can still fail a typed projection. That failure is transactional too.
+  printf '%s\n' \
+    '{"type":"note","payload":{"text":"must not land three"}}' \
+    '{"type":"human_effort","payload":{"phase":"critique","person_minutes":{"bad":"type"}}}' > "$BATCH"
+  bash "$SELF" --run "$RUN" --batch "$BATCH" > /dev/null 2>&1
+  rc=$?
+  after_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
+  if [ "$rc" -ne 1 ] || [ "$before_hash" != "$after_hash" ]; then
+    echo "  FAIL: projection failure partially committed a batch (rc $rc)"; fails=1
+  else echo "  ok: projection failure leaves the whole batch uncommitted"; fi
+
+  # 11. NEGATIVE CONTROLS -- each must refuse with exit 2 specifically
   bash "$SELF" --run "$RUN" not_a_type > /dev/null 2>&1
   if [ $? -ne 2 ]; then echo "  FAIL: an unknown event type was accepted"; fails=1
   else echo "  ok: unknown event type refused (exit 2)"; fi
@@ -571,8 +788,11 @@ self_test () {
   bash "$SELF" --run "$RUN" gate gate=stage_release > /dev/null 2>&1
   if [ $? -ne 2 ]; then echo "  FAIL: a gate event without exit_status was accepted"; fails=1
   else echo "  ok: gate without exit_status refused (exit 2)"; fi
+  bash "$SELF" --run "$RUN" --batch > /dev/null 2>&1
+  if [ $? -ne 2 ]; then echo "  FAIL: --batch without a JSONL path was accepted"; fails=1
+  else echo "  ok: --batch without a path refused (exit 2)"; fi
 
-  # 11. a stale lock left by a dead process must not wedge the run
+  # 12. a stale lock left by a dead process must not wedge the run
   mkdir -p "$RUN.lock"; printf '999999\n' > "$RUN.lock/pid"; printf '%s\n' "$(( $(date +%s) - 60 ))" > "$RUN.lock/ts"
   bash "$SELF" --run "$RUN" note text="after stale lock" > /dev/null 2>&1
   rc=$?

@@ -42,7 +42,7 @@ selftest () {
  {"id":"F3","claim":"A speculative conclusion-level pattern.","impact":"conclusion_contradicted","confidence":"SPECULATIVE","section":"Section 6"}
 ]}
 JSON
-  printf 'F1\tsnippet:verification_snippets/C-1.1.R\nF2\tnone\n' > "$T/r/claims_map.tsv"
+  printf 'F1\tsnippet:verification_snippets/C-1.1.R\nF2\tnone\nF3\tnone\n' > "$T/r/claims_map.tsv"
   "$0" "$T/r" >/dev/null || { echo "SELFTEST FAIL: R-case generator exited nonzero"; exit 1; }
   local bad=0 OUT="$T/r/claims_script.R"
   chk () { grep -qF "$2" "$3" || { echo "SELFTEST FAIL [$1]: $2"; bad=1; }; }
@@ -86,6 +86,10 @@ D = pathlib.Path(sys.argv[1])
 c = json.loads((D/"comment.json").read_text())
 finds = c.get("findings", [])
 if not finds: print("FATAL: comment.json has no findings"); sys.exit(1)
+ids = [str(f.get("id") or "") for f in finds]
+expected = [f"F{i}" for i in range(1, len(finds)+1)]
+if ids != expected:
+    print(f"FATAL: comment findings must be unique and ordered {expected}; observed {ids}"); sys.exit(1)
 
 def severity(f):  # mechanical; SKILL.md Phase 3b prose must agree — edit both or neither
     imp, conf = f.get("impact"), f.get("confidence")
@@ -99,11 +103,24 @@ def severity(f):  # mechanical; SKILL.md Phase 3b prose must agree — edit both
 cmap = {}
 mp = D/"claims_map.tsv"
 if mp.exists():
-    for ln in mp.read_text().splitlines():
+    for line_no, ln in enumerate(mp.read_text().splitlines(), 1):
         if ln.strip() and "\t" in ln:
-            k, v = ln.split("\t", 1); cmap[k.strip()] = v.strip()
+            k, v = ln.split("\t", 1); k=k.strip()
+            if k in cmap: print(f"FATAL: duplicate claims_map ID {k} on line {line_no}"); sys.exit(1)
+            cmap[k] = v.strip()
 else:
-    print("note: no claims_map.tsv — using verification_script fields, else the no-code tail")
+    print("FATAL: claims_map.tsv missing — generate it from work/findings.jsonl"); sys.exit(1)
+if set(cmap) != set(ids):
+    print("FATAL: claims_map IDs do not match comment findings exactly")
+    print("  only map:", sorted(set(cmap)-set(ids))); print("  only comment:", sorted(set(ids)-set(cmap)))
+    sys.exit(1)
+report = D/"report/REPORT_final.md"
+if report.is_file():
+    import re, collections
+    tags = re.findall(r"\[claim\s+(\d+)\]", report.read_text(), re.I)
+    dup = [x for x,n in collections.Counter(tags).items() if n != 1]
+    if dup or tags != [str(i) for i in range(1, len(finds)+1)]:
+        print(f"FATAL: report claim tags must occur exactly once in order; observed {tags}"); sys.exit(1)
 
 # ---- language: majority extension of author: entries; R fallback when none (2026-08-21) ----
 LANG = {"r": ("R", "##"), "do": ("do", "*"), "ado": ("do", "*"), "sps": ("sps", "*"),
@@ -167,7 +184,7 @@ for i, f in enumerate(finds, 1):
 hdr_lines = [
   MK + " " + "="*92,
   f"{MK} CLAIMS SCRIPT — verify every claim in the AI report, one numbered block at a time.",
-  f"{MK} Claim numbers match the [claim N] tags in the report, the page-1 findings table, and the",
+  f"{MK} Claim numbers match the [claim N] tags in the report, the Appendix-A findings table, and the",
   f"{MK} rows of the verdict survey.",
   MK,
   f"{MK} THE RULE: if you cannot verify a claim marked RETRACTION or CORRIGENDUM MATERIAL after",

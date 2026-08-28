@@ -49,6 +49,7 @@ done
 AUDIT="$(cd "$AUDIT" && pwd)"
 OUT="${OUT:-$AUDIT/verification.Rmd}"
 SNIPS="${SNIPS:-$AUDIT/verification_snippets}"
+PLAN="$AUDIT/work/verification_plan.json"
 
 REPORT="$AUDIT/report/REPORT_final.md"
 [ -f "$REPORT" ] || REPORT="$AUDIT/report/REPORT_v1.md"
@@ -58,10 +59,10 @@ ADJ="$AUDIT/report/ADJUDICATION.md"
 PKG="$AUDIT/pkg"
 [ -d "$PKG" ] || { echo "no pkg/ under $AUDIT — the notebook has nothing to read" >&2; exit 2; }
 
-python3 - "$REPORT" "$ADJ" "$PKG" "$SNIPS" "$OUT" "$TITLE" <<'PYGEN'
-import sys, re, os, pathlib, html
+python3 - "$REPORT" "$ADJ" "$PKG" "$SNIPS" "$OUT" "$TITLE" "$PLAN" <<'PYGEN'
+import sys, re, os, pathlib, html, json, hashlib
 
-report_p, adj_p, pkg_p, snips_p, out_p, title = sys.argv[1:7]
+report_p, adj_p, pkg_p, snips_p, out_p, title, plan_p = sys.argv[1:8]
 report = pathlib.Path(report_p).read_text()
 adj    = pathlib.Path(adj_p).read_text() if os.path.exists(adj_p) else ""
 
@@ -139,6 +140,28 @@ if am:
             claims.append(dict(id=f"C-ABS.{n}", head=sent.strip(), body="",
                                sec="Abstract", full=sent.strip()))
 
+# A v2 audit's verification plan is generated from work/findings.jsonl and is
+# authoritative.  Legacy notebooks may retain independently derived abstract
+# cross-checks, but a v2 notebook must have exactly one section per canonical
+# finding ID—no silent extras and no count-only join.
+if os.path.isfile(plan_p):
+    plan = json.loads(pathlib.Path(plan_p).read_text())
+    if not isinstance(plan, list):
+        raise SystemExit("verification plan must be a JSON array")
+    expected_ids = [item.get("claim_id") for item in plan if isinstance(item, dict)]
+    if (len(expected_ids) != len(plan) or len(expected_ids) != len(set(expected_ids)) or
+            any(not re.fullmatch(r"C-[1-9][0-9]*", str(value)) for value in expected_ids)):
+        raise SystemExit("verification plan has missing, duplicate, or noncanonical claim IDs")
+    canonical = [claim for claim in claims if claim["id"] in set(expected_ids)]
+    by_id = {}
+    for claim in canonical:
+        if claim["id"] in by_id:
+            raise SystemExit(f"report contains duplicate canonical claim tag {claim['id']}")
+        by_id[claim["id"]] = claim
+    if set(by_id) != set(expected_ids):
+        raise SystemExit("report claim tags do not exactly join the generated verification plan")
+    claims = [by_id[claim_id] for claim_id in expected_ids]
+
 def sortkey(c):
     tail = c["id"][2:]
     # abstract claims run LAST: they are cross-references to body results, and the
@@ -149,6 +172,8 @@ def sortkey(c):
     a, b = tail.split(".")
     return (1, int(a), int(b))
 claims.sort(key=sortkey)
+if not claims:
+    raise SystemExit("no claims were extracted; refusing to generate an empty verification notebook")
 
 # ---------------------------------------------------------------- provenance
 # Adjudication entries look like:  ## A8. THE LEAD FINDING — ... — A4, CONFIRMED
@@ -225,8 +250,9 @@ def snippet(cid):
     for ext, kind in ((".R", "code"), (".r", "code"), (".unverifiable", "unverifiable"),
                       (".judgement", "judgement")):
         if os.path.exists(base + ext):
-            return kind, pathlib.Path(base + ext).read_text().rstrip("\n")
-    return None, None
+            path = pathlib.Path(base + ext)
+            return kind, path.read_text().rstrip("\n"), hashlib.sha256(path.read_bytes()).hexdigest()
+    return None, None, None
 
 # ---------------------------------------------------------------- emit
 title = title or "Verification notebook"
@@ -465,6 +491,16 @@ unverifiable <- function(id, reason, observed = NULL) {
     cat("     for information, this pipeline produces: ", .fmt(observed), "\n", sep = "")
   invisible(TRUE)
 }
+
+## Claim chunks are wrapped in tryCatch(). A runtime error before expect() must create an
+## explicit failed ledger row instead of disappearing from the verification summary.
+runtime_failure <- function(id, error) {
+  detail <- paste0("runtime exception: ", conditionMessage(error))
+  .V$state[[id]] <- list(id = id, verdict = "FAIL", detail = detail, basis = "")
+  cat(sprintf("---- %s : FAIL ------------------------------------------------------\n", id))
+  cat("     ", detail, "\n", sep = "")
+  invisible(FALSE)
+}
 '''
 libs = "\n".join(f"  library({p})" for p in dict.fromkeys(pkgmap[n] for n in needed)) or "  invisible(NULL)"
 setup = setup.replace("__LIBS__", libs).replace("__PKG__", pkg_p)
@@ -480,7 +516,7 @@ w("")
 
 stub_ids = []
 for c in claims:
-    kind, body = snippet(c["id"])
+    kind, body, snippet_sha = snippet(c["id"])
     prov_auditor = ", ".join("A" + a for a in c["auditors"]) or "not recorded in the adjudication log"
     prov_adj = (f"`{c['adj']}` — {c['adj_title']}" if c["adj"] else
                 "no adjudication entry matched this claim")
@@ -495,8 +531,11 @@ for c in claims:
     nums = numerals(c["full"])
     if nums:
         w("- **Figures asserted:** " + ", ".join(f"`{n}`" for n in nums))
+    if snippet_sha:
+        w(f"<!-- I4R-SNIPPET-SHA256: {snippet_sha} -->")
     w("")
     w(f"```{{r {c['id'].replace('.', '_').replace('-', '_')}}}")
+    w("tryCatch({")
     if kind == "code":
         w(body)
     elif kind == "unverifiable":
@@ -528,6 +567,7 @@ for c in claims:
             w("## figures : " + ", ".join(nums))
         w("## ------------------------------------------------------------------------")
         w(f'stop("TODO: no check written for {c["id"]} — see the stub comment above")')
+    w(f'}}, error = function(e) runtime_failure("{c["id"]}", e))')
     w("```")
     w("")
 
@@ -541,6 +581,7 @@ w("## Claims the generator left as TODO stubs. This is a STARTING POINT, not a s
 w("## the next line removes any claim that has since acquired a real expect()/judgement()/")
 w("## unverifiable() record, so writing a check clears the stub automatically. Without this the")
 w("## summary reports a fully written notebook as entirely unverified.")
+w("ALL_CLAIMS <- c(" + ", ".join(f'"{c["id"]}"' for c in claims) + ")")
 w("STUB_CLAIMS <- c(" + ", ".join(f'"{i}"' for i in stub_ids) + ")")
 w("STUB_CLAIMS <- setdiff(STUB_CLAIMS,")
 w("  unique(c(vapply(.V$exp, function(e) e$id, character(1)), names(.V$state))))")
@@ -567,7 +608,16 @@ stubs <- if (length(STUB_CLAIMS))
              verdict = "FAIL", detail = "TODO stub: no check has been written for this claim",
              stringsAsFactors = FALSE) else NULL
 all_rows <- rbind(rows, states, stubs)
-all_rows <- all_rows[order(all_rows$claim, all_rows$key), ]
+covered <- unique(all_rows$claim)
+missing_claims <- setdiff(ALL_CLAIMS, covered)
+if (length(missing_claims)) {
+  all_rows <- rbind(all_rows,
+    data.frame(claim = missing_claims, key = "-", expected = "-", observed = "-", tol = "-",
+               verdict = "FAIL", detail = "claim chunk produced no outcome",
+               stringsAsFactors = FALSE))
+}
+claim_number <- suppressWarnings(as.integer(sub("^C-", "", all_rows$claim)))
+all_rows <- all_rows[order(claim_number, all_rows$key), ]
 
 cat("\n"); cat(strrep("=", 100), "\n")
 cat("VERIFICATION SUMMARY\n")
@@ -619,11 +669,10 @@ w(summary_r.strip())
 w("```")
 w("")
 w("The chunk above writes `verification_summary.csv` and `verification_status.txt` (`0` clean,")
-w("`1` if anything failed). To get a nonzero **process** exit as well:")
+w("`1` if anything failed). Render and bind the result to the report, comment, and package with:")
 w("")
 w("```sh")
-w("Rscript -e 'rmarkdown::render(\"verification.Rmd\"); \\")
-w("           quit(status = as.integer(readLines(\"verification_status.txt\")))'")
+w("bash scripts/run_verification.sh <audit-dir>")
 w("```")
 
 pathlib.Path(out_p).write_text("\n".join(x for x in L if x is not None) + "\n")

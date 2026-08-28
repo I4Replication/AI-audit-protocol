@@ -15,23 +15,22 @@ The notebook is self-contained apart from the deposit and a handful of CRAN pack
 its header with an `install.packages` block you can run once.
 
 ```sh
-cd <audit-dir>
-Rscript -e 'rmarkdown::render("verification.Rmd"); \
-           quit(status = as.integer(readLines("verification_status.txt")))'
+bash scripts/run_verification.sh <audit-dir>
 ```
 
-That form is the one to use in a script or a CI job: it renders the HTML **and** exits non-zero if
-anything failed. `rmarkdown::render` on its own always exits 0, because a failing check is data, not
-a crash — the notebook is built to run every section even when an early one fails, so that you see
-the whole picture rather than the first problem.
+The wrapper renders the HTML, exits non-zero if anything failed, and writes a SHA-256 manifest that
+binds the result to the exact notebook, report, `comment.json`, summary, and package manifest.
+`finalize_run.sh` rejects a missing or stale binding. Every claim chunk catches runtime exceptions
+and records them as FAIL, so an error before `expect()` cannot disappear from the summary.
 
-Three files come out:
+Four audit records come out (the rendered HTML is a human-readable convenience):
 
 | File | What it is |
 |---|---|
 | `verification.html` | the readable record: every claim, its expectation, its observation, its verdict |
 | `verification_summary.csv` | the same table, machine-readable |
 | `verification_status.txt` | `0` clean, `1` if any check failed |
+| `verification_manifest.json` | hashes and claim IDs binding the executed checks to this audit |
 
 Everything is read from `pkg/` and nothing is written into it. The setup chunk MD5s every file in the
 deposit on entry and the summary chunk re-checks them; if the line `deposit unmodified: NO` ever
@@ -156,6 +155,10 @@ It cannot write the check body for every claim. Where it has no snippet it emits
 carries the claim text, the section, the auditor, the adjudication entry and every numeral found in
 the claim, and that calls `stop()` — so an unfinished claim fails the run rather than passing
 silently. The stub count is printed on stderr and is the number to drive to zero.
+
+An empty report or a report from which no claims can be extracted is a generator failure, not a
+zero-claim success. After replacing every stub, use `run_verification.sh`; do not create a status
+file by hand.
 
 Snippets live in `<snippets-dir>` (default `<audit-dir>/verification_snippets`), keyed by claim id:
 

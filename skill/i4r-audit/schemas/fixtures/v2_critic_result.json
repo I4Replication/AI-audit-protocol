@@ -1,0 +1,64 @@
+{
+  "schema_version": "2.0.0",
+  "audit_id": "20260827-example-a1b2c3",
+  "invocation_id": "20260827-example-a1b2c3:r1:critic_stats:attempt-1",
+  "round": 1,
+  "role": "critic_stats",
+  "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "input_hashes": {
+    "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "prompt_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "policy_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "evidence_manifest_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "status": "complete",
+  "completion_marker": true,
+  "completeness_declaration": {
+    "all_assigned_checks_accounted_for": true,
+    "all_assessments_evidenced": true,
+    "unresolved_omissions": []
+  },
+  "coverage": {
+    "assigned_checks": ["primary quantitative finding"],
+    "completed_checks": ["primary quantitative finding"],
+    "skipped_checks": []
+  },
+  "covered_claim_ids": [
+    "F1"
+  ],
+  "conflicts": [],
+  "settled_spot_checks": [],
+  "items": [
+    {
+      "item_id": "stats-F1",
+      "finding_id": "F1",
+      "claim": "The reported value differs from the rerun output.",
+      "verdict": "CONFIRMED",
+      "priority": "NON_BLOCKING",
+      "confidence": "CONFIRMED",
+      "evidence": {
+        "artifact_refs": [
+          {
+            "path": "work/check_primary.txt",
+            "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        ],
+        "operation": "compare the bounded rerun with the printed value",
+        "result": "The exact comparison reproduces the discrepancy.",
+        "reproducible_script": {
+          "path": "work/check_primary.py",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      },
+      "unverifiable_basis": null,
+      "requested_correction": null
+    }
+  ],
+  "new_issues": [],
+  "overall": {
+    "publishable": true,
+    "blocking_count": 0,
+    "summary": "The assigned finding is supported."
+  }
+}
