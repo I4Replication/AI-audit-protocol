@@ -11,8 +11,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 import zipfile
+
+from tests.test_document_release import multi_page_pdf
 
 
 SKILL = Path(__file__).resolve().parents[1]
@@ -20,6 +23,11 @@ STAGE = SKILL / "scripts/stage_release.sh"
 BUILDER = SKILL / "scripts/build_package.py"
 PRIVACY = SKILL / "scripts/check_release_privacy.py"
 GENERATOR = SKILL / "scripts/generate_finding_artifacts.py"
+DOCUMENT_RELEASE = SKILL / "scripts/document_release.py"
+DOCUMENT_BUILDER = SKILL / "scripts/build_docx.sh"
+DOCUMENT_CACHE = SKILL / "scripts/document_build_cache.py"
+sys.path.insert(0, str(SKILL / "scripts"))
+import document_release
 
 _privacy_spec = importlib.util.spec_from_file_location("i4r_release_privacy", PRIVACY)
 assert _privacy_spec and _privacy_spec.loader
@@ -113,8 +121,11 @@ def write_pdf(path: Path, *, author: str, text: str = "sanitized fixture") -> No
 def release_fixture(base: Path) -> Path:
     """Create the smallest projection-bound audit accepted by staging."""
     audit = base / "Discipline/Journal/Paper/audit"
-    report = "# Independent audit\n\n## 1. Finding\n\nSanitized evidence [claim 1].\n"
+    abstract = "This sanitized fixture keeps its exact abstract ending on the opening report page."
+    report = ("# Independent audit\n\n## Abstract\n\n" + abstract +
+              "\n\n## 1. Finding\n\nSanitized evidence [claim 1].\n")
     write(audit / "report/REPORT_final.md", report)
+    write(audit / "report/front_matter.md", "Independent audit\n")
     write(audit / "report/ADJUDICATION.md", "# Adjudication\n\nAccepted.\n")
     for name in (
         "01_reproduction.md",
@@ -129,7 +140,7 @@ def release_fixture(base: Path) -> Path:
     evidence = audit / "work/check_primary.txt"
     snippet = audit / "work/check_primary.R"
     write(evidence, "expected=2 observed=2\n")
-    write(snippet, "stopifnot(1 + 1 == 2)\n")
+    write(snippet, "expect(\"C-1\", two = 2, tol = 0, note = \"fixture\")\ncheck(\"C-1\", two = 1 + 1)\n")
     finding = json.loads((SKILL / "schemas/fixtures/v2_finding_row.json").read_text())
     finding.update(
         {
@@ -161,6 +172,46 @@ def release_fixture(base: Path) -> Path:
     generated = run(sys.executable, GENERATOR, audit, "--apply")
     if generated.returncode != 0:
         raise AssertionError(generated.stdout + generated.stderr)
+    final_report = audit / "report/REPORT_final.md"
+    table_count = document_release.markdown_table_count(final_report.read_text(encoding="utf-8"))
+    captions = [f"Synthetic findings table {index}" for index in range(1, table_count + 1)]
+    write(audit / "report/captions.txt", "".join(value + "\n" for value in captions))
+    docx = audit / "report/comment.docx"
+    with zipfile.ZipFile(docx, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr(
+            "word/document.xml",
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:body>' + ''.join('<w:tbl><w:tr><w:tc/></w:tr></w:tbl>'
+                                 for _ in range(table_count)) + '</w:body></w:document>',
+        )
+    pdf = audit / "report/comment.pdf"
+    write(pdf, multi_page_pdf([
+        ["Independent audit", "Abstract", *textwrap.wrap(abstract, width=65),
+         "Section 1. Finding"],
+        ["Appendix A. Summary of findings",
+         *[f"Table {index}. {value}" for index, value in enumerate(captions, 1)]],
+    ]))
+    policy = json.loads((SKILL / "config/pipeline-policy-v2.json").read_text(encoding="utf-8"))
+    canonical = json.dumps(policy, sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False).encode("utf-8")
+    write(audit / "pipeline-policy.snapshot.json", json.dumps({
+        "snapshot_version": "1", "policy_sha256": hashlib.sha256(canonical).hexdigest(),
+        "policy": policy,
+    }, indent=2, sort_keys=True) + "\n")
+    built = run(
+        sys.executable, DOCUMENT_RELEASE, "create-manifest", "--audit", audit,
+        "--report", final_report, "--front-matter", audit / "report/front_matter.md",
+        "--captions", audit / "report/captions.txt", "--docx", docx, "--pdf", pdf,
+        "--docx-relative", "report/comment.docx", "--pdf-relative", "report/comment.pdf",
+        "--builder", DOCUMENT_BUILDER, "--cache-helper", DOCUMENT_CACHE,
+        "--pandoc-identity", "hardening-pandoc", "--renderer-identity", "hardening-libreoffice",
+        "--pdfinfo-identity", "hardening-pdfinfo", "--pdftotext-identity", "hardening-pdftotext",
+        "--build-kind", "canonical", "--cap", "10", "--manifest-out",
+        audit / "document_build_manifest.json",
+    )
+    if built.returncode != 0:
+        raise AssertionError(built.stdout + built.stderr)
     write(audit / "report/REPORT_v1.md", (audit / "report/REPORT_final.md").read_text())
     write(audit / "verification_status.txt", "0\n")
     write(audit / "verification_summary.csv", "claim_id,key,verdict,detail\nC-1,fixture,PASS,sanitized\n")
@@ -249,26 +300,128 @@ class StagePathAndSymlinkTest(unittest.TestCase):
 
     def test_qmd_source_is_staged_and_scanned(self) -> None:
         audit = release_fixture(self.root / "clean")
-        # PDF is optional to staging and has separate fail-closed tests below.
-        for pdf in (audit / "report").glob("*.pdf"):
-            pdf.unlink()
         write(audit / "work/reproducible.qmd", "---\ntitle: fixture\n---\n1 + 1\n")
         release = self.root / "clean-release"
         result = run("/bin/bash", STAGE, audit, release)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((release / "work/reproducible.qmd").is_file())
 
-    def test_statistical_source_private_path_blocks_staging(self) -> None:
+    def test_detector_source_spelling_the_users_prefix_does_not_block_staging(self) -> None:
+        # Regex source in evidence scripts spells the prefix without an account name;
+        # audit A34's release was blocked by its own privacy detectors' patterns.
+        audit = release_fixture(self.root / "detector-source")
+        write(audit / "work/privacy_check.py",
+              'import re\nMARK = re.compile(r\'"(/Users/|/home/|[A-Za-z]:\\\\\\\\)\')\n'
+              'ABS = re.compile(r"(?:/Users/[^/\\s]+|/home/[^/\\s]+)")\n')
+        release = self.root / "detector-source-release"
+        result = run("/bin/bash", STAGE, audit, release)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("naming a real account", result.stdout + result.stderr)
+
+    def test_statistical_source_private_path_never_ships(self) -> None:
+        # Before 2.7.6 a home path in a work/ record blocked staging for good (the record is hash-bound and cannot
+        # be reworded). Check 3d now masks the account in the STAGED copy and lists it; the path never ships.
         audit = release_fixture(self.root / "leaky")
-        for pdf in (audit / "report").glob("*.pdf"):
-            pdf.unlink()
         private = "/" + "home/realperson/private/input"
         write(audit / "work/reproduce.sas", f"%include '{private}';\n")
         release = self.root / "leaky-release"
         result = run("/bin/bash", STAGE, audit, release)
-        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("absolute path(s) naming a real account", result.stdout + result.stderr)
-        self.assertTrue((release / "RELEASE_REJECTED").is_file())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("masked in the staged record work/reproduce.sas: 1 home path(s)", result.stdout)
+        self.assertEqual((release / "work/reproduce.sas").read_text(), "%include '/" + "home/<user-dir>/private/input';\n")
+        self.assertIn("work/reproduce.sas  (1 path(s), 0 address(es))",
+                      (release / "RELEASE_PATH_NEUTRALISATION.txt").read_text())
+        self.assertEqual((audit / "work/reproduce.sas").read_text(), f"%include '{private}';\n")
+        self.assertFalse((release / "RELEASE_REJECTED").exists())
+
+
+class DeclaredRedactionTest(unittest.TestCase):
+    """run.json and comment.json are internal records whose publication_redaction block names the
+    fields removed before any extract is released; the inspector treats those fields as removed and
+    still inspects every undeclared field verbatim."""
+
+    def _inspect(self, name: str, payload: dict) -> list:
+        import json as _json
+        sys.path.insert(0, str(SKILL / "scripts"))
+        import check_release_privacy
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / name
+            path.write_text(_json.dumps(payload), encoding="utf-8")
+            return check_release_privacy.inspect_file(path, name, identifiers=True)
+
+    def test_non_ascii_account_names_are_private_paths(self) -> None:
+        # The account class was ASCII-only, so a home directory whose account name carries any
+        # non-ASCII character was not a match at all and passed the release gate silently. The
+        # NFD form is the one macOS filenames actually take, so it is built here rather than
+        # written as a literal -- the two spellings render identically in a source file.
+        import unicodedata
+        for account in ("Jos\u00e9", unicodedata.normalize("NFD", "Jos\u00e9"),
+                        "\u5f20\u4f1f", "M\u00fcller-Sch\u00f6n"):
+            with self.subTest(account=account):
+                private = "/" + "Users/" + account + "/audit/report/REPORT_v1.md"
+                issues = self._inspect("run.json", {"note": f"missing file: {private}"})
+                self.assertEqual([issue.category for issue in issues], ["private_path"])
+
+    def test_widening_the_account_class_still_ignores_prose_and_relative_paths(self) -> None:
+        # Negative control for the widening above. `data/users/alice.csv` matters especially:
+        # it is a plausible deposit path and must not start reading as a home directory.
+        for text in ("see the /" + "Users/ directory", "an ordinary sentence",
+                     "./data/raw/users.csv", "relative/path/to/file.R"):
+            with self.subTest(text=text):
+                self.assertEqual(self._inspect("run.json", {"note": text}), [])
+
+    def test_a_relative_path_segment_is_not_a_home_directory(self) -> None:
+        # `data/users/alice.csv` is a plausible deposit path and `https://example.org/users/x` a
+        # plausible citation; both used to report `private_path` and block a release. The account
+        # class was already tightened once for this class of false positive; the missing piece was
+        # that no pattern required the separator to actually start a path.
+        for text in ("data/users/alice.csv", "https://example.org/users/profile",
+                     "data/home/alice", "./data/raw/users.csv", "relative/path/to/file.R"):
+            with self.subTest(text=text):
+                self.assertEqual(self._inspect("run.json", {"note": text}), [])
+
+    def test_every_real_home_form_is_still_detected(self) -> None:
+        # Negative control for the boundary above. An earlier proposed fix was rejected because it
+        # silently stopped matching `\\Users\\name` and the UNC form; both are asserted here.
+        private = [
+            "C:\\" + "Users" + "\\realperson\\x",
+            "C:/" + "Users" + "/realperson/x",
+            "/" + "Users" + "/realperson/x",
+            "see /" + "Users" + "/realperson/x",
+            "\\" + "Users" + "\\realperson\\x",
+            "\\\\srv\\" + "Users" + "\\realperson\\x",
+            "/" + "home/realperson/x",
+        ]
+        for text in private:
+            with self.subTest(text=text):
+                issues = self._inspect("run.json", {"note": f"missing file: {text}"})
+                self.assertEqual([issue.category for issue in issues], ["private_path"], text)
+
+    def test_declared_pointer_with_wildcard_is_treated_as_removed(self) -> None:
+        private = "/" + "Users/realperson/audit/report/REPORT_v1.md"
+        record = {"publication_redaction": {"fields_requiring_removal": ["/events/*/payload/record/error"]},
+                  "events": [{"payload": {"record": {"error": f"missing file: {private}"}}}]}
+        self.assertEqual(self._inspect("run.json", record), [])
+
+    def test_undeclared_field_is_still_inspected(self) -> None:
+        private = "/" + "Users/realperson/audit/report/REPORT_v1.md"
+        record = {"publication_redaction": {"fields_requiring_removal": ["/costs"]},
+                  "events": [{"payload": {"record": {"error": f"missing file: {private}"}}}]}
+        issues = self._inspect("run.json", record)
+        self.assertTrue(any(issue.category == "private_path" for issue in issues))
+
+    def test_declaring_an_undesignated_pointer_does_not_silence_the_gate(self) -> None:
+        private = "/" + "Users/realperson/audit/x"
+        record = {"publication_redaction": {"fields_requiring_removal": ["/findings/*/claim"]},
+                  "findings": [{"claim": f"see {private}"}]}
+        issues = self._inspect("comment.json", record)
+        self.assertTrue(any(issue.category == "private_path" for issue in issues))
+
+    def test_other_json_files_get_no_masking(self) -> None:
+        private = "/" + "Users/realperson/audit/x"
+        record = {"publication_redaction": {"fields_requiring_removal": ["/error"]}, "error": private}
+        issues = self._inspect("other.json", record)
+        self.assertTrue(any(issue.category == "private_path" for issue in issues))
 
 
 class PrivacyInspectorTest(unittest.TestCase):
@@ -377,6 +530,10 @@ class PackageBuilderHardeningTest(unittest.TestCase):
         self.assertFalse(
             any(row["path"].endswith("/PACKAGE_MANIFEST.json") for row in manifest["entries"])
         )
+        write(self.source / "SKILL.md", "# Changed after packaging\n")
+        stale = run(sys.executable, self.builder, "--check", "--output", output)
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertIn("stale", (stale.stdout + stale.stderr).lower())
 
     def test_output_inside_source_and_private_qmd_are_rejected(self) -> None:
         inside_paths = [self.source / "forbidden.zip"]

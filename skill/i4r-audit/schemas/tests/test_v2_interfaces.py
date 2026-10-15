@@ -357,6 +357,78 @@ class InvocationAndRunTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 validate_invocation(mutated)
 
+    def test_partial_claude_usage_requires_honest_reasons_and_a_verified_derived_total(self) -> None:
+        partial = copy.deepcopy(self.invocation)
+        partial["usage"] = {
+            "obtainable": True,
+            "input_tokens": 2,
+            "output_tokens": 163,
+            "cached_input_tokens": 30597,
+            "cache_creation_input_tokens": 10876,
+            "reasoning_tokens": None,
+            "total_tokens": 41638,
+            "source": "cli_log",
+            "unavailable_reasons": {
+                "reasoning_tokens": "provider CLI does not expose separate reasoning tokens",
+            },
+            "total_tokens_kind": "derived",
+            "total_tokens_components": [
+                "input_tokens", "cached_input_tokens", "cache_creation_input_tokens", "output_tokens",
+            ],
+            "total_tokens_unavailable_reason": None,
+        }
+        validate_invocation(partial)
+
+        missing_reason = copy.deepcopy(partial)
+        missing_reason["usage"]["unavailable_reasons"] = {}
+        reason_for_observed = copy.deepcopy(partial)
+        reason_for_observed["usage"]["unavailable_reasons"]["input_tokens"] = "not available"
+        wrong_total = copy.deepcopy(partial)
+        wrong_total["usage"]["total_tokens"] += 1
+        unavailable_component = copy.deepcopy(partial)
+        unavailable_component["usage"]["cache_creation_input_tokens"] = None
+        unavailable_component["usage"]["unavailable_reasons"]["cache_creation_input_tokens"] = "not exposed"
+        provider_total_with_components = copy.deepcopy(partial)
+        provider_total_with_components["usage"]["total_tokens_kind"] = "provider_reported"
+        completed_without_total = copy.deepcopy(partial)
+        completed_without_total["usage"].update({
+            "total_tokens": None,
+            "total_tokens_kind": "unavailable",
+            "total_tokens_components": [],
+            "total_tokens_unavailable_reason": "provider did not report and components were incomplete",
+        })
+        for mutated in (
+            missing_reason, reason_for_observed, wrong_total, unavailable_component,
+            provider_total_with_components, completed_without_total,
+        ):
+            with self.subTest(mutated=mutated["usage"]), self.assertRaises(ValidationError):
+                validate_invocation(mutated)
+
+    def test_served_model_ids_and_non_provider_cache_disposition_fail_closed(self) -> None:
+        validate_invocation(self.invocation)
+        missing_primary = copy.deepcopy(self.invocation)
+        missing_primary["observed_model_ids"] = ["auxiliary-model"]
+        duplicate = copy.deepcopy(self.invocation)
+        duplicate["observed_model_ids"] = [
+            self.invocation["observed_model"], self.invocation["observed_model"],
+        ]
+        empty = copy.deepcopy(self.invocation)
+        empty["observed_model_ids"] = []
+        for mutated in (missing_primary, duplicate, empty):
+            with self.assertRaises(ValidationError):
+                validate_invocation(mutated)
+
+        no_provider = copy.deepcopy(self.invocation)
+        no_provider.update({"provider_call": False, "cache_usage": "not_applicable"})
+        validate_invocation(no_provider)
+        no_provider_write = copy.deepcopy(no_provider)
+        no_provider_write["cache_usage"] = "write"
+        provider_not_applicable = copy.deepcopy(self.invocation)
+        provider_not_applicable["cache_usage"] = "not_applicable"
+        for mutated in (no_provider_write, provider_not_applicable):
+            with self.assertRaises(ValidationError):
+                validate_invocation(mutated)
+
     def test_round_target_cap_and_stopping_reason_are_consistent(self) -> None:
         run = normalize_run_v1(load(SCHEMAS / "fixtures" / "v1_minimal_run.json"))
         validate_run(run)
@@ -383,6 +455,34 @@ class InvocationAndRunTests(unittest.TestCase):
         target_mismatch["unreviewed_sections"] = []
         for mutated in (target_above_cap, target_mismatch):
             with self.assertRaises(ValidationError):
+                validate_run(mutated)
+
+    def test_live_v2_accepts_the_2_6_9_cap_and_its_amendment_chain(self) -> None:
+        # 2.6.9: new audits freeze a cap of 7; an audit initialised earlier keeps 5 until a journaled
+        # amendment raises it (run.policy_amendments, chained from 5 to the run's cap).
+        base = normalize_run_v1(load(SCHEMAS / "fixtures" / "v1_minimal_run.json"))
+        base.pop("normalization")
+        base.update({"round_target": 2, "round_cap": 7, "rounds_run": 2, "stopping_reason": None})
+        validate_run(base)
+        for cap in (6, 8):
+            mutated = copy.deepcopy(base)
+            mutated["round_cap"] = cap
+            with self.subTest(cap=cap), self.assertRaises(ValidationError):
+                validate_run(mutated)
+        at_cap = copy.deepcopy(base)
+        at_cap.update({"rounds_run": 7, "stopping_reason": "cap_with_unresolved",
+                       "stopping_reason_detail": "One section changed after its last review.",
+                       "unreviewed_sections": ["Section 2"],
+                       "policy_amendments": [{"seq": 300, "at": "2026-09-28T12:00:00Z",
+                                              "leaf": "critique.round_cap", "from": 5, "to": 7,
+                                              "reason": "continue past the old cap",
+                                              "snapshot_sha256": "a" * 64}]})
+        validate_run(at_cap)
+        for label, change in (("below the cap", {"rounds_run": 6}),
+                              ("chain ends below the cap", {"round_cap": 5, "rounds_run": 5})):
+            mutated = copy.deepcopy(at_cap)
+            mutated.update(change)
+            with self.subTest(label), self.assertRaises(ValidationError):
                 validate_run(mutated)
 
     def test_live_v2_target_cap_and_stop_evidence_fail_closed(self) -> None:

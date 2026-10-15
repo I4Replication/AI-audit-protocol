@@ -15,6 +15,7 @@ import zipfile
 
 
 HERE = pathlib.Path(__file__).resolve().parent
+SKILL = HERE.parent
 HELPER = HERE / "document_build_cache.py"
 BUILDER = HERE / "build_docx.sh"
 
@@ -78,7 +79,11 @@ def helper_contract_test(scratch: pathlib.Path) -> None:
     archive = root / "cache.zip"
     docx.write_bytes(b"exact-docx-bytes")
     pdf.write_bytes(b"exact-pdf-bytes")
-    metadata.write_text(json.dumps({"status": "passed", "pages": 3, "body_pages": 2}) + "\n")
+    metadata.write_text(json.dumps({
+        "schema_version": "3.0.0", "status": "passed", "build_kind": "canonical",
+        "all_validations_passed": True,
+        "pages": {"total_pages": 3, "body_pages": 2, "body_page_cap": 10},
+    }) + "\n")
     run([sys.executable, str(HELPER), "store", "--archive", str(archive), "--key", base_key,
          "--descriptor", str(descriptor), "--docx", str(docx), "--pdf", str(pdf),
          "--metadata", str(metadata)])
@@ -119,6 +124,13 @@ def make_fake_tools(bin_dir: pathlib.Path, counter: pathlib.Path, abstract: str)
         if any(value in converted for value in forbidden):
             print("generated claim join leaked into converter input", file=sys.stderr)
             raise SystemExit(9)
+        availability="# Data and Code Availability"
+        if availability in converted:
+            prefix=converted[:converted.index(availability)]
+            # 2.7.4: a marker paragraph that the post-pandoc step turns into the heading's own pageBreakBefore
+            if not any('I4RPageBreakBeforeNext' in line for line in prefix.split("\n")[-5:]):
+                print("Data and Code Availability lacks its generated page break", file=sys.stderr)
+                raise SystemExit(10)
         out=pathlib.Path(args[args.index("-o")+1])
         counter=pathlib.Path(os.environ["FAKE_BUILD_COUNTER"])
         with counter.open("a",encoding="utf-8") as handle: handle.write("pandoc\n")
@@ -148,18 +160,21 @@ def make_fake_tools(bin_dir: pathlib.Path, counter: pathlib.Path, abstract: str)
     write_executable(bin_dir / "pdfinfo", r'''
         #!/bin/sh
         if [ "${1:-}" = "-v" ]; then echo "pdfinfo fake-1.0" >&2; exit 0; fi
-        echo "Pages: 3"
+        echo "Pages: ${FAKE_PAGES:-3}"
     ''')
-    # The body-page check sees References first on page 3. The abstract check receives the same
+    # The body-page check sees Data and Code Availability first on page 3. The abstract check receives the same
     # page-1 text and can find both its head and its last eight words.
     write_executable(bin_dir / "pdftotext", '''
         #!/usr/bin/env python3
-        import sys
+        import os, sys
         if len(sys.argv)>1 and sys.argv[1] == "-v":
             print("pdftotext fake-1.0",file=sys.stderr); raise SystemExit(0)
-        print("Audit title Abstract " + ''' + repr(abstract) + ''')
-        print("\\fSection 1. Introduction body")
-        print("\\fReferences entry")
+        args=sys.argv[1:]
+        page=int(args[args.index("-f")+1])
+        pages=int(os.environ.get("FAKE_PAGES","3"))
+        if page == 1: print("Audit title Abstract " + ''' + repr(abstract) + ''')
+        elif page == pages: print("Data and Code Availability\\nSanitized availability statement")
+        else: print("Section 1. Introduction body")
     ''')
 
 
@@ -179,11 +194,18 @@ def build_integration_test(scratch: pathlib.Path) -> None:
         "### Findings cross-reference\n\n"
         "- [claim 1] F1: source-only generated join text.\n"
         "<!-- I4R-GENERATED-CLAIM-TAGS:END -->\n\n"
-        "## References\nReference entry.\n",
+        "## Data and Code Availability\nSanitized availability statement.\n",
         encoding="utf-8",
     )
     (report / "front_matter.md").write_text("Audit title\n\n", encoding="utf-8")
     (report / "captions.txt").write_text("", encoding="utf-8")
+    policy = json.loads((SKILL / "config/pipeline-policy-v2.json").read_text(encoding="utf-8"))
+    canonical = json.dumps(policy, sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False).encode("utf-8")
+    (audit / "pipeline-policy.snapshot.json").write_text(json.dumps({
+        "snapshot_version": "1", "policy_sha256": hashlib.sha256(canonical).hexdigest(),
+        "policy": policy,
+    }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     fake_bin = scratch / "fake-bin"
     counter = scratch / "build-counter.txt"
     counter.write_text("", encoding="utf-8")
@@ -212,8 +234,9 @@ def build_integration_test(scratch: pathlib.Path) -> None:
     assert (sha(docx), sha(pdf)) == first_hashes
     assert counter.read_text().splitlines() == first_calls
     manifest = json.loads((audit / "document_build_manifest.json").read_text())
-    assert manifest["docx"]["sha256"] == first_hashes[0]
-    assert manifest["pdf"]["sha256"] == first_hashes[1]
+    assert manifest["schema_version"] == "3.0.0"
+    assert manifest["artifacts"]["docx"]["sha256"] == first_hashes[0]
+    assert manifest["artifacts"]["pdf"]["sha256"] == first_hashes[1]
     print("  ok: second identical build skips Pandoc/LibreOffice and restores exact bound outputs")
 
     archive = next(iter(archives))
@@ -253,18 +276,50 @@ def build_integration_test(scratch: pathlib.Path) -> None:
     assert sha(docx) != hashlib.sha256(b"old-visible-docx").hexdigest()
     print("  ok: corrupt matching entry is rejected, rebuilt, and replaced with a valid archive")
 
+    canonical_manifest_hash = sha(audit / "document_build_manifest.json")
+    cache_before_preview = {path.name: sha(path) for path in (audit / ".cache/document-builds").glob("*.zip")}
+    preview = run(["bash", str(BUILDER), "--preview-max-pages", "14",
+                   str(audit), "comment-max14"], env=env)
+    preview_pdf = report / "previews/comment-max14.pdf"
+    preview_manifest = report / "previews/comment-max14.manifest.json"
+    assert preview_pdf.is_file() and preview_manifest.is_file()
+    assert json.loads(preview_manifest.read_text())["release_eligible"] is False
+    assert sha(audit / "document_build_manifest.json") == canonical_manifest_hash
+    assert {path.name: sha(path) for path in (audit / ".cache/document-builds").glob("*.zip")} == cache_before_preview
+    assert "NON-RELEASE" in preview.stdout
+    print("  ok: preview limits write only non-release artifacts and never update canonical manifest/cache")
+
+    override_env = dict(env)
+    override_env["MAX_PAGES"] = "14"
+    rejected_override = run(command, env=override_env, expected=1)
+    assert "MAX_PAGES is forbidden" in rejected_override.stderr
+    assert sha(audit / "document_build_manifest.json") == canonical_manifest_hash
+    print("  ok: canonical builds reject the historical MAX_PAGES environment override")
+
+    unbound = report / "diagnostic.PDF"
+    unbound.write_bytes(pdf.read_bytes())
+    calls_before_inventory_rejection = counter.read_text().splitlines()
+    rejected_inventory = run(command, env=env, expected=1)
+    assert "extra unbound document" in rejected_inventory.stderr
+    assert counter.read_text().splitlines() == calls_before_inventory_rejection
+    unbound.unlink()
+    print("  ok: case-variant unbound documents fail preflight before renderer inference")
+
     malformed = source.read_text(encoding="utf-8").replace(
         "<!-- I4R-GENERATED-CLAIM-TAGS:END -->", ""
     )
     source.write_text(malformed, encoding="utf-8")
+    passing_hashes = (sha(docx), sha(pdf), sha(audit / "document_build_manifest.json"))
     rejected = run(
         ["bash", str(BUILDER), "--no-cache", str(audit), "comment"],
         env=env,
         expected=1,
     )
-    assert "malformed generated claim-tag block" in rejected.stdout
-    assert counter.read_text().splitlines().count("pandoc") == 5
-    print("  ok: an unbalanced generated claim block fails before document conversion")
+    assert "malformed generated claim-tag block" in rejected.stdout + rejected.stderr
+    assert counter.read_text().splitlines().count("pandoc") == 6
+    assert (sha(docx), sha(pdf), sha(audit / "document_build_manifest.json")) == passing_hashes
+    assert json.loads((audit / "document_build_diagnostics/last_failure.json").read_text())["status"] == "failed"
+    print("  ok: a failed rebuild leaves the prior passing pair/manifest untouched and writes only diagnostics")
 
 
 def main() -> int:

@@ -79,7 +79,17 @@ RENDER_ENDED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 [ -s "$SUMMARY" ] || { echo "verification_summary.csv missing or empty" >&2; exit 1; }
 CODE=$(tr -d '[:space:]' < "$STATUS")
 case "$CODE" in ''|*[!0-9]*) echo "verification status is not an integer: $CODE" >&2; exit 1 ;; esac
-[ "$CODE" = "0" ] || { rm -f "$MANIFEST"; echo "verification failed with status $CODE" >&2; exit "$CODE"; }
+if [ "$CODE" != "0" ]; then
+  rm -f "$MANIFEST"
+  echo "verification failed with status $CODE; failing rows of $SUMMARY:" >&2
+  python3 - "$SUMMARY" <<'PYFAIL' >&2 || true
+import csv, sys
+for row in csv.DictReader(open(sys.argv[1], encoding="utf-8")):
+    if row.get("verdict") == "FAIL":
+        print(f"  {row.get('claim')} {row.get('key')}: {row.get('detail')}")
+PYFAIL
+  exit "$CODE"
+fi
 
 RENDER_TX="$RENDER_TX" RENDER_STARTED="$RENDER_STARTED" RENDER_ENDED="$RENDER_ENDED" \
 python3 - "$DIR" "$NB" "$REPORT" "$COMMENT" "$STATUS" "$SUMMARY" <<'PY'
@@ -115,8 +125,9 @@ for index, row in enumerate(rows, 2):
         claims.append(claim); seen.add(claim)
 if not claims: raise SystemExit("verification summary contains no claims")
 numbers=[int(claim[2:]) for claim in claims]
-if numbers != list(range(1,len(numbers)+1)):
-    raise SystemExit(f"verification summary claim groups must be contiguous C-1..C-{len(numbers)}; observed {claims}")
+# unique and increasing: a finding whose approval is deferred leaves a hole (finalize refuses the stop meanwhile)
+if numbers != sorted(set(numbers)):
+    raise SystemExit(f"verification summary claim groups must be unique C-<n> in increasing order; observed {claims}")
 report_claims=[f"C-{int(n)}" for n in re.findall(r"\[claim\s+([1-9][0-9]*)\]", report.read_text(errors="replace"), re.I)]
 comment_obj=json.loads(comment.read_text())
 comment_claims=[]

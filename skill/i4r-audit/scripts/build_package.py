@@ -24,7 +24,15 @@ from check_release_privacy import (
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PREFIX = ROOT.name + "/"
 EXCLUDED_PARTS = {"__pycache__", ".git", ".pytest_cache", "_history_aug27_baks"}
-EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".html", ".csv"}
+# `.html` used to be here, and the only file in the tree it excluded was CHEATSHEET.html --
+# the team onboarding document, which therefore shipped in no release. The rendered
+# CHEATSHEET.pdf is still excluded by name below, as a build output.
+EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".csv"}
+# Excluded by exact name. R writes `.Rhistory` and `.RData` into whatever directory it was started
+# in; an empty `.Rhistory` appeared in the skill root after the 2.6.3 ZIP was built, and the
+# freshness check then failed with missing=['i4r-audit/.Rhistory'] on an unchanged package. The one
+# set serves both the inclusion test and the symlink refusal, so the two can no longer disagree.
+EXCLUDED_NAMES = {".DS_Store", "CHEATSHEET.pdf", "PACKAGE_MANIFEST.json", ".Rhistory", ".RData"}
 
 
 def digest(data: bytes) -> str:
@@ -35,7 +43,7 @@ def included(path: pathlib.Path, root: pathlib.Path = ROOT) -> bool:
     rel = path.relative_to(root)
     if any(part in EXCLUDED_PARTS or part.startswith("_history") for part in rel.parts):
         return False
-    if path.name in {".DS_Store", "CHEATSHEET.pdf", "PACKAGE_MANIFEST.json"}:
+    if path.name in EXCLUDED_NAMES:
         return False
     if path.suffix.lower() in EXCLUDED_SUFFIXES:
         return False
@@ -51,7 +59,7 @@ def source_entries(root: pathlib.Path = ROOT) -> dict[str, bytes]:
         rel_path = path.relative_to(root)
         excluded = any(part in EXCLUDED_PARTS or part.startswith("_history") for part in rel_path.parts)
         if path.is_symlink():
-            if not excluded and path.name not in {".DS_Store", "CHEATSHEET.pdf", "PACKAGE_MANIFEST.json"}:
+            if not excluded and path.name not in EXCLUDED_NAMES:
                 raise ValueError(f"symlinked package input is not allowed: {rel_path.as_posix()}")
             continue
         if not included(path, root):

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://i4replication.org/schemas/v2/lifecycle-event.schema.json",
+  "title": "I4R metadata 2.1 canonical lifecycle event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "seq", "at", "type", "payload", "pid", "source",
+    "previous_hash", "event_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.1.0"},
+    "seq": {"type": "integer", "minimum": 1},
+    "at": {"type": "string", "format": "date-time"},
+    "type": {
+      "type": "string",
+      "enum": [
+        "init", "phase_start", "phase_end", "round_prepared",
+        "round_authorization_required", "round_authorized", "round_ready",
+        "round_start", "round_end", "round_quorum_complete", "round_integrated",
+        "round_paused", "round_result", "review_scope", "invocation_reserved",
+        "provider_request", "inference_start", "provider_response",
+        "invocation_terminal", "invocation_correction", "cache_reuse", "authorization_wait_start",
+        "authorization_wait_end", "pause_start", "pause_end",
+        "retry_backoff_start", "retry_backoff_end", "metadata_correction",
+        "migration_anchor", "model", "tokens", "cost", "failure",
+        "brief_correction", "gate", "delivery", "package", "records",
+        "human_effort", "settled", "note", "finalize", "policy_amendment",
+        "audit_reopened",
+        "environment_captured",
+        "text_redaction"
+      ]
+    },
+    "payload": {"type": "object"},
+    "pid": {"type": ["integer", "null"], "minimum": 1},
+    "source": {"type": ["string", "null"]},
+    "previous_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

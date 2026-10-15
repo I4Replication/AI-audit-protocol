@@ -1,0 +1,53 @@
+{
+  "schema_version": "i4r-benchmark-input-1",
+  "records": [
+    {
+      "case_id": "regression-principal-replay",
+      "source": "seeded",
+      "measurement_status": "projected",
+      "failure_domains": [
+        "statistics",
+        "data",
+        "privacy",
+        "archive",
+        "report_synchronization",
+        "methods"
+      ],
+      "ground_truth": {
+        "substantive_finding_ids": [
+          "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10",
+          "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19", "P20"
+        ],
+        "conclusion_changing_ids": ["P1", "P2", "P5"],
+        "disclosure_critical_ids": ["P10", "P11"]
+      },
+      "baseline": {
+        "total_tokens": 118249574,
+        "wall_clock_seconds": 100000,
+        "reported_finding_ids": [
+          "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10",
+          "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19", "P20",
+          "REGRESSION-FP"
+        ],
+        "telemetry_coverage": {
+          "model": 1,
+          "reasoning_effort": 1,
+          "latency": 1,
+          "outcome": 1,
+          "tokens": 1
+        },
+        "accepted_partial_or_stale_outputs": 0,
+        "settled_spot_check_failures": 0,
+        "operational_metrics": {
+          "phase1_turn_counts": null,
+          "claude_cache_read_tokens": 109041155,
+          "accounted_tokens": 118249574,
+          "failed_billable_tokens": 47973272,
+          "local_preflight_billable_tokens": null,
+          "schema_admission_billable_tokens": null
+        }
+      },
+      "optimized": null
+    }
+  ]
+}

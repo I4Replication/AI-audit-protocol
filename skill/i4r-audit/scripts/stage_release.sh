@@ -19,14 +19,24 @@
 #      regenerable from the scripts we do ship.
 #   3. Cached repository JSON, which puts result-file pseudonyms and upload timestamps on one line.
 #   4. Raw agent transcripts and driver logs, which are process records, not audit evidence.
+#   5. (2.6.8, check 3c) Any staged text, PDF or DOCX location that reproduces a value from the
+#      deposit's personal-data columns (full names, e-mail addresses, dates of birth, IP addresses,
+#      postal addresses, phone numbers), and any e-mail, IPv4 or IPv6 address. In the comment's own
+#      outputs such a finding is reworded to describe the identifier by kind, file, column and count.
+#      In the staged copy of a record nobody can reword (a Phase-1 auditor report, a critique record,
+#      a work record or evidence script; 2.6.9) the span is masked instead and listed in
+#      RELEASE_VALUE_REDACTION.txt. A one-word match is a warning, never a refusal.
 #
 # What IS shipped: the comment, the ledger, the adjudication log, the five auditors' reports,
 # the critique rounds, and every re-runnable script. A reader can regenerate every excluded
-# artefact from the scripts plus the public deposit.
+# artefact from the scripts plus the public deposit. Where a shipped script named the audit's own
+# absolute root, the release copy carries `<audit>` instead and RELEASE_PATH_NEUTRALISATION.txt
+# lists exactly which files were rewritten.
 set -uo pipefail
 A="${1:?usage: stage_release.sh <audit-dir> <release-dir>}"
 R="${2:?usage: stage_release.sh <audit-dir> <release-dir>}"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
+DOCUMENT_RELEASE="$SCRIPT_DIR/document_release.py"
 
 # Resolve both paths before creating anything.  Textual comparisons miss aliases
 # through `..` and symlinked parents, and allowed a release to be staged into the
@@ -81,14 +91,30 @@ PYPATH
 A=$(printf '%s\n' "$CANONICAL_PATHS" | sed -n '1p')
 R=$(printf '%s\n' "$CANONICAL_PATHS" | sed -n '2p')
 if [ -e "$R" ]; then
-  echo "FATAL: release target already exists; staging requires a fresh directory: $R" >&2
+  if [ -f "$R/RELEASE_REJECTED" ]; then
+    echo "FATAL: $R holds an earlier REJECTED staging attempt:" >&2
+    sed 's/^/  /' "$R/RELEASE_REJECTED" >&2
+    printf '  Fix that step, then remove the rejected directory and stage again: rm -r %q\n' "$R" >&2
+  else
+    echo "FATAL: release target already exists; staging requires a fresh directory: $R" >&2
+  fi
   exit 2
 fi
 mkdir -p "$R"
 STAGE_ACCEPTED=0
+# The marker used to hold one word. A rejected staging directory found a day later, on another
+# machine, then said nothing about which gate refused it; audit A28 left two
+# such directories before a third attempt passed. Each banner below records the step it opens,
+# and the marker names the step that was open when the script stopped.
+STAGE_STEP="before the first step"
+stage () { STAGE_STEP="$1"; echo "== $1 =="; }
 mark_rejected () {
   if [ "$STAGE_ACCEPTED" -ne 1 ] && [ -d "$R" ]; then
-    printf 'REJECTED_OR_INCOMPLETE\n' > "$R/RELEASE_REJECTED"
+    {
+      printf 'REJECTED_OR_INCOMPLETE\n'
+      printf 'failed during: %s\n' "$STAGE_STEP"
+      printf 'the refusing gate printed its reason to the terminal that ran stage_release.sh\n'
+    } > "$R/RELEASE_REJECTED"
   fi
 }
 trap mark_rejected EXIT
@@ -96,7 +122,7 @@ trap 'mark_rejected; exit 129' HUP
 trap 'mark_rejected; exit 130' INT
 trap 'mark_rejected; exit 143' TERM
 
-echo "== mandatory release inputs =="
+stage "mandatory release inputs"
 missing=0
 for f in report/REPORT_final.md report/LEDGER.md report/ADJUDICATION.md \
          report/01_reproduction.md report/02_data_integrity.md report/03_text_vs_data.md \
@@ -126,6 +152,7 @@ root_files = {
     "PAPER.txt", "ENV.txt", "SLOW.txt", "SETTLED.md", "SETTLED.json", "WRAPUP.txt",
     "RELEASE_MANIFEST.md", "BRIEF.md", "verification.Rmd", "verification_status.txt",
     "verification_summary.csv", "verification_manifest.json", "comment.json", "package_manifest.json",
+    "document_build_manifest.json", "pipeline-policy.snapshot.json",
 }
 report_files = {
     "REPORT_final.md", "LEDGER.md", "ADJUDICATION.md", "retired_claims.txt", "front_matter.md",
@@ -176,9 +203,75 @@ if bad:
 PYSYMLINK
 echo "  ok: report, five auditor records, and executed verification artefacts are present"
 
+stage "exact document release binding"
+[ -f "$DOCUMENT_RELEASE" ] || { echo "FATAL: document release verifier is missing" >&2; exit 1; }
+python3 "$DOCUMENT_RELEASE" verify "$A" --builder "$SCRIPT_DIR/build_docx.sh" \
+  --boundary stage-source || exit 1
+BOUND_PATHS=$(python3 "$DOCUMENT_RELEASE" paths "$A/document_build_manifest.json") || exit 1
+BOUND_PDF=$(printf '%s\n' "$BOUND_PATHS" | sed -n '1p')
+BOUND_DOCX=$(printf '%s\n' "$BOUND_PATHS" | sed -n '2p')
+[ -n "$BOUND_PDF" ] || { echo "FATAL: document manifest has no PDF path" >&2; exit 1; }
+
 python3 "$SCRIPT_DIR/generate_finding_artifacts.py" "$A" --check || {
   echo "  FAIL: canonical finding projections are missing or divergent" >&2; exit 1
 }
+
+# finalize requires the last round's post-delta receipt to be current; staging first and learning it at finalize cost a
+# whole restage (a registry or report change since the gates ran, e.g. a late integration's approve/project/settled)
+python3 - "$A" "$SCRIPT_DIR" <<'PYGATES' || { rmdir "$R" 2>/dev/null || true; exit 1; }
+import json, pathlib, shlex, sys
+audit, here = pathlib.Path(sys.argv[1]).resolve(), pathlib.Path(sys.argv[2]).resolve()
+sys.path.insert(0, str(here))
+# the rounds finalize counts: run.json's rounds (a refused prepare of a later round leaves a folder that never ran)
+try:
+    run = json.loads((audit / "run.json").read_text(encoding="utf-8"))
+    # a round prepared but never run (no projection) is not part of the review
+    called = set()
+    ledger = audit / "invocations.jsonl"
+    try:
+        for line in (ledger.read_text(encoding="utf-8").splitlines() if ledger.is_file() else []):
+            if line.strip():
+                row = json.loads(line)
+                if isinstance(row, dict) and row.get("role_class") in ("critic", "adjudicator"):
+                    called.add(row.get("round"))
+    except (OSError, ValueError):
+        # an unreadable ledger must not switch this check off: count every round as run (finalize refuses the
+        # ledger itself)
+        called = {r.get("round") for r in (run.get("rounds") or []) if isinstance(r, dict)}
+    rounds = sorted(int(r.get("round")) for r in (run.get("rounds") or []) if isinstance(r, dict)
+                    and isinstance(r.get("round"), int)
+                    and not (r.get("state") in ("prepared", "awaiting_authorization", "ready") and not r.get("started_at")
+                             and r.get("round") not in called
+                             and not (audit / f"critique/round_{r.get('round')}/CURRENT_PROJECTION").is_file()))
+except (OSError, ValueError, TypeError):
+    rounds = []
+if rounds and rounds[-1] > 1:
+    import run_post_delta_gates
+    last = rounds[-1]
+    try:
+        run_post_delta_gates.verify_receipt(audit, audit / f"critique/round_{last}/POST_DELTA_GATES.json", require_current=True)
+    except Exception as exc:   # noqa: BLE001 -- any failure means the receipt does not cover what would be staged
+        q = lambda value: shlex.quote(str(value))
+        prior = audit / f"critique/round_{last - 1}"
+        # the before-files the round's packet was built from (older audits used other paths than the step-1 copies)
+        before_report, before_findings = prior / "REPORT_BEFORE_INTEGRATION.md", prior / "FINDINGS_BEFORE_INTEGRATION.jsonl"
+        try:
+            built = json.loads((audit / f"critique/DIFF_MANIFEST_round_{last}.json").read_text(encoding="utf-8"))
+            paths = built.get("input_paths") or {}
+            if isinstance(paths.get("before_report"), str) and isinstance(paths.get("before_findings"), str):
+                before_report, before_findings = audit / paths["before_report"], audit / paths["before_findings"]
+        except (OSError, ValueError, AttributeError):
+            pass
+        print(f"  FAIL: round {last}'s post-delta gates are not current ({exc}). Rebuild its packet and gates, then stage:\n"
+              f"    python3 {q(here / 'make_diff_packet.py')} {q(audit)} --round {last} "
+              f"--before-report {q(before_report)} --after-report {q(audit / 'report/REPORT_final.md')} "
+              f"--before-findings {q(before_findings)} --after-findings {q(audit / 'work/findings.jsonl')} "
+              f"--output {q(audit / f'critique/DIFF_MANIFEST_round_{last}.json')}\n"
+              f"    python3 {q(here / 'run_post_delta_gates.py')} {q(audit)} --round {last} --report {q(audit / 'report/REPORT_final.md')}\n"
+              "  (if make_diff_packet says a before-file changed, restore it as it prints instead of rebuilding)",
+              file=sys.stderr)
+        raise SystemExit(1)
+PYGATES
 
 python3 - "$A" <<'PYBIND' || exit 1
 import hashlib, json, pathlib, sys
@@ -194,7 +287,13 @@ for label in ("report","comment","summary","notebook"):
     try: path.relative_to(root.resolve())
     except ValueError: raise SystemExit(f"verification manifest {label} path escapes audit root")
     if not path.is_file() or item.get("sha256") != digest(path):
-        raise SystemExit(f"verification binding is stale for {label}")
+        raise SystemExit(
+            f"verification binding is stale for {label}.\n"
+            "  The notebook was executed against an earlier version of this file. Every report\n"
+            "  edit -- including one made to satisfy a critique round -- invalidates the run.\n"
+            "  Rebuild and re-execute, then stage:\n"
+            "      bash scripts/make_verification_notebook.sh \"$AUDIT_DIR\"\n"
+            "      bash scripts/run_verification.sh \"$AUDIT_DIR\"")
 if m.get("status") != 0: raise SystemExit("verification status is not zero")
 status=m.get("status_artifact") or {}; status_path=(root/status.get("path","")).resolve()
 try: status_path.relative_to(root.resolve())
@@ -207,27 +306,30 @@ if render.get("mode") != "executed" or render.get("exit_status") != 0:
 print("  ok: report, comment, summary and notebook match the verification manifest")
 PYBIND
 
-echo "== checking the report to be staged is the current one =="
+stage "checking the report to be staged is the current one"
 # A stale REPORT_final.md was staged once, silently, because this script copied whatever file had
 # that name. Refuse unless it is byte-identical to the highest-numbered REPORT_v*.md.
 LATEST=$(ls "$A"/report/REPORT_v*.md 2>/dev/null | sed 's/.*REPORT_v//; s/\.md//' | sort -n | tail -1)
 if [ -n "$LATEST" ]; then
   V="$A/report/REPORT_v${LATEST}.md"
   if [ ! -f "$A/report/REPORT_final.md" ]; then
-    echo "FATAL: report/REPORT_final.md missing. Copy REPORT_v${LATEST}.md to it first."; exit 1
+    printf 'FATAL: %s/report/REPORT_final.md missing. Copy it from the snapshot, remove this attempt, and re-run:\n  cp %q %q; rm -r %q\n' \
+      "$A" "$A/report/REPORT_v${LATEST}.md" "$A/report/REPORT_final.md" "$R"; exit 1
   fi
   if ! cmp -s "$V" "$A/report/REPORT_final.md"; then
     echo "FATAL: report/REPORT_final.md and REPORT_v${LATEST}.md differ."
     echo "  If REPORT_final.md is the newer one -- the usual case, because a critique round edits"
     echo "  it in place -- cut a new snapshot and re-run. Do NOT copy the snapshot over the final:"
     echo "  that discards the round you just finished."
-    echo "       cp report/REPORT_final.md report/REPORT_v$((LATEST+1)).md   then re-run."
+    printf '       cp %q %q\n' "$A/report/REPORT_final.md" "$A/report/REPORT_v$((LATEST+1)).md"
+    printf '       rm -r %q      # this attempt is marked REJECTED; staging needs a fresh directory\n' "$R"
+    echo "  then re-run."
     echo "  Only if REPORT_final.md is genuinely the stale one is the reverse copy right."; exit 1
   fi
   echo "  ok: REPORT_final.md matches REPORT_v${LATEST}.md"
 fi
 
-echo "== staging =="
+stage "staging"
 copy_input () {
   cp "$1" "$2" || { echo "FATAL: could not copy release input: $1" >&2; exit 1; }
 }
@@ -237,10 +339,11 @@ for f in REPORT_final.md LEDGER.md ADJUDICATION.md retired_claims.txt front_matt
          01_reproduction.md 02_data_integrity.md 03_text_vs_data.md 04_code_methods.md 05_privacy_archive.md; do
   [ -f "$A/report/$f" ] && copy_input "$A/report/$f" "$R/report/"
 done
-for f in "$A"/report/*.docx "$A"/report/*.pdf; do [ -f "$f" ] && copy_input "$f" "$R/report/"; done
+copy_input "$A/$BOUND_PDF" "$R/$BOUND_PDF"
+if [ -n "$BOUND_DOCX" ]; then copy_input "$A/$BOUND_DOCX" "$R/$BOUND_DOCX"; fi
 for f in PAPER.txt ENV.txt SLOW.txt SETTLED.md SETTLED.json WRAPUP.txt RELEASE_MANIFEST.md BRIEF.md \
          verification.Rmd verification_status.txt verification_summary.csv verification_manifest.json \
-         comment.json; do
+         comment.json document_build_manifest.json pipeline-policy.snapshot.json; do
   [ -f "$A/$f" ] && copy_input "$A/$f" "$R/"
 done
 copy_input "${CLAIMS[0]}" "$R/"
@@ -256,11 +359,20 @@ fi
 # created before the gate existed.
 mkdir -p "$R/scripts" || exit 1
 copy_input "$SCRIPT_DIR/check_release_privacy.py" "$R/scripts/check_release_privacy.py"
+# Document-manifest v3 binds these exact packaged gates.  Always stage the release-side copies,
+# even when an audit-local scripts directory predates them.
+copy_input "$SCRIPT_DIR/build_docx.sh" "$R/scripts/build_docx.sh"
+copy_input "$SCRIPT_DIR/document_build_cache.py" "$R/scripts/document_build_cache.py"
+copy_input "$SCRIPT_DIR/document_release.py" "$R/scripts/document_release.py"
+copy_input "$SCRIPT_DIR/lock_wait.py" "$R/scripts/lock_wait.py"
+# the renumber history maps the ids each round was reviewed under (critic files, CONTESTED.json) to the
+# published ids used by RESPONSE_notes.md and ADJUDICATION.md
+[ -f "$A/work/id_map_history.jsonl" ] && { mkdir -p "$R/critique" || exit 1; copy_input "$A/work/id_map_history.jsonl" "$R/critique/id_map_history.jsonl"; }
 # critique rounds: the critiques themselves, not the transcripts
 for d in "$A"/critique/round_*; do
   [ -d "$d" ] || continue
   n=$(basename "$d"); mkdir -p "$R/critique/$n" || exit 1
-  for f in "$d"/critic_*.md "$d"/CRITIQUE.md "$d"/RESPONSE_notes.md; do
+  for f in "$d"/critic_*.md "$d"/CRITIQUE.md "$d"/RESPONSE_notes.md "$d"/CONTESTED.json; do
     [ -f "$f" ] && copy_input "$f" "$R/critique/$n/"
   done
 done
@@ -283,7 +395,7 @@ done; then
   exit 1
 fi
 
-echo "== pruning verbatim copies of the authors' files =="
+stage "pruning verbatim copies of the authors' files"
 # Auditors copy the authors' scripts into scratch directories to test running them as shipped,
 # and copy the data alongside. Both are CC0 and already public, so the copies disclose nothing —
 # but shipping duplicates of someone else's deposit inside ours is redundant, and for the data
@@ -311,7 +423,45 @@ for p in sorted(R.rglob("*"), key=lambda x: -len(x.parts)):
     if p.is_dir() and not any(p.iterdir()): p.rmdir()
 PY
 
-echo "== enforcing exclusions =="
+stage "neutralising audit paths in staged working source"
+# Scoped to work/, and to the AUDIT ROOT only. An auditor's script must name the snapshot it
+# actually read; the snapshot sits inside the audit directory, and the audit-side file is
+# hash-bound into the role's evidence manifest, so it cannot be edited. Rewriting the RELEASE copy
+# loses nothing -- the path was unusable on any other machine already -- and the substitution is
+# listed in RELEASE_PATH_NEUTRALISATION.txt, not applied silently. An absolute path that points
+# ANYWHERE ELSE is not rewritten here; since 2.7.6 its account segment is masked in the staged copy
+# of a record nobody can reword (check 3d below), listed in the same note, and refused anywhere else. Outside work/, a private path is a leak from a
+# report, a manifest or a gate script and must fail too. The rewrite lives in
+# check_release_privacy.py, beside the pattern that rejects the path, so the two cannot drift.
+# The discipline tree the audit sits in is ours too (2.6.2): only when tree_layout.sh recognises
+# a real tree (data/, reservations/ or the legacy Completed reports/), never a scratch parent.
+TREE_ROOT="$(bash "$SCRIPT_DIR/tree_layout.sh" i4r_root_of_audit "$A" 2>/dev/null || true)"
+if [ -n "$TREE_ROOT" ] && ! bash -c '. "$1/tree_layout.sh"; i4r_is_tree_root "$2"' _ "$SCRIPT_DIR" "$TREE_ROOT"; then
+  TREE_ROOT=""
+fi
+python3 - "$A" "$R" "$SCRIPT_DIR/check_release_privacy.py" "$TREE_ROOT" <<'PY' || { echo "FATAL: audit-path neutralisation failed" >&2; exit 1; }
+import importlib.util, pathlib, sys
+A, R = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("crp", sys.argv[3])
+crp = importlib.util.module_from_spec(spec); sys.modules["crp"] = crp
+spec.loader.exec_module(crp)
+prefixes = {str(A), str(A.resolve())}
+tree = sys.argv[4] if len(sys.argv) > 4 else ""
+tree_prefixes = {tree, str(pathlib.Path(tree).resolve())} if tree else set()
+work = R / "work"
+rewritten = crp.neutralise_tree(work, prefixes, tree_prefixes) if work.is_dir() else []
+crp.write_neutralisation_note(R, rewritten)
+if rewritten:
+    total = sum(n for _, n in rewritten)
+    print(f"  neutralised {total} audit path(s) in {len(rewritten)} file(s)"
+          f" (listed in {crp.NEUTRALISATION_NOTE})")
+    for name, n in rewritten:
+        print(f"    - work/{name} ({n})")
+else:
+    print("  ok: no audit path in staged working source")
+PY
+
+stage "enforcing exclusions"
 viol=0
 
 # 1. no verbatim copy of any file from the authors' package
@@ -461,8 +611,13 @@ TOKEN = re.compile(r"\b(?:[A-Za-z]{1,4}_)?(?=[A-Za-z0-9]*[A-Z])(?=[A-Za-z0-9]*[a
                    r"(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{12,}\b")
 HEXONLY = re.compile(r"\A[0-9a-fA-F]+\Z")
 THRESHOLD = 20
+# Mirrors check_release_privacy._without_base64: a rendered figure left in a staged .ipynb is
+# ~1170 base64 "identifiers" and blocked a clean release.
+DATA_URI = re.compile(r"data:[A-Za-z0-9.+/-]+;base64,[A-Za-z0-9+/=\s]+")
+BASE64_RUN = re.compile(r"(?<![A-Za-z0-9+/=])(?:[A-Za-z0-9+/]{4}){40,}={0,2}(?![A-Za-z0-9+/=])")
 
 def ids(text):
+    text = BASE64_RUN.sub(" ", DATA_URI.sub(" ", text))
     return {t for t in TOKEN.findall(text) if not HEXONLY.match(t.split("_")[-1])}
 
 # self-test both ways; controls are out of range so one can never be mistaken for real data
@@ -474,6 +629,9 @@ if len(ids(NEG)) >= THRESHOLD:
     print("  FAIL: the opaque-identifier detector fires on prose"); sys.exit(1)
 if ids("a" * 40) or ids("deadbeefcafe1234"):
     print("  FAIL: the opaque-identifier detector fires on a hash or a flat string"); sys.exit(1)
+import base64 as _b64
+if ids("data:image/png;base64," + _b64.b64encode(bytes(range(256)) * 40).decode()):
+    print("  FAIL: the opaque-identifier detector fires on a base64 figure"); sys.exit(1)
 
 bad = []
 for f in sorted(R.rglob("*")):
@@ -491,10 +649,55 @@ print("  ok: no opaque per-row identifier listing (detector self-tested, thresho
 IDPY
 [ $? -ne 0 ] && viol=1
 
+# 3c. IDENTIFYING VALUES COPIED FROM THE DEPOSIT (2.6.8). A deposit holding personal data is
+# audited and reported like any other, as a finding that names the kind of identifier, the file,
+# the column and the count. Checks 3, 3b and 4 know participant codes, timestamps and paths; none
+# of them catches a finding that quotes a participant's name, e-mail address, date of birth or IP
+# address. check_deposit_values.py hashes the values of the deposit's name, e-mail, birth-date,
+# IP, address and phone columns in memory under a one-run key (nothing value-derived is written),
+# then refuses any staged text, PDF or DOCX location that reproduces one, and any e-mail, IPv4 or
+# IPv6 address at all; a one-word name match is a warning. It prints locations and value kinds,
+# never values. A deposit file it cannot read is reported as not scanned and never refuses
+# anything: this check judges the audit's own outputs only. Its detector self-test (synthetic,
+# out-of-range controls) runs first; a failed self-test certifies nothing. 2.6.9: --mask-records
+# masks a match in the STAGED copy of a record nobody can reword (Phase-1 auditor reports, critique
+# records, work records and evidence scripts: hash-bound or model output, so "reword" had no
+# remedy and the audit could never stage) with a class-only placeholder, lists each masking in
+# RELEASE_VALUE_REDACTION.txt (file, line, class; never the value) and scans again; the audit's own
+# files are never touched. Exit 1 means a value remains in the comment's own outputs (or in a file
+# the masking does not rewrite; the script printed the locations and the remedy for each kind of
+# file); exit 2 means the release could not be inspected, which no rewording fixes.
+if python3 "$SCRIPT_DIR/check_deposit_values.py" --self-test; then
+  python3 "$SCRIPT_DIR/check_deposit_values.py" "$A" "$R" --mask-records
+  case $? in
+    0) ;;
+    1) viol=1 ;;
+    2) echo "  FAIL: check 3c could not inspect this release (see above): fix the document or the environment and restage; the text needs no rewording on this account"
+       viol=1 ;;
+    *) echo "  FAIL: check 3c stopped unexpectedly, so it certified nothing"
+       viol=1 ;;
+  esac
+else
+  echo "  FAIL: the deposit-value detector failed its self-test, so check 3c cannot certify this release"
+  viol=1
+fi
+
+# 3d. HOME PATHS AND E-MAIL ADDRESSES IN RECORDS NOBODY CAN REWORD (2.7.6). Check 4 refuses any home
+# path and any address the byline and the article do not print. A critic quoting the authors'
+# setwd("C:/Users/<name>/..."), or a Phase-1 evidence script naming a deposit path, is a hash-bound or
+# model-written record, so "reword it" had no remedy and the audit could never stage. As check 3c does
+# for deposit values, the STAGED copy of such a record (check_deposit_values.record_file) gets <user-dir>
+# for the account segment and [e-mail address] for the address, and every rewrite is listed in
+# RELEASE_PATH_NEUTRALISATION.txt. The audit's files are untouched; the comment's own outputs are not
+# records, so a path or address there still refuses below. The step lives in release_record_masking.py:
+# every post-delta receipt binds check_release_privacy.py's bytes, so that file is read, never changed.
+python3 "$SCRIPT_DIR/release_record_masking.py" "$R" "$A/paper/paper.txt" \
+  || { echo "  FAIL: check 3d could not mask the staged records" >&2; viol=1; }
+
 # 4. Inspect every shipped text/code suffix plus PDF and DOCX text and metadata.
 # PDF extraction is deliberately fail-closed: a corrupt/encrypted document, or
 # a host without the required extractor, is not certified as clean.
-python3 "$SCRIPT_DIR/check_release_privacy.py" "$R" --identifiers
+python3 "$SCRIPT_DIR/check_release_privacy.py" "$R" --identifiers --allow-emails-from "$A/paper/paper.txt"
 [ $? -ne 0 ] && viol=1
 
 echo ""
@@ -507,13 +710,33 @@ if [ "$viol" -ne 0 ]; then echo "RELEASE BLOCKED — fix the failures above and 
 # returned a false clean for an archive whose identifiers were bare letters,
 # while critic reports carried full-precision BMI that inverts to height/weight.
 if [ -f "$A/scripts/gate_pkgspecific.py" ]; then
-  echo "== package-specific disclosure gate =="
+  stage "package-specific disclosure gate"
   if ! python3 "$A/scripts/gate_pkgspecific.py" "$A" "$R"; then
     echo "  RELEASE VETOED by the package-specific gate. The staged tree remains for diagnosis"
-    printf 'REJECTED\n' > "$R/RELEASE_REJECTED"
+    printf 'REJECTED\nfailed during: %s\n' "$STAGE_STEP" > "$R/RELEASE_REJECTED"
     exit 1
   fi
 fi
+stage "recounting the manifest-bound staged PDF"
+python3 "$R/scripts/document_release.py" verify "$R" --builder "$R/scripts/build_docx.sh" \
+  --boundary stage-candidate || {
+  echo "RELEASE BLOCKED -- staged PDF/document binding changed during staging." >&2
+  exit 1
+}
+# What this release carries of the files finalize may still ask to change (hashes only, no paths): the
+# contest records and the settled cache. Finalize refuses when the audit's copies no longer match.
+python3 - "$A" <<'PYSTAGED' || { echo "RELEASE BLOCKED -- could not record the staged files" >&2; exit 1; }
+import datetime, hashlib, json, pathlib, sys
+audit = pathlib.Path(sys.argv[1])
+digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+staged = {str(p.relative_to(audit)): digest(p)
+          for p in sorted(audit.glob("critique/round_*/CONTESTED.json")) if p.is_file()}
+settled = {name: digest(audit / name) for name in ("SETTLED.json", "SETTLED.md") if (audit / name).is_file()}
+(audit / "work").mkdir(exist_ok=True)
+(audit / "work/RELEASE_STAGED.json").write_text(json.dumps(
+    {"staged_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+     "contested": staged, "settled": settled}, indent=2) + "\n", encoding="utf-8")
+PYSTAGED
 echo "release staged clean at $R"
 echo "  files: $(find "$R" -type f | wc -l | tr -d ' ')"
 STAGE_ACCEPTED=1
