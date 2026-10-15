@@ -23,76 +23,320 @@
   "allOf": [
     {
       "if": {
-        "required": ["schema_version"],
-        "properties": {"schema_version": {"const": "2.0.0"}}
+        "required": [
+          "schema_version"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": "2.0.0"
+          }
+        }
       },
       "then": {
-        "required": ["invocations", "round_target", "round_cap", "stopping_reason"],
+        "required": [
+          "invocations",
+          "round_target",
+          "round_cap",
+          "stopping_reason"
+        ],
         "properties": {
-          "stopping_reason": {"type": ["string", "null"], "enum": ["target_complete", "converged", "cap_with_unresolved", "aborted", null]}
+          "stopping_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "target_complete",
+              "converged",
+              "cap_with_unresolved",
+              "aborted",
+              null
+            ]
+          }
         }
       }
     },
     {
       "if": {
+        "required": [
+          "schema_version"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": "2.1.0"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "invocations",
+          "round_target",
+          "round_cap",
+          "stopping_reason",
+          "journal_watermark",
+          "pause_reason",
+          "post_delta_gates_passed"
+        ]
+      }
+    },
+    {
+      "if": {
         "allOf": [
-          {"required": ["schema_version"], "properties": {"schema_version": {"const": "2.0.0"}}},
+          {
+            "required": [
+              "schema_version"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": "2.1.0"
+              }
+            }
+          },
           {
             "anyOf": [
-              {"not": {"required": ["normalization"]}},
-              {"required": ["normalization"], "properties": {"normalization": {"type": "null"}}}
+              {
+                "not": {
+                  "required": [
+                    "normalization"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "normalization"
+                ],
+                "properties": {
+                  "normalization": {
+                    "type": "null"
+                  }
+                }
+              }
             ]
           }
         ]
       },
       "then": {
         "properties": {
-          "round_target": {"const": 2},
-          "round_cap": {"const": 5}
+          "round_target": {
+            "const": 2
+          },
+          "round_cap": {
+            "enum": [
+              5,
+              7
+            ]
+          }
         }
       }
     },
     {
-      "if": {"properties": {"schema_version": {"const": "2.0.0"}, "stopping_reason": {"const": "target_complete"}}, "required": ["schema_version", "stopping_reason"]},
+      "if": {
+        "allOf": [
+          {
+            "required": [
+              "schema_version"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": "2.0.0"
+              }
+            }
+          },
+          {
+            "anyOf": [
+              {
+                "not": {
+                  "required": [
+                    "normalization"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "normalization"
+                ],
+                "properties": {
+                  "normalization": {
+                    "type": "null"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
       "then": {
-        "required": ["changed_claim_ids", "rereviewed_claim_ids", "unresolved_blocking_item_ids", "unresolved_conclusion_critical_item_ids"],
         "properties": {
-          "unresolved_blocking_item_ids": {"maxItems": 0},
-          "unresolved_conclusion_critical_item_ids": {"maxItems": 0},
-          "unreviewed_sections": {"maxItems": 0}
+          "round_target": {
+            "const": 2
+          },
+          "round_cap": {
+            "enum": [
+              5,
+              7
+            ]
+          }
         }
       }
     },
     {
-      "if": {"properties": {"schema_version": {"const": "2.0.0"}, "stopping_reason": {"const": "converged"}}, "required": ["schema_version", "stopping_reason"]},
-      "then": {
-        "required": ["changed_claim_ids", "rereviewed_claim_ids", "unresolved_blocking_item_ids", "unresolved_conclusion_critical_item_ids", "unreviewed_sections"],
+      "if": {
         "properties": {
-          "unresolved_blocking_item_ids": {"maxItems": 0},
-          "unresolved_conclusion_critical_item_ids": {"maxItems": 0},
-          "unreviewed_sections": {"maxItems": 0}
+          "schema_version": {
+            "const": "2.0.0"
+          },
+          "stopping_reason": {
+            "const": "target_complete"
+          }
+        },
+        "required": [
+          "schema_version",
+          "stopping_reason"
+        ]
+      },
+      "then": {
+        "required": [
+          "changed_claim_ids",
+          "rereviewed_claim_ids",
+          "unresolved_blocking_item_ids",
+          "unresolved_conclusion_critical_item_ids"
+        ],
+        "properties": {
+          "unresolved_blocking_item_ids": {
+            "maxItems": 0
+          },
+          "unresolved_conclusion_critical_item_ids": {
+            "maxItems": 0
+          },
+          "unreviewed_sections": {
+            "maxItems": 0
+          }
         }
       }
     },
     {
-      "if": {"properties": {"schema_version": {"const": "2.0.0"}, "stopping_reason": {"const": "cap_with_unresolved"}}, "required": ["schema_version", "stopping_reason"]},
-      "then": {
-        "required": ["stopping_reason_detail"],
+      "if": {
         "properties": {
-          "stopping_reason_detail": {"type": "string", "minLength": 1}
+          "schema_version": {
+            "const": "2.0.0"
+          },
+          "stopping_reason": {
+            "const": "converged"
+          }
+        },
+        "required": [
+          "schema_version",
+          "stopping_reason"
+        ]
+      },
+      "then": {
+        "required": [
+          "changed_claim_ids",
+          "rereviewed_claim_ids",
+          "unresolved_blocking_item_ids",
+          "unresolved_conclusion_critical_item_ids",
+          "unreviewed_sections"
+        ],
+        "properties": {
+          "unresolved_blocking_item_ids": {
+            "maxItems": 0
+          },
+          "unresolved_conclusion_critical_item_ids": {
+            "maxItems": 0
+          },
+          "unreviewed_sections": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": "2.0.0"
+          },
+          "stopping_reason": {
+            "const": "cap_with_unresolved"
+          }
+        },
+        "required": [
+          "schema_version",
+          "stopping_reason"
+        ]
+      },
+      "then": {
+        "required": [
+          "stopping_reason_detail"
+        ],
+        "properties": {
+          "stopping_reason_detail": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "anyOf": [
-          {"required": ["unreviewed_sections"], "properties": {"unreviewed_sections": {"type": "array", "minItems": 1}}},
-          {"required": ["unresolved_blocking_item_ids"], "properties": {"unresolved_blocking_item_ids": {"type": "array", "minItems": 1}}},
-          {"required": ["unresolved_conclusion_critical_item_ids"], "properties": {"unresolved_conclusion_critical_item_ids": {"type": "array", "minItems": 1}}}
+          {
+            "required": [
+              "unreviewed_sections"
+            ],
+            "properties": {
+              "unreviewed_sections": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          },
+          {
+            "required": [
+              "unresolved_blocking_item_ids"
+            ],
+            "properties": {
+              "unresolved_blocking_item_ids": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          },
+          {
+            "required": [
+              "unresolved_conclusion_critical_item_ids"
+            ],
+            "properties": {
+              "unresolved_conclusion_critical_item_ids": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
         ]
       }
     },
     {
-      "if": {"properties": {"schema_version": {"const": "2.0.0"}, "stopping_reason": {"const": "aborted"}}, "required": ["schema_version", "stopping_reason"]},
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": "2.0.0"
+          },
+          "stopping_reason": {
+            "const": "aborted"
+          }
+        },
+        "required": [
+          "schema_version",
+          "stopping_reason"
+        ]
+      },
       "then": {
-        "required": ["stopping_reason_detail"],
-        "properties": {"stopping_reason_detail": {"type": "string", "minLength": 1}}
+        "required": [
+          "stopping_reason_detail"
+        ],
+        "properties": {
+          "stopping_reason_detail": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     }
   ],
@@ -104,31 +348,74 @@
     },
     "publication_redaction": {
       "description": "OPTIONAL but expected. What would have to go before any subset of this file is released with the meta-paper. Written down here rather than remembered, because the person doing the release will not be the person who ran the audit.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
         "fields_requiring_removal": {
           "description": "JSON pointers to fields that must be dropped or aggregated before release. Baseline set: /audit_dir and /toolkit/skill_path (local paths naming a real account), /costs (commercially sensitive and per-seat), /auditor_model/provider and /model_assignments/*/provider (vendor identification), /failure_events (names vendors in a failure context), /compliance/violations (self-reported protocol breaches, meaningful only in aggregate), /delivery/recipient. Model FAMILIES and the differs_from_auditor_family flags can be released; model IDs and providers should be coded first.",
           "type": "array",
-          "items": {"description": "A JSON pointer into this document, e.g. '/costs'.", "type": "string"}
+          "items": {
+            "description": "A JSON pointer into this document, e.g. '/costs'.",
+            "type": "string"
+          }
         },
         "safe_aggregates": {
           "description": "Fields explicitly cleared for release in aggregated form: phase and round wall clock, rounds_run, stopping_reason, blocking/comment/paper defect counts, brief_corrections.count, compliance_pass, token coverage_fraction, package characteristics.",
           "type": "array",
-          "items": {"description": "A JSON pointer into this document.", "type": "string"}
+          "items": {
+            "description": "A JSON pointer into this document.",
+            "type": "string"
+          }
         },
-        "note": {"description": "One paragraph of guidance for whoever prepares the release extract.", "type": ["string", "null"]},
-        "cleared_by": {"description": "Who set safe_to_publish, and when. Null while safe_to_publish is false.", "type": ["string", "null"]}
+        "note": {
+          "description": "One paragraph of guidance for whoever prepares the release extract.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cleared_by": {
+          "description": "Who set safe_to_publish, and when. Null while safe_to_publish is false.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "registry": {
       "description": "OPTIONAL, written by finalize_run.sh. Where this run was filed in the internal registry.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
-        "registry_dir": {"description": "Per-audit registry subdirectory that received the validated pair.", "type": ["string", "null"]},
-        "filed_at": {"description": "When the copy was made.", "type": ["string", "null"], "format": "date-time"},
-        "index_row_appended": {"description": "Did finalize_run.sh append this audit to the top-level registry index?", "type": ["boolean", "null"]}
+        "registry_dir": {
+          "description": "Per-audit registry subdirectory that received the validated pair.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "filed_at": {
+          "description": "When the copy was made.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "index_row_appended": {
+          "description": "Did finalize_run.sh append this audit to the top-level registry index?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
       }
     },
     "schema_version": {
@@ -138,14 +425,39 @@
     },
     "normalization": {
       "description": "Present only when a v1 record was deterministically adapted to v2. The adapter preserves unknown values as null/'unknown' and lists them here; it never estimates model, effort, timestamps, or token counts.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["source_schema_version", "source_sha256", "adapter", "fields_unavailable"],
+      "required": [
+        "source_schema_version",
+        "source_sha256",
+        "adapter",
+        "fields_unavailable"
+      ],
       "properties": {
-        "source_schema_version": {"type": "string"},
-        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "adapter": {"type": "string", "const": "normalize_v1_to_v2.py"},
-        "fields_unavailable": {"type": "array", "items": {"type": "string"}}
+        "source_schema_version": {
+          "type": "string"
+        },
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "adapter": {
+          "type": "string",
+          "enum": [
+            "normalize_v1_to_v2.py",
+            "normalize_to_v2_1.py",
+            "migrate_metadata_2_1.py"
+          ]
+        },
+        "fields_unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "audit_id": {
@@ -155,12 +467,18 @@
     },
     "paper_doi": {
       "description": "REQUIRED (nullable). DOI of the audited paper, bare form '10.xxxx/yyyy' with no URL prefix. Null only when the paper genuinely has no DOI (working paper, preprint without one); a null here must be explained in notes.",
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^10\\.[0-9]{4,9}/[^\\s]+$"
     },
     "paper_title": {
       "description": "OPTIONAL. Title of the audited paper, for human readability when scanning a directory of run files.",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "protocol_version": {
       "description": "REQUIRED. Version of the audit protocol (SKILL.md + reference/) in force for this run. Captured at init from the toolkit itself so a later protocol change cannot retroactively relabel a finished audit.",
@@ -177,17 +495,57 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "skill_path": {"description": "Portable skill-directory label used. New v2 runs record a basename, while legacy records may contain an absolute path that must never enter a release.", "type": ["string", "null"]},
-        "skill_commit": {"description": "Git commit of the skill directory, or null if it is not under version control.", "type": ["string", "null"]},
-        "scripts_sha256": {"description": "sha256 over the concatenated, sorted contents of scripts/*.sh -- fixes exactly which gate code ran even when nothing is versioned.", "type": ["string", "null"]},
-        "pipeline_policy_snapshot_sha256": {"description": "SHA-256 of the immutable audit-scoped pipeline-policy.snapshot.json captured at initialization.", "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-        "host_os": {"description": "uname -sr of the machine that ran the audit.", "type": ["string", "null"]},
-        "bash_version": {"description": "Bash version string; the toolkit has been bitten by bash 3.2 vs 5.x differences.", "type": ["string", "null"]}
+        "skill_path": {
+          "description": "Portable skill-directory label used. New v2 runs record a basename, while legacy records may contain an absolute path that must never enter a release.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "skill_commit": {
+          "description": "Git commit of the skill directory, or null if it is not under version control.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scripts_sha256": {
+          "description": "sha256 over the concatenated, sorted contents of every gate file -- scripts/*.sh, scripts/*.py, schemas/*.json, schemas/v2/*.json, schemas/v3/*.json, schemas/tools/*.py, config/check_policy_drift.py, config/pipeline-policy-v2.json, prompts/*.txt (init_run.sh gate_files_digest) -- fixes exactly which gate code ran even when nothing is versioned.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pipeline_policy_snapshot_sha256": {
+          "description": "SHA-256 of the immutable audit-scoped pipeline-policy.snapshot.json captured at initialization.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "host_os": {
+          "description": "uname -sr of the machine that ran the audit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bash_version": {
+          "description": "Bash version string; the toolkit has been bitten by bash 3.2 vs 5.x differences.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "audit_dir": {
       "description": "OPTIONAL legacy workspace locator. New v2 runs leave this null and resolve retained artifacts relative to run.json, avoiding workstation-path disclosure.",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "started_at": {
       "description": "REQUIRED. RFC 3339 timestamp at which init_run.sh ran, i.e. the start of the intake phase.",
@@ -196,250 +554,979 @@
     },
     "ended_at": {
       "description": "REQUIRED at finalize (null before). RFC 3339 timestamp at which finalize_run.sh ran.",
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "date-time"
     },
     "wall_clock_seconds": {
       "description": "DERIVED at finalize (null before). ended_at minus started_at in whole seconds. Includes idle time; this is elapsed clock, not compute.",
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 0
     },
     "active_seconds": {
       "description": "OPTIONAL, DERIVED. Sum of per-phase wall clock, which excludes gaps between phases. Compare with wall_clock_seconds to see how much of an audit's elapsed time was the audit actually running.",
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 0
     },
     "status": {
-      "description": "REQUIRED. Lifecycle state. 'initialized' after init_run.sh, 'running' after the first phase_start, 'complete' or 'aborted' after finalize_run.sh.",
+      "description": "Metadata 2.1 lifecycle status. Missing authorization is paused/awaiting_authorization and never implies a provider dispatch.",
       "type": "string",
-      "enum": ["initialized", "running", "complete", "aborted"]
+      "enum": [
+        "initialized",
+        "prepared",
+        "awaiting_authorization",
+        "ready",
+        "running",
+        "paused",
+        "quorum_complete",
+        "integrated",
+        "complete",
+        "aborted"
+      ]
     },
     "coordinator_model": {
       "description": "V2 configured and served coordinator identity. Keeping both values detects alias resolution or fallback; served_model stays null until observed from a provider response or invocation record.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["configured_model", "served_model", "family", "provider", "effort", "observed_from", "declared_at"],
+      "required": [
+        "configured_model",
+        "served_model",
+        "family",
+        "provider",
+        "effort",
+        "observed_from",
+        "declared_at"
+      ],
       "properties": {
-        "configured_model": {"type": "string", "minLength": 1},
-        "served_model": {"type": ["string", "null"]},
-        "family": {"type": "string", "minLength": 1},
-        "provider": {"type": "string", "minLength": 1},
-        "effort": {"type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra", "provider_default", "unknown"]},
-        "observed_from": {"type": ["string", "null"]},
-        "declared_at": {"type": "string", "format": "date-time"}
+        "configured_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "served_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra",
+            "provider_default",
+            "unknown"
+          ]
+        },
+        "observed_from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "declared_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "auditor_model": {
       "description": "REQUIRED. The model family running the audit itself (the coordinator and the five fan-out auditors). This is the reference point for every differs_from_auditor_family flag: an independent critic is only independent if it is NOT this family.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["model_id", "family", "provider"],
+      "required": [
+        "model_id",
+        "family",
+        "provider"
+      ],
       "properties": {
-        "model_id": {"description": "REQUIRED. Configured coordinator/Phase-1 requested model captured at initialization. Live v2 uses the canonical policy alias; exact provider-served identifiers are recorded per call in invocations[].observed_model.", "type": "string"},
-        "family": {"description": "REQUIRED. Coarse family used for independence comparisons, e.g. 'claude', 'gpt', 'gemini'.", "type": "string"},
-        "provider": {"description": "REQUIRED. Serving organisation, e.g. 'anthropic', 'openai', 'google', 'local'.", "type": "string"},
-        "declared_at": {"description": "When this was recorded.", "type": ["string", "null"], "format": "date-time"}
+        "model_id": {
+          "description": "REQUIRED. Configured coordinator/Phase-1 requested model captured at initialization. Live v2 uses the canonical policy alias; exact provider-served identifiers are recorded per call in invocations[].observed_model.",
+          "type": "string"
+        },
+        "family": {
+          "description": "REQUIRED. Coarse family used for independence comparisons, e.g. 'claude', 'gpt', 'gemini'.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "REQUIRED. Serving organisation, e.g. 'anthropic', 'openai', 'google', 'local'.",
+          "type": "string"
+        },
+        "declared_at": {
+          "description": "When this was recorded.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
       }
     },
     "phases": {
       "description": "REQUIRED. Wall-clock and execution record for the five pipeline phases. Every key is always present, so a phase that never ran is visibly absent (ran=false) rather than missing from the object -- the compliance vector depends on being able to tell those apart.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["intake", "fan_out", "adjudication", "critique", "release"],
+      "required": [
+        "intake",
+        "fan_out",
+        "adjudication",
+        "critique",
+        "release"
+      ],
       "properties": {
-        "intake": {"$ref": "#/$defs/phase", "description": "REQUIRED. setup_workspace.sh, package extraction, brief drafting."},
-        "fan_out": {"$ref": "#/$defs/phase", "description": "REQUIRED. The five parallel auditors."},
-        "adjudication": {"$ref": "#/$defs/phase", "description": "REQUIRED. Ledger, adjudication log, REPORT_v1."},
-        "critique": {"$ref": "#/$defs/phase", "description": "REQUIRED. The whole adversarial loop; per-round timing lives in rounds[]."},
-        "release": {"$ref": "#/$defs/phase", "description": "REQUIRED. stage_release.sh, build_docx.sh, delivery."}
+        "intake": {
+          "$ref": "#/$defs/phase",
+          "description": "REQUIRED. setup_workspace.sh, package extraction, brief drafting."
+        },
+        "fan_out": {
+          "$ref": "#/$defs/phase",
+          "description": "REQUIRED. The five parallel auditors."
+        },
+        "adjudication": {
+          "$ref": "#/$defs/phase",
+          "description": "REQUIRED. Ledger, adjudication log, REPORT_v1."
+        },
+        "critique": {
+          "$ref": "#/$defs/phase",
+          "description": "REQUIRED. The whole adversarial loop; per-round timing lives in rounds[]."
+        },
+        "release": {
+          "$ref": "#/$defs/phase",
+          "description": "REQUIRED. stage_release.sh, build_docx.sh, delivery."
+        }
       }
     },
     "human_effort": {
       "description": "REQUIRED (values nullable). Human time spent on this audit, by phase. The programme's whole comparison in the literature is AI-assisted teams against human-only teams, and without this field the numerator of that comparison does not exist anywhere in the registry -- wall clock is not effort, because it includes every hour the pipeline sat idle overnight. SELF-REPORTED, NOT INSTRUMENTED: nothing measures these numbers, a person types them in, and they should be read with the tolerance that implies. Null means nobody recorded it, which is different from zero.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["self_reported", "person_minutes_by_phase"],
+      "required": [
+        "self_reported",
+        "person_minutes_by_phase"
+      ],
       "properties": {
-        "self_reported": {"description": "REQUIRED. Always true as things stand. Present as a field rather than a footnote so that any future instrumented source has somewhere to declare itself, and so a reader never has to guess which kind of number this is.", "type": "boolean"},
-        "instrumented": {"description": "Was any part of this measured rather than recalled? False today.", "type": ["boolean", "null"]},
+        "self_reported": {
+          "description": "REQUIRED. Always true as things stand. Present as a field rather than a footnote so that any future instrumented source has somewhere to declare itself, and so a reader never has to guess which kind of number this is.",
+          "type": "boolean"
+        },
+        "instrumented": {
+          "description": "Was any part of this measured rather than recalled? False today.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "person_minutes_by_phase": {
           "description": "REQUIRED. Person-minutes per phase -- two people for thirty minutes is 60. Every value nullable: an unrecorded phase must stay null rather than be back-filled from memory at the end of the audit, which is exactly how the first cohort's cost data became fiction.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["intake", "fan_out", "adjudication", "critique", "release"],
+          "required": [
+            "intake",
+            "fan_out",
+            "adjudication",
+            "critique",
+            "release"
+          ],
           "properties": {
-            "intake": {"description": "Person-minutes on intake: package retrieval, extraction, briefing.", "type": ["integer", "null"], "minimum": 0},
-            "fan_out": {"description": "Person-minutes on the fan-out phase, including reading the five reports.", "type": ["integer", "null"], "minimum": 0},
-            "adjudication": {"description": "Person-minutes on adjudication, the ledger and the first draft.", "type": ["integer", "null"], "minimum": 0},
-            "critique": {"description": "Person-minutes across all critique rounds: verifying criticisms, applying them, contesting the wrong ones.", "type": ["integer", "null"], "minimum": 0},
-            "release": {"description": "Person-minutes on staging, the deliverable and disclosure.", "type": ["integer", "null"], "minimum": 0}
+            "intake": {
+              "description": "Person-minutes on intake: package retrieval, extraction, briefing.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "fan_out": {
+              "description": "Person-minutes on the fan-out phase, including reading the five reports.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "adjudication": {
+              "description": "Person-minutes on adjudication, the ledger and the first draft.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "critique": {
+              "description": "Person-minutes across all critique rounds: verifying criticisms, applying them, contesting the wrong ones.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "release": {
+              "description": "Person-minutes on staging, the deliverable and disclosure.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
           }
         },
-        "person_minutes_total": {"description": "DERIVED at finalize. Sum of the non-null phase values, or null when none was recorded. Report it with the count of phases it actually covers -- a total over two of five phases is not a total.", "type": ["integer", "null"], "minimum": 0},
-        "phases_recorded": {"description": "DERIVED at finalize. How many of the five phases carry a non-null value. The denominator for person_minutes_total.", "type": ["integer", "null"], "minimum": 0, "maximum": 5},
-        "people_involved": {"description": "Distinct humans who worked on the audit.", "type": ["integer", "null"], "minimum": 0},
-        "notes": {"description": "Free text: who reported these, when, and how confidently.", "type": ["string", "null"]}
+        "person_minutes_total": {
+          "description": "DERIVED at finalize. Sum of the non-null phase values, or null when none was recorded. Report it with the count of phases it actually covers -- a total over two of five phases is not a total.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "phases_recorded": {
+          "description": "DERIVED at finalize. How many of the five phases carry a non-null value. The denominator for person_minutes_total.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 5
+        },
+        "people_involved": {
+          "description": "Distinct humans who worked on the audit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "notes": {
+          "description": "Free text: who reported these, when, and how confidently.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "settled_facts": {
       "description": "REQUIRED (values nullable). Whether SETTLED.md was used, and from when. SKILL.md calls this the single largest cost lever in the protocol -- roughly 40-50% of critic time, on the evidence of about 28 redundant full reconstructions across seven calibration rounds -- and nothing in the record currently says whether any given audit pulled it. A lever whose use is never recorded can never be shown to work.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["used"],
+      "required": [
+        "used"
+      ],
       "properties": {
-        "used": {"description": "REQUIRED. Was a SETTLED.md generated and injected into the critic prompts? Null only if genuinely unknown; false is the honest answer for an audit that never made one.", "type": ["boolean", "null"]},
-        "generated_after_round": {"description": "Which round it was generated after -- the v2 protocol promotes only eligible facts immediately after Round 1 has completed, been integrated, and passed consistency checks. Null when unused. The rounds before this number paid the full re-derivation cost and later rounds may consume only validated references.", "type": ["integer", "null"], "minimum": 0},
-        "path": {"description": "Path to the file, relative to the audit directory.", "type": ["string", "null"]},
-        "entries": {"description": "How many settled facts it carried, if counted.", "type": ["integer", "null"], "minimum": 0},
-        "spot_check_failures": {"description": "How many times a critic's spot-check of a settled fact FAILED. Non-zero is a major finding about the audit itself, not a statistic: it means something asserted as settled was wrong.", "type": ["integer", "null"], "minimum": 0},
-        "notes": {"description": "Free text.", "type": ["string", "null"]}
+        "used": {
+          "description": "REQUIRED. Was a SETTLED.md generated and injected into the critic prompts? Null only if genuinely unknown; false is the honest answer for an audit that never made one.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "generated_after_round": {
+          "description": "Which round it was generated after -- the v2 protocol promotes only eligible facts immediately after Round 1 has completed, been integrated, and passed consistency checks. Null when unused. The rounds before this number paid the full re-derivation cost and later rounds may consume only validated references.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "path": {
+          "description": "Path to the file, relative to the audit directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entries": {
+          "description": "How many settled facts it carried, if counted.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "spot_check_failures": {
+          "description": "How many times a critic's spot-check of a settled fact FAILED. Non-zero is a major finding about the audit itself, not a statistic: it means something asserted as settled was wrong.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "notes": {
+          "description": "Free text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "model_assignments": {
       "description": "REQUIRED in practice (may be empty only before the first role runs). One entry PER ROLE PER ROUND -- not one per role. Two real failures make this granularity mandatory: one audit silently swapped models mid-run when a provider retired an alias, and another had its 'independent' critics fall back onto the auditor family after a quota failure, so a round of adversarial review was actually self-review. Both were invisible until someone went looking months later.",
       "type": "array",
-      "items": {"$ref": "#/$defs/model_assignment"}
+      "items": {
+        "$ref": "#/$defs/model_assignment"
+      }
     },
     "invocations": {
       "description": "V2 canonical execution ledger: one record per actual model call/attempt, with requested and observed model identity, reasoning effort, elapsed time, output hashes, and token usage in the same object. Do not aggregate retries or copy one role-level token total into multiple calls.",
       "type": "array",
-      "items": {"$ref": "#/$defs/invocation_record"}
+      "items": {
+        "$ref": "#/$defs/invocation_record"
+      }
     },
     "tokens": {
       "description": "REQUIRED in practice (may be empty). Token usage by role and round. Numbers only when the provider reported them; null everywhere else. NEVER estimate: an estimated token count is indistinguishable from a measured one once written down, and the meta-paper's cost figures would inherit the estimate as fact.",
       "type": "array",
-      "items": {"$ref": "#/$defs/token_record"}
+      "items": {
+        "$ref": "#/$defs/token_record"
+      }
     },
     "costs": {
       "description": "REQUIRED in practice (may be empty). Monetary cost by role and round. Present as a first-class array because the auditor-phase cost of the first programme cohort was never recorded and could not be rebuilt: the token logs were partial, and the price schedule had changed by the time anyone asked.",
       "type": "array",
-      "items": {"$ref": "#/$defs/cost_record"}
+      "items": {
+        "$ref": "#/$defs/cost_record"
+      }
     },
     "token_accounting": {
       "description": "DERIVED at finalize. How complete the token record actually is. Reported alongside any aggregate so a total over 5 of 30 rounds cannot be read as a total over 30.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
-        "invocations_expected": {"description": "Number of invocation records expected to carry usage, including retries as separate calls.", "type": ["integer", "null"], "minimum": 0},
-        "invocations_with_tokens": {"description": "Number of invocation records with observed token usage.", "type": ["integer", "null"], "minimum": 0},
-        "role_rounds_expected": {"description": "Number of (role, round) pairs that ran, from model_assignments.", "type": ["integer", "null"], "minimum": 0},
-        "role_rounds_with_tokens": {"description": "Number of those pairs with a non-null total_tokens.", "type": ["integer", "null"], "minimum": 0},
-        "coverage_fraction": {"description": "role_rounds_with_tokens / role_rounds_expected, or null if nothing ran.", "type": ["number", "null"], "minimum": 0, "maximum": 1},
-        "total_tokens_observed": {"description": "Sum of non-null total_tokens. A floor on true usage, never the truth.", "type": ["integer", "null"], "minimum": 0},
-        "total_cost_usd_observed": {"description": "Sum of non-null cost amounts, USD. A floor, never the truth.", "type": ["number", "null"], "minimum": 0}
+        "invocations_expected": {
+          "description": "Number of invocation records expected to carry usage, including retries as separate calls.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "invocations_with_tokens": {
+          "description": "Number of invocation records with a complete honest token disposition: every count is observed or explicitly unavailable under the applicable usage contract.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "invocations_with_accounted_total": {
+          "description": "Number of invocations with either a provider-reported or exactly derived total.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "invocations_with_provider_reported_total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "invocations_with_derived_total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "invocations_with_unavailable_total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "role_rounds_expected": {
+          "description": "Number of (role, round) pairs that ran, from model_assignments.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "role_rounds_with_tokens": {
+          "description": "Backward-compatible alias for invocations_with_tokens.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "coverage_fraction": {
+          "description": "Complete token dispositions divided by expected provider calls, or null if nothing ran. Explicit unavailability is covered telemetry, not a fabricated numeric count.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "numeric_total_coverage_fraction": {
+          "description": "Provider-reported or exactly derived totals divided by expected provider calls.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "total_tokens_observed": {
+          "description": "Sum of provider-reported totals only; derived totals are excluded.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_tokens_derived": {
+          "description": "Sum of totals derived exactly from named observed components.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_tokens_accounted": {
+          "description": "Sum of provider-reported and exactly derived totals, with provenance retained in the adjacent fields.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_cost_usd_observed": {
+          "description": "Sum of non-null cost amounts, USD. A floor, never the truth.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
       }
     },
     "rounds": {
       "description": "REQUIRED in practice (may be empty). One entry per critique round actually launched, including rounds that aborted.",
       "type": "array",
-      "items": {"$ref": "#/$defs/round"}
+      "items": {
+        "$ref": "#/$defs/round"
+      }
     },
     "rounds_run": {
       "description": "DERIVED at finalize. Count of entries in rounds[]. Null before finalize.",
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 0
     },
     "round_target": {
       "description": "V2 configured target number of critique rounds. This is the planned stopping point, distinct from round_cap (the hard safety ceiling) and rounds_run (what happened). Null only in normalized v1 records because v1 did not capture the target.",
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 1
     },
     "round_cap": {
-      "description": "REQUIRED at init. Hard maximum number of critique rounds. Must be greater than or equal to round_target when the target is known. Reaching the cap is not convergence.",
-      "type": ["integer", "null"],
+      "description": "REQUIRED at init. Hard maximum number of critique rounds, frozen from the policy snapshot (critique.round_cap): 7 for an audit initialised on 2.6.9 or later, 5 for an older one until a journaled amendment (scripts/amend_round_cap.py, policy_amendments) raises it. Must be greater than or equal to round_target when the target is known. Reaching the cap is not convergence.",
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 1
+    },
+    "policy_amendments": {
+      "description": "OPTIONAL (2.6.9). PROJECTED from policy_amendment journal events, written only by scripts/amend_round_cap.py: each raise of this audit's frozen round cap, in order. Absent for an audit whose cap was never amended. finalize binds every entry to the snapshot's critique.round_cap_amendments history and the archived snapshot it replaced (scripts/round_cap_amendment.py).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "seq",
+          "at",
+          "leaf",
+          "from",
+          "to",
+          "reason",
+          "snapshot_sha256"
+        ],
+        "properties": {
+          "seq": {
+            "description": "Journal sequence number of the policy_amendment event.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "description": "When the amendment was journaled.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "leaf": {
+            "description": "The amended policy leaf.",
+            "type": "string",
+            "enum": [
+              "critique.round_cap"
+            ]
+          },
+          "from": {
+            "description": "The cap before the amendment.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "to": {
+            "description": "The cap after the amendment.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "description": "The operator's reason, as journaled.",
+            "type": "string",
+            "minLength": 1
+          },
+          "snapshot_sha256": {
+            "description": "SHA-256 of the amended pipeline-policy.snapshot.json.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "reopenings": {
+      "description": "OPTIONAL (2.6.9). PROJECTED from audit_reopened journal events, written only by scripts/amend_round_cap.py --reopen or scripts/reopen_audit.py: each reopening of a finalized audit, with the close it reopened. A reopening clears stopping_reason, its detail, ended_at, the review-scope fields and the compliance verdict until the next finalize.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "seq",
+          "at",
+          "reason",
+          "purpose",
+          "previous_finalized_at",
+          "previous_stopping_reason",
+          "previous_rounds_run"
+        ],
+        "properties": {
+          "seq": {
+            "description": "Journal sequence number of the audit_reopened event.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "description": "When the audit was reopened.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "description": "The operator's reason, as journaled.",
+            "type": "string",
+            "minLength": 1
+          },
+          "purpose": {
+            "description": "continue_critique (more rounds) or correct_published (a correction without new rounds, or with rounds inside the cap).",
+            "type": "string",
+            "enum": [
+              "continue_critique",
+              "correct_published"
+            ]
+          },
+          "previous_finalized_at": {
+            "description": "The reopened close (the last finalize event's time).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "previous_stopping_reason": {
+            "description": "The stopping reason of the reopened close.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previous_rounds_run": {
+            "description": "Rounds run at the reopened close.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "previous_registry_version": {
+            "description": "Registry version filed by the reopened close, when known.",
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ]
+          },
+          "previous_publication": {
+            "description": "The filed publication set the reopened close was published as (release_dir relative to the tree root, and when), or null when it was never published.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "skill_version": {
+            "description": "VERSION of the skill that reopened the audit.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
     },
     "stopping_reason": {
       "description": "REQUIRED at finalize (null before). Canonical v2 values: target_complete after required rounds, re-review of every changed claim ID, and no unresolved blocking/conclusion-critical item; converged only after continuing until a round returns no factual correction and no critical unresolved item; cap_with_unresolved at the hard cap with all unresolved items/sections recorded; aborted for a genuine blocker or failed run. Legacy v1 'cap' remains accepted only outside the v2 conditional.",
-      "type": ["string", "null"],
-      "enum": ["target_complete", "converged", "cap_with_unresolved", "aborted", "cap", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "target_complete",
+        "converged",
+        "cap_with_unresolved",
+        "aborted",
+        "cap",
+        null
+      ]
     },
     "stopping_reason_detail": {
       "description": "OPTIONAL. One line explaining the stopping reason, mandatory in practice when it is 'aborted'.",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "unreviewed_sections": {
       "description": "Sections added or rewritten after their last adversarial review. Must be empty for target_complete. At the cap, unresolved scope may instead be represented by blocking or conclusion-critical claim IDs.",
       "type": "array",
-      "items": {"description": "A section identifier, e.g. 'Section 4.2'.", "type": "string"}
+      "items": {
+        "description": "A section identifier, e.g. 'Section 4.2'.",
+        "type": "string"
+      }
     },
     "changed_claim_ids": {
       "description": "Claim IDs changed after critique began. target_complete requires every ID here to appear in rereviewed_claim_ids.",
       "type": "array",
-      "items": {"type": "string", "minLength": 1},
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "rereviewed_claim_ids": {
       "description": "Changed claim IDs that received a subsequent independent review of the changed text/evidence.",
       "type": "array",
-      "items": {"type": "string", "minLength": 1},
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "unresolved_blocking_item_ids": {
       "description": "Blocking critique item IDs still unresolved when the run stopped.",
       "type": "array",
-      "items": {"type": "string", "minLength": 1},
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "unresolved_conclusion_critical_item_ids": {
       "description": "Unresolved item IDs that could change a paper-level conclusion even if not labelled blocking.",
       "type": "array",
-      "items": {"type": "string", "minLength": 1},
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "compliance": {
       "description": "DERIVED at finalize. The compliance vector: a mechanical yes/no record of whether the protocol was actually followed. Motivated by three comments that shipped BEFORE the critique that was supposed to harden them existed, with nothing in the record flagging it.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["phases_ran", "critique_integrated_before_delivery", "converged", "compliance_pass"],
+      "required": [
+        "phases_ran",
+        "critique_integrated_before_delivery",
+        "converged",
+        "compliance_pass"
+      ],
       "properties": {
         "phases_ran": {
           "description": "REQUIRED. Did each phase actually execute (a phase_start AND a phase_end event)?",
           "type": "object",
           "additionalProperties": false,
-          "required": ["intake", "fan_out", "adjudication", "critique", "release"],
+          "required": [
+            "intake",
+            "fan_out",
+            "adjudication",
+            "critique",
+            "release"
+          ],
           "properties": {
-            "intake": {"description": "Did the intake phase run to completion?", "type": "boolean"},
-            "fan_out": {"description": "Did the fan-out phase run to completion?", "type": "boolean"},
-            "adjudication": {"description": "Did the adjudication phase run to completion?", "type": "boolean"},
-            "critique": {"description": "Did the critique phase run to completion?", "type": "boolean"},
-            "release": {"description": "Did the release phase run to completion?", "type": "boolean"}
+            "intake": {
+              "description": "Did the intake phase run to completion?",
+              "type": "boolean"
+            },
+            "fan_out": {
+              "description": "Did the fan-out phase run to completion?",
+              "type": "boolean"
+            },
+            "adjudication": {
+              "description": "Did the adjudication phase run to completion?",
+              "type": "boolean"
+            },
+            "critique": {
+              "description": "Did the critique phase run to completion?",
+              "type": "boolean"
+            },
+            "release": {
+              "description": "Did the release phase run to completion?",
+              "type": "boolean"
+            }
           }
         },
-        "all_five_auditors_ran": {"description": "Did all five fan-out auditors produce a report? A four-auditor fan-out is a protocol deviation.", "type": ["boolean", "null"]},
-        "critique_integrated_before_delivery": {"description": "REQUIRED. Was EVERY round's critique integrated (integrated_at non-null) strictly before delivery.delivered_at? False if any round was integrated after delivery, or if delivery happened with no critique at all.", "type": "boolean"},
-        "rounds_integrated_before_delivery": {"description": "How many rounds were integrated before delivery.", "type": ["integer", "null"], "minimum": 0},
-        "rounds_not_integrated": {"description": "Round numbers whose critique was never integrated, or integrated after delivery. Empty is the only acceptable value.", "type": "array", "items": {"description": "A round number.", "type": "integer"}},
-        "converged": {"description": "REQUIRED. True only when stopping_reason == 'converged'. Deliberately not inferred from round count.", "type": "boolean"},
-        "critics_independent_all_rounds": {"description": "Was every critic in every round from a family other than the auditor family? False catches the quota-failure collision.", "type": ["boolean", "null"]},
-        "no_silent_model_swap": {"description": "Did every role keep one model_id for the whole run, or were all changes explicitly logged as intended? False means a model changed under the run without a logged reason.", "type": ["boolean", "null"]},
-        "gates_run": {"description": "Which named gates ran, and their outcome.", "type": "array", "items": {"$ref": "#/$defs/gate_result"}},
-        "consistency_check_after_every_round": {"description": "Was check_consistency.sh run after each round that edited the comment, as SKILL.md requires?", "type": ["boolean", "null"]},
-        "compliance_pass": {"description": "REQUIRED. Conjunction of every boolean above that is not null. False means the audit deviated from protocol; it does not mean the findings are wrong, but the deviation must be stated in the release notes.", "type": "boolean"},
-        "violations": {"description": "Human-readable list of every failed check, one line each. Empty iff compliance_pass is true.", "type": "array", "items": {"description": "One violation, e.g. 'round 3 critique integrated after delivery'.", "type": "string"}}
+        "all_five_auditors_ran": {
+          "description": "Did all five fan-out auditors produce a report? A four-auditor fan-out is a protocol deviation.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "critique_integrated_before_delivery": {
+          "description": "REQUIRED. Was EVERY round's critique integrated (integrated_at non-null) strictly before delivery.delivered_at? False if any round was integrated after delivery, or if delivery happened with no critique at all.",
+          "type": "boolean"
+        },
+        "rounds_integrated_before_delivery": {
+          "description": "How many rounds were integrated before delivery.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rounds_not_integrated": {
+          "description": "Round numbers whose critique was never integrated, or integrated after delivery. Empty is the only acceptable value.",
+          "type": "array",
+          "items": {
+            "description": "A round number.",
+            "type": "integer"
+          }
+        },
+        "converged": {
+          "description": "REQUIRED. True only when stopping_reason == 'converged'. Deliberately not inferred from round count.",
+          "type": "boolean"
+        },
+        "critics_independent_all_rounds": {
+          "description": "Was every critic in every round from a family other than the auditor family? False catches the quota-failure collision.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no_silent_model_swap": {
+          "description": "Did every role keep one model_id for the whole run, or were all changes explicitly logged as intended? False means a model changed under the run without a logged reason.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "gates_run": {
+          "description": "Which named gates ran, and their outcome.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gate_result"
+          }
+        },
+        "consistency_check_after_every_round": {
+          "description": "Was check_consistency.sh run after each round that edited the comment, as SKILL.md requires?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verifier_calls": {
+          "description": "OPTIONAL (2.6.4). Present only when the invocation ledger holds a role_class 'verifier' row; absent otherwise, so an audit that never ran the post-fan-out verifier keeps its earlier compliance keys. One entry per completed verifier provider call, listed apart from the five Phase-1 auditors: a verifier is never counted in the auditor quorum.",
+          "type": "array",
+          "items": {
+            "description": "One completed post-fan-out verifier provider call.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "invocation_id",
+              "role",
+              "round",
+              "model_family",
+              "claim_sha256s",
+              "cited_by"
+            ],
+            "properties": {
+              "invocation_id": {
+                "description": "The verifier call's canonical invocation ID.",
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "description": "The verifier role, verifier_<12 hex> (one per batch of hypotheses). Recorded as found; a malformed role is a violation, not a schema failure.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "round": {
+                "description": "The recorded round; the contract requires 0.",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "model_family": {
+                "description": "The recorded model family; the contract requires the Phase-1 auditor family.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "claim_sha256s": {
+                "description": "SHA-256 of each claim text this call returned an admitted verdict for (empty when the record was not admitted).",
+                "type": "array",
+                "items": {
+                  "description": "SHA-256 of a registry claim's UTF-8 bytes.",
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "cited_by": {
+                "description": "IDs of the registry findings whose verifications cite this call (directly or through a cache replay), in registry order.",
+                "type": "array",
+                "items": {
+                  "description": "A registry finding ID.",
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "verifiers_ok": {
+          "description": "OPTIONAL (2.6.4). Present only with verifier_calls. True when every role_class verifier row, whatever its status (legacy_record aside), has a verifier_<12 hex> role, round 0 and no critic family; every completed verifier provider call also has an observed identity, the Phase-1 auditor family, a policy route and the runner's completion receipt, and is re-admitted by scripts/run_verifier.py as its own admitted output (a hand-made record is not); and every registry confirmation citing one passes the claim-hash scope check. Each failure is a violation. Included in compliance_pass.",
+          "type": "boolean"
+        },
+        "policy_amendments_valid": {
+          "description": "OPTIONAL (2.6.9). Present when the audit has a round-cap amendment or a reopening: true when the snapshot history, the archived snapshots, the round plans and the journal tell one story (scripts/round_cap_amendment.py); failures are listed in violations.",
+          "type": "boolean"
+        },
+        "compliance_pass": {
+          "description": "REQUIRED. Conjunction of every boolean above that is not null. False means the audit deviated from protocol; it does not mean the findings are wrong, but the deviation must be stated in the release notes.",
+          "type": "boolean"
+        },
+        "violations": {
+          "description": "Human-readable list of every failed check, one line each. Empty iff compliance_pass is true.",
+          "type": "array",
+          "items": {
+            "description": "One violation, e.g. 'round 3 critique integrated after delivery'.",
+            "type": "string"
+          }
+        }
       }
     },
     "brief_corrections": {
       "description": "REQUIRED (count may be 0). Corrections the auditors made to the coordinator's shared brief. SKILL.md tells auditors to correct the brief because in calibration it stated the wrong file count and missed an entire data folder; the rate at which the brief is wrong is a programme-level quality metric and exists nowhere else.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["count", "items"],
+      "required": [
+        "count",
+        "items"
+      ],
       "properties": {
-        "count": {"description": "REQUIRED. Number of corrections. Must equal items.length after finalize.", "type": "integer", "minimum": 0},
+        "count": {
+          "description": "REQUIRED. Number of corrections. Must equal items.length after finalize.",
+          "type": "integer",
+          "minimum": 0
+        },
         "items": {
           "description": "REQUIRED (may be empty).",
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["at", "description"],
+            "required": [
+              "at",
+              "description"
+            ],
             "properties": {
-              "id": {"description": "Short local identifier, e.g. 'bc1'.", "type": ["string", "null"]},
-              "at": {"description": "REQUIRED. When the correction was raised.", "type": "string", "format": "date-time"},
-              "raised_by": {"description": "Role that caught it, e.g. 'auditor_data_integrity'.", "type": ["string", "null"]},
-              "field": {"description": "What in the brief was wrong, e.g. 'package file count', 'data folder inventory'.", "type": ["string", "null"]},
-              "description": {"description": "REQUIRED. One line: what the brief said, and what is true.", "type": "string"},
-              "accepted": {"description": "Did the coordinator accept the correction? A rejected correction is still a record worth keeping.", "type": ["boolean", "null"]}
+              "id": {
+                "description": "Short local identifier, e.g. 'bc1'.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "at": {
+                "description": "REQUIRED. When the correction was raised.",
+                "type": "string",
+                "format": "date-time"
+              },
+              "raised_by": {
+                "description": "Role that caught it, e.g. 'auditor_data_integrity'.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "field": {
+                "description": "What in the brief was wrong, e.g. 'package file count', 'data folder inventory'.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "description": "REQUIRED. One line: what the brief said, and what is true.",
+                "type": "string"
+              },
+              "accepted": {
+                "description": "Did the coordinator accept the correction? A rejected correction is still a record worth keeping.",
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
             }
           }
         }
@@ -448,154 +1535,1175 @@
     "failure_events": {
       "description": "REQUIRED (may be empty). API errors, quota exhaustion, throttling, timeouts, retries -- and crucially what was SUBSTITUTED when something failed, because substitution is how a critic silently becomes the auditor family.",
       "type": "array",
-      "items": {"$ref": "#/$defs/failure_event"}
+      "items": {
+        "$ref": "#/$defs/failure_event"
+      }
     },
     "records_retained": {
       "description": "REQUIRED at finalize (may be empty before). Which working artefacts still exist at close, checked mechanically rather than assumed. Six of the first ten audits' working records were gone by the time the meta-paper wanted them; 'we kept everything' was believed until someone listed the directory.",
       "type": "array",
-      "items": {"$ref": "#/$defs/retained_record"}
+      "items": {
+        "$ref": "#/$defs/retained_record"
+      }
     },
     "records_retained_checked_at": {
       "description": "OPTIONAL. When the retention check was run. A retention list without a timestamp says nothing about the state of the disk today.",
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "date-time"
     },
     "package": {
       "description": "REQUIRED at init. Characteristics of the replication package AS RECEIVED. Captured at intake so that a later change (a re-deposit by the authors, or one of our own scripts writing into pkg/) is detectable rather than arguable.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["file_count", "total_bytes"],
+      "required": [
+        "file_count",
+        "total_bytes"
+      ],
       "properties": {
-        "source_url": {"description": "Where the package came from (OSF/Dataverse/figshare/GitHub URL).", "type": ["string", "null"]},
-        "retrieved_at": {"description": "When it was downloaded.", "type": ["string", "null"], "format": "date-time"},
-        "file_count": {"description": "REQUIRED. Number of regular files under pkg/ at intake.", "type": "integer", "minimum": 0},
-        "total_bytes": {"description": "REQUIRED. Sum of file sizes under pkg/ at intake.", "type": "integer", "minimum": 0},
+        "source_url": {
+          "description": "Where the package came from (OSF/Dataverse/figshare/GitHub URL).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retrieved_at": {
+          "description": "When it was downloaded.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "file_count": {
+          "description": "REQUIRED. Number of regular files under pkg/ at intake.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_bytes": {
+          "description": "REQUIRED. Sum of file sizes under pkg/ at intake.",
+          "type": "integer",
+          "minimum": 0
+        },
         "formats": {
           "description": "File-extension histogram, most common first.",
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["extension", "count"],
+            "required": [
+              "extension",
+              "count"
+            ],
             "properties": {
-              "extension": {"description": "Lower-cased extension without the dot; '' for extensionless files.", "type": "string"},
-              "count": {"description": "Number of files with this extension.", "type": "integer", "minimum": 0},
-              "bytes": {"description": "Total bytes for this extension.", "type": ["integer", "null"], "minimum": 0}
+              "extension": {
+                "description": "Lower-cased extension without the dot; '' for extensionless files.",
+                "type": "string"
+              },
+              "count": {
+                "description": "Number of files with this extension.",
+                "type": "integer",
+                "minimum": 0
+              },
+              "bytes": {
+                "description": "Total bytes for this extension.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
             }
           }
         },
-        "analysis_code_files": {"description": "Count of candidate analysis-code files (.R/.r/.do/.py/.qmd/.Rmd/.sps/.ipynb).", "type": ["integer", "null"], "minimum": 0},
-        "manifest_sha256": {"description": "sha256 over the sorted 'hash  relpath' listing of pkg/. One value that changes if ANY packaged file changes -- the mechanical version of 'treat pkg/ as read-only'.", "type": ["string", "null"]},
-        "file_count_at_close": {"description": "Re-counted at finalize. A difference from file_count means something wrote into pkg/ during the audit; suspect your own scripts first.", "type": ["integer", "null"], "minimum": 0},
-        "manifest_sha256_at_close": {"description": "Re-computed at finalize. Compare with manifest_sha256.", "type": ["string", "null"]},
-        "pkg_unchanged": {"description": "DERIVED at finalize. True iff the close-time manifest equals the intake manifest.", "type": ["boolean", "null"]},
-        "runs_as_shipped": {"description": "Did the package's own analysis code run to completion without modification? 'partial' = some entry points ran. 'not_attempted' = nobody tried, which is itself a finding about the audit, not the paper. Null only before the reproduction auditor reports.", "type": ["string", "null"], "enum": ["yes", "no", "partial", "not_attempted", null]},
-        "runs_as_shipped_notes": {"description": "What was changed to make it run, if anything.", "type": ["string", "null"]}
+        "analysis_code_files": {
+          "description": "Count of candidate analysis-code files (.R/.r/.do/.py/.qmd/.Rmd/.sps/.ipynb).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "manifest_sha256": {
+          "description": "sha256 over the sorted 'hash  relpath' listing of pkg/. One value that changes if ANY packaged file changes -- the mechanical version of 'treat pkg/ as read-only'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file_count_at_close": {
+          "description": "Re-counted at finalize. A difference from file_count means something wrote into pkg/ during the audit; suspect your own scripts first.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "manifest_sha256_at_close": {
+          "description": "Re-computed at finalize. Compare with manifest_sha256.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pkg_unchanged": {
+          "description": "DERIVED at finalize. True iff the close-time manifest equals the intake manifest.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "runs_as_shipped": {
+          "description": "Did the package's own analysis code run to completion without modification? 'partial' = some entry points ran. 'not_attempted' = nobody tried, which is itself a finding about the audit, not the paper. Null only before the reproduction auditor reports.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "yes",
+            "no",
+            "partial",
+            "not_attempted",
+            null
+          ]
+        },
+        "runs_as_shipped_notes": {
+          "description": "What was changed to make it run, if anything.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "delivery": {
       "description": "REQUIRED at finalize (null before). When the comment actually left the audit -- the reference point for critique_integrated_before_delivery. Without a delivery timestamp, 'the critique was integrated before delivery' is unfalsifiable.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
-        "delivered_at": {"description": "RFC 3339 timestamp of delivery (staged release accepted, or comment sent).", "type": ["string", "null"], "format": "date-time"},
-        "artifact_path": {"description": "Path of the delivered artefact, relative to the audit directory.", "type": ["string", "null"]},
-        "artifact_sha256": {"description": "sha256 of the delivered artefact, so a later copy can be proven identical.", "type": ["string", "null"]},
-        "release_dir": {"description": "Path of the staged release tree produced by stage_release.sh.", "type": ["string", "null"]},
-        "recipient": {"description": "Who it went to, e.g. 'I4R editorial', 'authors (disclosure)'.", "type": ["string", "null"]}
+        "delivered_at": {
+          "description": "RFC 3339 timestamp of delivery (staged release accepted, or comment sent).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "artifact_path": {
+          "description": "Path of the delivered artefact, relative to the audit directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifact_sha256": {
+          "description": "sha256 of the delivered artefact, so a later copy can be proven identical.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "release_dir": {
+          "description": "Path of the staged release tree produced by stage_release.sh.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recipient": {
+          "description": "Who it went to, e.g. 'I4R editorial'. The audit delivers only to I4R, never to authors or journals directly.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "notes": {
       "description": "OPTIONAL. Free text for anything the schema has no field for. Read at finalize; a recurring note is a missing field.",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "environment": {
-      "description": "Software environment captured live at audit initialization; never reconstructed later.",
-      "type": ["object", "null"],
+      "description": "Software environment captured live at audit initialization; never reconstructed later. The projection of the latest environment_captured event, which only scripts/capture_environment.sh journals (init_run.sh runs it). Absent on metadata-2.1 audits initialised before 2.7.4: the capture wrote run.json directly and the next journal append re-projected run.json without it.",
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
-        "captured_at": {"type": ["string", "null"], "format": "date-time"},
-        "operator": {"type": ["string", "null"]},
-        "os": {"type": ["string", "null"]},
-        "r": {"type": ["string", "null"]},
-        "r_packages": {"type": ["object", "null"], "additionalProperties": {"type": "string"}},
-        "python": {"type": ["string", "null"]},
-        "python_packages": {"type": ["object", "null"], "additionalProperties": {"type": "string"}},
-        "pandoc": {"type": ["string", "null"]},
-        "libreoffice": {"type": ["string", "null"]},
-        "codex_cli": {"type": ["string", "null"]}
+        "captured_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "operator": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "r": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "r_packages": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "python": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "python_packages": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "pandoc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "libreoffice": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "codex_cli": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "events": {
       "description": "REQUIRED. Append-only journal, the ground truth of this file. log_event.sh appends here under a lock and then projects the event into the typed fields above; finalize_run.sh computes durations and the compliance vector from those projections, using the journal as the backstop from which any lost or disputed projection can be rebuilt. Never edit or reorder an event. An abridged journal (an example file, a run whose early events predate instrumentation) is legal but should say so in notes.",
       "type": "array",
-      "items": {"$ref": "#/$defs/event"}
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    },
+    "pause_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "awaiting_authorization",
+        "local_preflight_failed",
+        "capability_probe_failed",
+        "operator_pause",
+        "external_dependency",
+        null
+      ]
+    },
+    "post_delta_gates_passed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "journal_watermark": {
+      "description": "Latest canonical journal event included in this deterministic projection.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "journal_seq",
+        "journal_hash"
+      ],
+      "properties": {
+        "journal_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "journal_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "durations": {
+      "description": "Non-conflated elapsed, provider, wait, pause, backoff, idle, and human-effort measures.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "audit_elapsed_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_duration_sum_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_active_interval_union_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "authorization_wait_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "paused_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "retry_backoff_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "idle_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "human_effort_person_minutes": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "diagnostic_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "disposition",
+          "reason"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "disposition": {
+            "const": "diagnostic_only"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
     }
   },
   "$defs": {
     "phase": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ran"],
+      "required": [
+        "ran"
+      ],
       "properties": {
-        "ran": {"description": "REQUIRED. True once the phase has both started and ended. False means it did not run to completion -- including 'still running'.", "type": "boolean"},
-        "started_at": {"description": "RFC 3339 start timestamp, null if never started.", "type": ["string", "null"], "format": "date-time"},
-        "ended_at": {"description": "RFC 3339 end timestamp, null if never ended.", "type": ["string", "null"], "format": "date-time"},
-        "wall_clock_seconds": {"description": "DERIVED. ended_at minus started_at, whole seconds. Null while incomplete.", "type": ["integer", "null"], "minimum": 0},
-        "notes": {"description": "Free text, e.g. why a phase was skipped.", "type": ["string", "null"]}
+        "ran": {
+          "description": "REQUIRED. True once the phase has both started and ended. False means it did not run to completion -- including 'still running'.",
+          "type": "boolean"
+        },
+        "started_at": {
+          "description": "RFC 3339 start timestamp, null if never started.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ended_at": {
+          "description": "RFC 3339 end timestamp, null if never ended.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "wall_clock_seconds": {
+          "description": "DERIVED. ended_at minus started_at, whole seconds. Null while incomplete.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "notes": {
+          "description": "Free text, e.g. why a phase was skipped.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "invocation_usage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["obtainable", "input_tokens", "output_tokens", "cached_input_tokens", "reasoning_tokens", "total_tokens", "source"],
+      "required": [
+        "obtainable",
+        "input_tokens",
+        "output_tokens",
+        "cached_input_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "source"
+      ],
       "properties": {
-        "obtainable": {"type": "boolean"},
-        "input_tokens": {"type": ["integer", "null"], "minimum": 0},
-        "output_tokens": {"type": ["integer", "null"], "minimum": 0},
-        "cached_input_tokens": {"type": ["integer", "null"], "minimum": 0},
-        "reasoning_tokens": {"type": ["integer", "null"], "minimum": 0},
-        "total_tokens": {"type": ["integer", "null"], "minimum": 0},
-        "source": {"type": "string", "enum": ["api_response", "cli_log", "dashboard_export", "unavailable"]}
+        "obtainable": {
+          "type": "boolean"
+        },
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cached_input_tokens": {
+          "description": "Cache-read input tokens when separately exposed by the provider.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cache_creation_input_tokens": {
+          "description": "Cache-creation/write input tokens when separately exposed by the provider. Optional only for the pre-extension all-or-nothing v2 usage shape.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reasoning_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "api_response",
+            "cli_log",
+            "dashboard_export",
+            "unavailable"
+          ]
+        },
+        "unavailable_reasons": {
+          "description": "For the extended partial-usage shape, every null component has a non-empty reason and every observed component omits its reason. This makes absence explicit without fabricating zero tokens.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "input_tokens": {
+              "type": "string",
+              "minLength": 1
+            },
+            "output_tokens": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cached_input_tokens": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cache_creation_input_tokens": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reasoning_tokens": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "total_tokens_kind": {
+          "description": "Whether total_tokens was reported by the provider, derived exactly from named observed components, or unavailable.",
+          "type": "string",
+          "enum": [
+            "provider_reported",
+            "derived",
+            "unavailable"
+          ]
+        },
+        "total_tokens_components": {
+          "description": "Unique observed components summed for a derived total; empty for provider-reported or unavailable totals.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "input_tokens",
+              "output_tokens",
+              "cached_input_tokens",
+              "cache_creation_input_tokens",
+              "reasoning_tokens"
+            ]
+          }
+        },
+        "total_tokens_unavailable_reason": {
+          "description": "Non-empty exactly when total_tokens_kind is unavailable.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "semantics": {
+          "description": "Provider-specific overlap semantics used when normalizing totals.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+            "reasoning_tokens",
+            "normalized_total"
+          ],
+          "properties": {
+            "input_tokens": {
+              "type": "string",
+              "enum": [
+                "fresh_only",
+                "includes_cache_read",
+                "provider_defined",
+                "unknown"
+              ]
+            },
+            "cache_read_tokens": {
+              "type": "string",
+              "enum": [
+                "additional",
+                "subset_of_input",
+                "provider_defined",
+                "unknown"
+              ]
+            },
+            "cache_write_tokens": {
+              "type": "string",
+              "enum": [
+                "additional",
+                "subset_of_input",
+                "provider_defined",
+                "unknown"
+              ]
+            },
+            "reasoning_tokens": {
+              "type": "string",
+              "enum": [
+                "additional",
+                "subset_of_output",
+                "provider_defined",
+                "unknown"
+              ]
+            },
+            "normalized_total": {
+              "type": "string",
+              "enum": [
+                "provider_reported",
+                "non_overlapping_components",
+                "unavailable"
+              ]
+            }
+          }
+        }
       }
     },
     "invocation_record": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["invocation_id", "role", "role_class", "round", "attempt", "status", "provider", "provider_call", "cache_usage", "session_id", "requested_model", "observed_model", "model_family", "model_source", "reasoning_effort", "started_at", "ended_at", "elapsed_seconds", "input_artifact_sha256", "prompt_sha256", "output_artifact", "output_sha256", "usage", "error", "error_class", "legacy_source"],
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "attempt_kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "attempt_kind",
+              "provider_request_status",
+              "inference_start_status",
+              "source_invocation_id",
+              "turn_count",
+              "provider_cost",
+              "served_model",
+              "identity_assurance",
+              "model_identity_evidence",
+              "usage_by_model",
+              "unattributed_usage",
+              "provider_duration_seconds"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "invocation_id",
+        "role",
+        "role_class",
+        "round",
+        "attempt",
+        "status",
+        "provider",
+        "provider_call",
+        "cache_usage",
+        "session_id",
+        "requested_model",
+        "observed_model",
+        "model_family",
+        "model_source",
+        "reasoning_effort",
+        "started_at",
+        "ended_at",
+        "elapsed_seconds",
+        "input_artifact_sha256",
+        "prompt_sha256",
+        "output_artifact",
+        "output_sha256",
+        "usage",
+        "error",
+        "error_class",
+        "legacy_source"
+      ],
       "properties": {
-        "invocation_id": {"type": "string", "minLength": 1},
-        "role": {"type": "string", "minLength": 1},
-        "role_class": {"type": "string", "enum": ["coordinator", "auditor", "adjudicator", "critic", "synthesizer", "other"]},
-        "round": {"type": ["integer", "null"], "minimum": 0},
-        "attempt": {"type": "integer", "minimum": 1},
-        "status": {"type": "string", "enum": ["started", "completed", "failed", "cancelled", "timed_out", "legacy_record"]},
-        "provider": {"type": ["string", "null"]},
-        "provider_call": {"description": "True exactly when this record represents a provider call; false distinguishes cache reads and probe-cache metadata from paid calls.", "type": "boolean"},
-        "cache_usage": {"type": "string", "enum": ["none", "read", "write", "read_write", "probe_cache"]},
-        "session_id": {"description": "Provider session/thread/conversation identifier when exposed; null otherwise.", "type": ["string", "null"], "minLength": 1},
-        "requested_model": {"type": ["string", "null"]},
-        "observed_model": {"type": ["string", "null"]},
-        "model_family": {"type": ["string", "null"]},
-        "model_source": {"type": "string", "enum": ["observed", "declared", "inferred", "unavailable"]},
-        "reasoning_effort": {"type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra", "provider_default", "unknown"]},
-        "started_at": {"type": ["string", "null"], "format": "date-time"},
-        "ended_at": {"type": ["string", "null"], "format": "date-time"},
-        "elapsed_seconds": {"type": ["number", "null"], "minimum": 0},
-        "input_artifact_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-        "prompt_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-        "output_artifact": {"type": ["string", "null"], "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"},
-        "output_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-        "usage": {"$ref": "#/$defs/invocation_usage"},
-        "error": {"type": ["string", "null"]},
-        "error_class": {"type": ["string", "null"], "enum": ["transient", "permanent", "schema", "authentication", "authorization", "quota", "model", "timeout", "transport", "unknown", null]},
-        "legacy_source": {
-          "type": ["object", "null"],
+        "invocation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role_class": {
+          "type": "string",
+          "enum": [
+            "coordinator",
+            "auditor",
+            "adjudicator",
+            "critic",
+            "synthesizer",
+            "verifier",
+            "other"
+          ]
+        },
+        "round": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "attempt": {
+          "description": "Role-budget attempt allocated only at an accepted inference start; null for preflight, rejected schema admission, or cache replay.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "attempt_ceiling": {
+          "description": "Accepted inference starts allowed for this role and round when the attempt was allocated. Projected from the journal, never authored.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "attempt_ceiling_source": {
+          "description": "Which knob set attempt_ceiling: the protocol default or the operator's I4R_MAX_ATTEMPTS.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "protocol_default",
+            "I4R_MAX_ATTEMPTS",
+            null
+          ]
+        },
+        "attempt_ceiling_applies": {
+          "description": "Whether this attempt kind consumes the per-role budget at all; capability probes do not.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "attempt_kind": {
+          "type": "string",
+          "enum": [
+            "local_preflight",
+            "capability_probe",
+            "schema_admission",
+            "role_inference",
+            "output_repair",
+            "cache_replay"
+          ]
+        },
+        "schema_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "provider_request_status": {
+          "type": "string",
+          "enum": [
+            "not_requested",
+            "requested",
+            "accepted",
+            "rejected",
+            "unknown"
+          ]
+        },
+        "inference_start_status": {
+          "type": "string",
+          "enum": [
+            "not_started",
+            "started",
+            "unknown"
+          ]
+        },
+        "source_invocation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "started",
+            "completed",
+            "failed",
+            "cancelled",
+            "timed_out",
+            "legacy_record"
+          ]
+        },
+        "superseded_status": {
+          "description": "The terminal status this record carried before an invocation_correction changed it. Set by projection, never authored. A superseded failure stays countable as a failure.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "started",
+            "completed",
+            "failed",
+            "cancelled",
+            "timed_out",
+            "legacy_record",
+            null
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider_call": {
+          "description": "True exactly when this record represents a provider call; false distinguishes cache reads and probe-cache metadata from paid calls.",
+          "type": "boolean"
+        },
+        "cache_usage": {
+          "type": "string",
+          "enum": [
+            "none",
+            "read",
+            "write",
+            "read_write",
+            "probe_cache",
+            "not_applicable"
+          ]
+        },
+        "session_id": {
+          "description": "Provider session/thread/conversation identifier when exposed; null otherwise.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "requested_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observed_model": {
+          "description": "Deprecated pre-2.1 alias of served_model. Never populate it from the requested route.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "served_model": {
+          "description": "Provider-observed served model ID; null when the adapter exposes only the requested route.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "identity_assurance": {
+          "type": "string",
+          "enum": [
+            "observed",
+            "requested_only",
+            "unavailable"
+          ]
+        },
+        "model_identity_evidence": {
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
-          "required": ["model_assignment_index", "token_record_index"],
+          "required": [
+            "source",
+            "raw_ids",
+            "artifact",
+            "artifact_sha256"
+          ],
           "properties": {
-            "model_assignment_index": {"type": "integer", "minimum": 0},
-            "token_record_index": {"type": ["integer", "null"], "minimum": 0}
+            "source": {
+              "type": "string",
+              "enum": [
+                "api_response",
+                "cli_log",
+                "dashboard_export",
+                "adapter",
+                "unavailable"
+              ]
+            },
+            "raw_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "artifact": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+            },
+            "artifact_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "observed_model_ids": {
+          "description": "Every distinct served model ID exposed for the invocation, including auxiliary models. observed_model remains the primary routed model used for policy and family checks.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "model_family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_source": {
+          "type": "string",
+          "enum": [
+            "observed",
+            "declared",
+            "inferred",
+            "unavailable"
+          ]
+        },
+        "reasoning_effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra",
+            "provider_default",
+            "unknown"
+          ]
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ended_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "elapsed_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_duration_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "turn_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_cost": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/provider_cost"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_artifact_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "prompt_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "output_artifact": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+        },
+        "output_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "usage": {
+          "$ref": "#/$defs/invocation_usage"
+        },
+        "usage_by_model": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "model",
+              "identity_assurance",
+              "usage"
+            ],
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "identity_assurance": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "requested_only"
+                ]
+              },
+              "usage": {
+                "$ref": "#/$defs/invocation_usage"
+              }
+            }
+          }
+        },
+        "unattributed_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/invocation_usage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error_class": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "transient",
+            "permanent",
+            "schema",
+            "authentication",
+            "authorization",
+            "quota",
+            "model",
+            "unsupported_model",
+            "capability",
+            "deterministic_schema",
+            "throttling",
+            "provider_5xx",
+            "server_5xx",
+            "timeout",
+            "transport",
+            "provider_safety_refusal",
+            "output_limit",
+            "environment",
+            "unknown",
+            null
+          ]
+        },
+        "legacy_source": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "model_assignment_index",
+            "token_record_index"
+          ],
+          "properties": {
+            "model_assignment_index": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "token_record_index": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "journal_event": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "seq",
+            "hash"
+          ],
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
           }
         }
       }
@@ -603,137 +2711,877 @@
     "model_assignment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "role_class", "model_id", "provider", "differs_from_auditor_family", "recorded_at"],
+      "required": [
+        "role",
+        "role_class",
+        "model_id",
+        "provider",
+        "differs_from_auditor_family",
+        "recorded_at"
+      ],
       "properties": {
-        "role": {"description": "REQUIRED. Canonical role name. Fan-out: auditor_reproduction, auditor_data_integrity, auditor_text_vs_data, auditor_code_methods, auditor_privacy_archive. Critique: critic_stats, critic_data, critic_fairness, critic_completeness, critic_synth. Also: coordinator, adjudicator.", "type": "string"},
-        "role_class": {"description": "REQUIRED. Coarse class, so a query can ask 'were the critics independent' without knowing every role name.", "type": "string", "enum": ["coordinator", "auditor", "adjudicator", "critic", "synthesizer", "other"]},
-        "round": {"description": "REQUIRED semantically: the critique round this assignment applies to, or null for roles that are not per-round (coordinator, fan-out auditors). One entry PER ROLE PER ROUND.", "type": ["integer", "null"], "minimum": 0},
-        "model_id": {"description": "REQUIRED. Exact model identifier the provider reported for this invocation. Record what the provider ECHOED BACK, not what was requested -- the silent swap happened because a requested alias resolved to a different model and only the response knew.", "type": "string"},
-        "model_family": {"description": "Coarse family, e.g. 'claude', 'gpt'. Used for the independence comparison.", "type": ["string", "null"]},
-        "provider": {"description": "REQUIRED. Serving organisation or 'local'.", "type": "string"},
-        "differs_from_auditor_family": {"description": "REQUIRED. Is model_family different from auditor_model.family? For a critic this must be true; false means the round was self-review and the adversarial claim for that round does not hold.", "type": "boolean"},
-        "auditor_family_at_time": {"description": "The auditor family this was compared against, copied in so the flag stays interpretable if auditor_model is ever corrected.", "type": ["string", "null"]},
-        "source": {"description": "How the identity was learned. 'observed' = echoed by the provider (trustworthy). 'declared' = what we asked for (may be an alias). 'inferred' = deduced from logs (weakest). Only 'observed' can detect a swap.", "type": ["string", "null"], "enum": ["observed", "declared", "inferred", null]},
-        "replaces_model_id": {"description": "If this assignment changed the model for a role mid-run, the previous model_id. Non-null here is the mid-run swap; combined with intended=false it is the SILENT swap.", "type": ["string", "null"]},
-        "intended": {"description": "Was the model choice deliberate? False marks a fallback -- e.g. the quota failure that dropped critics onto the auditor family.", "type": ["boolean", "null"]},
-        "recorded_at": {"description": "REQUIRED. When this assignment was observed.", "type": "string", "format": "date-time"}
+        "role": {
+          "description": "REQUIRED. Canonical role name. Fan-out: auditor_reproduction, auditor_data_integrity, auditor_text_vs_data, auditor_code_methods, auditor_privacy_archive. Critique: critic_stats, critic_data, critic_fairness, critic_completeness, critic_synth. Also: coordinator, adjudicator.",
+          "type": "string"
+        },
+        "role_class": {
+          "description": "REQUIRED. Coarse class, so a query can ask 'were the critics independent' without knowing every role name.",
+          "type": "string",
+          "enum": [
+            "coordinator",
+            "auditor",
+            "adjudicator",
+            "critic",
+            "synthesizer",
+            "verifier",
+            "other"
+          ]
+        },
+        "round": {
+          "description": "REQUIRED semantically: the critique round this assignment applies to, or null for roles that are not per-round (coordinator, fan-out auditors). One entry PER ROLE PER ROUND.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "model_id": {
+          "description": "REQUIRED. Exact model identifier the provider reported for this invocation. Record what the provider ECHOED BACK, not what was requested -- the silent swap happened because a requested alias resolved to a different model and only the response knew.",
+          "type": "string"
+        },
+        "model_family": {
+          "description": "Coarse family, e.g. 'claude', 'gpt'. Used for the independence comparison.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "REQUIRED. Serving organisation or 'local'.",
+          "type": "string"
+        },
+        "differs_from_auditor_family": {
+          "description": "REQUIRED. Is model_family different from auditor_model.family? For a critic this must be true; false means the round was self-review and the adversarial claim for that round does not hold.",
+          "type": "boolean"
+        },
+        "auditor_family_at_time": {
+          "description": "The auditor family this was compared against, copied in so the flag stays interpretable if auditor_model is ever corrected.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "How the identity was learned. 'observed' = echoed by the provider (trustworthy). 'declared' = what we asked for (may be an alias). 'inferred' = deduced from logs (weakest). Only 'observed' can detect a swap.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "observed",
+            "declared",
+            "inferred",
+            null
+          ]
+        },
+        "replaces_model_id": {
+          "description": "If this assignment changed the model for a role mid-run, the previous model_id. Non-null here is the mid-run swap; combined with intended=false it is the SILENT swap.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "intended": {
+          "description": "Was the model choice deliberate? False marks a fallback -- e.g. the quota failure that dropped critics onto the auditor family.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "recorded_at": {
+          "description": "REQUIRED. When this assignment was observed.",
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "token_record": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "round", "obtainable"],
+      "required": [
+        "role",
+        "round",
+        "obtainable"
+      ],
       "properties": {
-        "role": {"description": "REQUIRED. Canonical role name, as in model_assignment.role.", "type": "string"},
-        "round": {"description": "REQUIRED. Critique round, or null for non-round roles.", "type": ["integer", "null"], "minimum": 0},
-        "obtainable": {"description": "REQUIRED. Did the provider expose usage for this invocation at all? False plus null counts is a complete record of an incomplete measurement; false plus a number is a contradiction.", "type": "boolean"},
-        "input_tokens": {"description": "Prompt tokens, or null if not reported. Never estimated.", "type": ["integer", "null"], "minimum": 0},
-        "output_tokens": {"description": "Completion tokens, or null if not reported. Never estimated.", "type": ["integer", "null"], "minimum": 0},
-        "cached_input_tokens": {"description": "Cache-read prompt tokens, or null if not reported.", "type": ["integer", "null"], "minimum": 0},
-        "reasoning_tokens": {"description": "Reasoning/thinking tokens where the provider bills them separately, else null.", "type": ["integer", "null"], "minimum": 0},
-        "total_tokens": {"description": "Provider-reported total, or null. Do NOT fill this by adding the parts unless the provider itself reports the sum; a derived total that looks measured is exactly the failure this field guards.", "type": ["integer", "null"], "minimum": 0},
-        "source": {"description": "Where the numbers came from: 'api_response', 'cli_log', 'dashboard_export', or 'unavailable'.", "type": ["string", "null"], "enum": ["api_response", "cli_log", "dashboard_export", "unavailable", null]},
-        "recorded_at": {"description": "When the usage was captured.", "type": ["string", "null"], "format": "date-time"}
+        "role": {
+          "description": "REQUIRED. Canonical role name, as in model_assignment.role.",
+          "type": "string"
+        },
+        "round": {
+          "description": "REQUIRED. Critique round, or null for non-round roles.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "obtainable": {
+          "description": "REQUIRED. Did the provider expose usage for this invocation at all? False plus null counts is a complete record of an incomplete measurement; false plus a number is a contradiction.",
+          "type": "boolean"
+        },
+        "input_tokens": {
+          "description": "Prompt tokens, or null if not reported. Never estimated.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "description": "Completion tokens, or null if not reported. Never estimated.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cached_input_tokens": {
+          "description": "Cache-read prompt tokens, or null if not reported.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reasoning_tokens": {
+          "description": "Reasoning/thinking tokens where the provider bills them separately, else null.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_tokens": {
+          "description": "Provider-reported total, or null. Do NOT fill this by adding the parts unless the provider itself reports the sum; a derived total that looks measured is exactly the failure this field guards.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source": {
+          "description": "Where the numbers came from: 'api_response', 'cli_log', 'dashboard_export', or 'unavailable'.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "api_response",
+            "cli_log",
+            "dashboard_export",
+            "unavailable",
+            null
+          ]
+        },
+        "recorded_at": {
+          "description": "When the usage was captured.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
       }
     },
     "cost_record": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "round", "obtainable"],
+      "required": [
+        "role",
+        "round",
+        "obtainable"
+      ],
       "properties": {
-        "role": {"description": "REQUIRED. Canonical role name.", "type": "string"},
-        "round": {"description": "REQUIRED. Critique round, or null.", "type": ["integer", "null"], "minimum": 0},
-        "obtainable": {"description": "REQUIRED. Was a cost figure available at run time? Subscription-billed roles (a desktop app session, a flat-rate seat) are genuinely null and must say so rather than being priced retrospectively.", "type": "boolean"},
-        "amount": {"description": "Cost in `currency`, or null. Never back-computed from a price schedule after the fact.", "type": ["number", "null"], "minimum": 0},
-        "currency": {"description": "ISO 4217 code, normally 'USD'.", "type": ["string", "null"]},
-        "billing_model": {"description": "'metered_api', 'subscription', 'free_tier', or 'unknown'. Explains a null amount.", "type": ["string", "null"], "enum": ["metered_api", "subscription", "free_tier", "unknown", null]},
-        "source": {"description": "'api_response', 'cli_log', 'invoice', or 'unavailable'.", "type": ["string", "null"], "enum": ["api_response", "cli_log", "invoice", "unavailable", null]},
-        "recorded_at": {"description": "When the cost was captured.", "type": ["string", "null"], "format": "date-time"}
+        "role": {
+          "description": "REQUIRED. Canonical role name.",
+          "type": "string"
+        },
+        "round": {
+          "description": "REQUIRED. Critique round, or null.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "obtainable": {
+          "description": "REQUIRED. Was a cost figure available at run time? Subscription-billed roles (a desktop app session, a flat-rate seat) are genuinely null and must say so rather than being priced retrospectively.",
+          "type": "boolean"
+        },
+        "amount": {
+          "description": "Cost in `currency`, or null. Never back-computed from a price schedule after the fact.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "currency": {
+          "description": "ISO 4217 code, normally 'USD'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "billing_model": {
+          "description": "'metered_api', 'subscription', 'free_tier', or 'unknown'. Explains a null amount.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "metered_api",
+            "subscription",
+            "free_tier",
+            "unknown",
+            null
+          ]
+        },
+        "source": {
+          "description": "'api_response', 'cli_log', 'invoice', or 'unavailable'.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "api_response",
+            "cli_log",
+            "invoice",
+            "unavailable",
+            null
+          ]
+        },
+        "recorded_at": {
+          "description": "When the cost was captured.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
       }
     },
     "round": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["round"],
+      "required": [
+        "round"
+      ],
       "properties": {
-        "round": {"description": "REQUIRED. 1-based round number.", "type": "integer", "minimum": 1},
-        "started_at": {"description": "When run_critique.sh was invoked for this round.", "type": ["string", "null"], "format": "date-time"},
-        "ended_at": {"description": "When the round's required critic quorum and any conditionally triggered adjudication finished. Routine synthesis is disabled.", "type": ["string", "null"], "format": "date-time"},
-        "wall_clock_seconds": {"description": "DERIVED. Per-round elapsed seconds. The critique loop was 94% of pipeline time in calibration; this is the field that proves or disproves that for each audit.", "type": ["integer", "null"], "minimum": 0},
-        "critics_run": {"description": "Critic role names that produced output this round.", "type": "array", "items": {"description": "A critic role name, e.g. 'critic_stats'.", "type": "string"}},
-        "critics_failed": {"description": "Critic role names that produced nothing after all retries.", "type": "array", "items": {"description": "A critic role name.", "type": "string"}},
-        "parallelism": {"description": "The PARALLEL setting in force for this round.", "type": ["integer", "null"], "minimum": 1},
-        "report_version_reviewed": {"description": "Which draft the critics actually saw, e.g. 'REPORT_v3.md' or a sha256. Guards the stale-review failure where a round reviewed a superseded revision.", "type": ["string", "null"]},
-        "blocking_items": {"description": "Number of items the round's synthesis ranked BLOCKING. Null means not yet counted, not zero.", "type": ["integer", "null"], "minimum": 0},
-        "non_blocking_items": {"description": "Number ranked NON-BLOCKING.", "type": ["integer", "null"], "minimum": 0},
-        "comment_defects": {"description": "Of the blocking items, how many were defects in OUR comment (a wrong, overstated or unsupported claim of ours). The comment/paper split is the convergence signal: late rounds that find only comment defects mean the paper has been exhausted.", "type": ["integer", "null"], "minimum": 0},
-        "paper_defects": {"description": "Of the blocking items, how many were defects in the AUDITED PAPER or its package.", "type": ["integer", "null"], "minimum": 0},
-        "unclassified_defects": {"description": "Blocking items not yet classified as comment or paper defects. comment_defects + paper_defects + unclassified_defects must equal blocking_items.", "type": ["integer", "null"], "minimum": 0},
-        "items_accepted": {"description": "How many criticisms were verified and applied.", "type": ["integer", "null"], "minimum": 0},
-        "items_contested": {"description": "How many were verified and rejected, with the reproduction shown.", "type": ["integer", "null"], "minimum": 0},
-        "integrated_at": {"description": "When this round's surviving criticisms were applied to the draft. Null means never integrated -- the failure that let three comments ship before their critique existed.", "type": ["string", "null"], "format": "date-time"},
-        "integrated_before_delivery": {"description": "DERIVED at finalize. integrated_at is non-null and strictly before delivery.delivered_at.", "type": ["boolean", "null"]},
-        "consistency_check_run": {"description": "Was check_consistency.sh run after integrating this round?", "type": ["boolean", "null"]},
-        "consistency_check_exit": {"description": "Its exit status. Non-zero with the audit continuing is a protocol violation, and the toolkit has shipped gates that printed FAIL and returned 0.", "type": ["integer", "null"]},
-        "character": {"description": "The qualitative character of this round's criticism, for the convergence table: substantive errors -> framing -> prose precision.", "type": ["string", "null"], "enum": ["substantive", "framing", "precision", "wording_only", "none", null]},
-        "factual_corrections": {"description": "Number of factual corrections returned by this round after adjudication. Required evidence for the converged stopping reason; zero is distinct from an unrecorded null.", "type": ["integer", "null"], "minimum": 0},
-        "notes": {"description": "Free text.", "type": ["string", "null"]}
+        "round": {
+          "description": "REQUIRED. 1-based round number.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "started_at": {
+          "description": "When run_critique.sh was invoked for this round.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ended_at": {
+          "description": "When the round's required critic quorum and any conditionally triggered adjudication finished. Routine synthesis is disabled.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "wall_clock_seconds": {
+          "description": "DERIVED. Per-round elapsed seconds. The critique loop was 94% of pipeline time in calibration; this is the field that proves or disproves that for each audit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "critics_run": {
+          "description": "Critic role names that produced output this round.",
+          "type": "array",
+          "items": {
+            "description": "A critic role name, e.g. 'critic_stats'.",
+            "type": "string"
+          }
+        },
+        "critics_failed": {
+          "description": "Critic role names that produced nothing after all retries.",
+          "type": "array",
+          "items": {
+            "description": "A critic role name.",
+            "type": "string"
+          }
+        },
+        "parallelism": {
+          "description": "The PARALLEL setting in force for this round.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "report_version_reviewed": {
+          "description": "Which draft the critics actually saw, e.g. 'REPORT_v3.md' or a sha256. Guards the stale-review failure where a round reviewed a superseded revision.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocking_items": {
+          "description": "Number of items the round's synthesis ranked BLOCKING. Null means not yet counted, not zero.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "non_blocking_items": {
+          "description": "Number ranked NON-BLOCKING.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "comment_defects": {
+          "description": "Of the blocking items, how many were defects in OUR comment (a wrong, overstated or unsupported claim of ours). The comment/paper split is the convergence signal: late rounds that find only comment defects mean the paper has been exhausted.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "paper_defects": {
+          "description": "Of the blocking items, how many were defects in the AUDITED PAPER or its package.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "unclassified_defects": {
+          "description": "Blocking items not yet classified as comment or paper defects. comment_defects + paper_defects + unclassified_defects must equal blocking_items.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "items_accepted": {
+          "description": "How many criticisms were verified and applied.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "items_contested": {
+          "description": "How many were verified and rejected, with the reproduction shown.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "integrated_at": {
+          "description": "When this round's surviving criticisms were applied to the draft. Null means never integrated -- the failure that let three comments ship before their critique existed.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "integrated_before_delivery": {
+          "description": "DERIVED at finalize. integrated_at is non-null and strictly before delivery.delivered_at.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "consistency_check_run": {
+          "description": "Was check_consistency.sh run after integrating this round?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "consistency_check_exit": {
+          "description": "Its exit status. Non-zero with the audit continuing is a protocol violation, and the toolkit has shipped gates that printed FAIL and returned 0.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "character": {
+          "description": "The qualitative character of this round's criticism, for the convergence table: substantive errors -> framing -> prose precision.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "substantive",
+            "framing",
+            "precision",
+            "wording_only",
+            "none",
+            null
+          ]
+        },
+        "factual_corrections": {
+          "description": "Number of factual corrections returned by this round after adjudication. Required evidence for the converged stopping reason; zero is distinct from an unrecorded null.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "notes": {
+          "description": "Free text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "prepared",
+            "awaiting_authorization",
+            "ready",
+            "running",
+            "quorum_complete",
+            "integrated",
+            null
+          ]
+        },
+        "prepared_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "plan": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "authorization": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "authorization_wait_started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "authorization_wait_ended_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "reopened_from": {
+          "description": "The state a finished round was reopened from (I4R_FORCE_RERUN or an adjudicator retry); its clock keeps the first start.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reopened_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
       }
     },
     "failure_event": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["at", "kind", "detail"],
+      "required": [
+        "at",
+        "kind",
+        "detail"
+      ],
       "properties": {
-        "at": {"description": "REQUIRED. When it happened.", "type": "string", "format": "date-time"},
-        "kind": {"description": "REQUIRED. Category of failure.", "type": "string", "enum": ["api_error", "quota_exhausted", "rate_limit", "timeout", "network_outage", "tool_crash", "empty_output", "gate_failure", "other"]},
-        "role": {"description": "Role affected, if any.", "type": ["string", "null"]},
-        "round": {"description": "Round affected, if any.", "type": ["integer", "null"], "minimum": 0},
-        "detail": {"description": "REQUIRED. One line: what failed, with the error text if there was one.", "type": "string"},
-        "retries": {"description": "How many retries were attempted.", "type": ["integer", "null"], "minimum": 0},
-        "substitution": {"description": "What was used INSTEAD after the failure -- a different model, a reduced critic set, a skipped check, or 'none'. This is the field that would have caught the quota failure that put critics on the auditor family.", "type": ["string", "null"]},
-        "resolved": {"description": "Did the run recover? False means the failure changed what the audit delivered.", "type": ["boolean", "null"]}
+        "at": {
+          "description": "REQUIRED. When it happened.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "description": "REQUIRED. Category of failure.",
+          "type": "string",
+          "enum": [
+            "api_error",
+            "quota_exhausted",
+            "rate_limit",
+            "timeout",
+            "network_outage",
+            "tool_crash",
+            "empty_output",
+            "gate_failure",
+            "other"
+          ]
+        },
+        "role": {
+          "description": "Role affected, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "round": {
+          "description": "Round affected, if any.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "detail": {
+          "description": "REQUIRED. One line: what failed, with the error text if there was one.",
+          "type": "string"
+        },
+        "retries": {
+          "description": "How many retries were attempted.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "substitution": {
+          "description": "What was used INSTEAD after the failure -- a different model, a reduced critic set, a skipped check, or 'none'. This is the field that would have caught the quota failure that put critics on the auditor family.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolved": {
+          "description": "Did the run recover? False means the failure changed what the audit delivered.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
       }
     },
     "gate_result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["gate", "exit_status"],
+      "required": [
+        "gate",
+        "exit_status"
+      ],
       "properties": {
-        "gate": {"description": "REQUIRED. Gate name, e.g. 'check_consistency', 'stage_release', 'gate_pkgspecific'.", "type": "string"},
-        "at": {"description": "When it ran.", "type": ["string", "null"], "format": "date-time"},
-        "round": {"description": "Round it was run for, or null for the release gates.", "type": ["integer", "null"], "minimum": 0},
-        "exit_status": {"description": "REQUIRED. The gate's process exit status, captured from $? -- not from its stdout. A gate that prints FAIL and returns 0 has blocked nothing, and this toolkit has shipped two of those.", "type": "integer"},
-        "passed": {"description": "exit_status == 0. Stored explicitly so a query does not have to know the convention.", "type": ["boolean", "null"]},
-        "log_path": {"description": "Where the gate's output was kept.", "type": ["string", "null"]}
+        "gate": {
+          "description": "REQUIRED. Gate name, e.g. 'check_consistency', 'stage_release', 'gate_pkgspecific'.",
+          "type": "string"
+        },
+        "at": {
+          "description": "When it ran.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "round": {
+          "description": "Round it was run for, or null for the release gates.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "exit_status": {
+          "description": "REQUIRED. The gate's process exit status, captured from $? -- not from its stdout. A gate that prints FAIL and returns 0 has blocked nothing, and this toolkit has shipped two of those.",
+          "type": "integer"
+        },
+        "passed": {
+          "description": "exit_status == 0. Stored explicitly so a query does not have to know the convention.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "log_path": {
+          "description": "Where the gate's output was kept.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "retained_record": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["artifact", "present"],
+      "required": [
+        "artifact",
+        "present"
+      ],
       "properties": {
-        "artifact": {"description": "REQUIRED. Logical name of the artefact class, e.g. 'report_final', 'ledger', 'adjudication_log', 'auditor_reports', 'critique_rounds', 'critic_prompts', 'agent_transcripts', 'work_scripts', 'run_json', 'event_journal', 'package_manifest'.", "type": "string"},
-        "path": {"description": "Path relative to the audit directory.", "type": ["string", "null"]},
-        "present": {"description": "REQUIRED. Does it exist on disk at the retention check? Determined by stat, never by belief.", "type": "boolean"},
-        "count": {"description": "Number of files, for artefact classes that are directories.", "type": ["integer", "null"], "minimum": 0},
-        "bytes": {"description": "Total size in bytes.", "type": ["integer", "null"], "minimum": 0},
-        "sha256": {"description": "Hash for single-file artefacts, so a later copy can be authenticated.", "type": ["string", "null"]},
-        "retention": {"description": "Intended disposition: 'retained' (kept and shipped), 'retained_local' (kept but not released), 'excluded_by_manifest' (deliberately not released, see stage_release.sh), 'destroyed' (deleted), 'never_created'. 'destroyed' and 'never_created' are the two that must be distinguishable, and were not for six of the first ten audits.", "type": ["string", "null"], "enum": ["retained", "retained_local", "excluded_by_manifest", "destroyed", "never_created", null]},
-        "reason": {"description": "Why, when retention is anything other than 'retained'.", "type": ["string", "null"]}
+        "artifact": {
+          "description": "REQUIRED. Logical name of the artefact class, e.g. 'report_final', 'ledger', 'adjudication_log', 'auditor_reports', 'critique_rounds', 'critic_prompts', 'agent_transcripts', 'work_scripts', 'run_json', 'event_journal', 'package_manifest'.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path relative to the audit directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "present": {
+          "description": "REQUIRED. Does it exist on disk at the retention check? Determined by stat, never by belief.",
+          "type": "boolean"
+        },
+        "count": {
+          "description": "Number of files, for artefact classes that are directories.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "bytes": {
+          "description": "Total size in bytes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sha256": {
+          "description": "Hash for single-file artefacts, so a later copy can be authenticated.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retention": {
+          "description": "Intended disposition: 'retained' (kept and shipped), 'retained_local' (kept but not released), 'excluded_by_manifest' (deliberately not released, see stage_release.sh), 'destroyed' (deleted), 'never_created'. 'destroyed' and 'never_created' are the two that must be distinguishable, and were not for six of the first ten audits.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "retained",
+            "retained_local",
+            "excluded_by_manifest",
+            "destroyed",
+            "never_created",
+            null
+          ]
+        },
+        "reason": {
+          "description": "Why, when retention is anything other than 'retained'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "event": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["seq", "at", "type"],
+      "required": [
+        "seq",
+        "at",
+        "type"
+      ],
       "properties": {
-        "seq": {"description": "REQUIRED. Monotonic sequence number assigned under the write lock, starting at 1. Ordering key; timestamps can collide at one-second resolution.", "type": "integer", "minimum": 1},
-        "at": {"description": "REQUIRED. RFC 3339 timestamp of the event.", "type": "string", "format": "date-time"},
-        "type": {"description": "REQUIRED. Event kind. Each type has a projection rule in log_event.sh: phase_start/phase_end -> phases; round_start/round_end/round_result -> rounds; review_scope atomically projects changed, re-reviewed, and unresolved IDs; model -> model_assignments; tokens -> tokens; cost -> costs; failure -> failure_events; brief_correction -> brief_corrections; gate -> compliance.gates_run; delivery -> delivery; package -> package; records -> records_retained; human_effort -> human_effort.person_minutes_by_phase; settled -> settled_facts; note/init/finalize -> the journal only.", "type": "string", "enum": ["init", "phase_start", "phase_end", "round_start", "round_end", "round_result", "review_scope", "model", "tokens", "cost", "failure", "brief_correction", "gate", "delivery", "package", "records", "human_effort", "settled", "note", "finalize"]},
-        "payload": {"description": "REQUIRED in practice. Type-specific body. Deliberately loosely typed so a new event kind can be logged before the schema catches up -- an unloggable fact is a lost fact, and the projection can be added later from the journal.", "type": "object"},
-        "pid": {"description": "PID of the logging process, for debugging concurrent writers.", "type": ["integer", "null"]},
-        "source": {"description": "What emitted the event, e.g. 'log_event.sh', 'run_critique.sh', 'operator'.", "type": ["string", "null"]}
+        "seq": {
+          "description": "REQUIRED. Monotonic sequence number assigned under the write lock, starting at 1. Ordering key; timestamps can collide at one-second resolution.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "at": {
+          "description": "REQUIRED. RFC 3339 timestamp of the event.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "type": {
+          "description": "REQUIRED. Event kind. Each type has a projection rule in log_event.sh: phase_start/phase_end -> phases; round_start/round_end/round_result -> rounds; review_scope atomically projects changed, re-reviewed, and unresolved IDs; model -> model_assignments; tokens -> tokens; cost -> costs; failure -> failure_events; brief_correction -> brief_corrections; gate -> compliance.gates_run; delivery -> delivery; package -> package; records -> records_retained; human_effort -> human_effort.person_minutes_by_phase; settled -> settled_facts; environment_captured -> environment (the latest one; written only by capture_environment.sh); note/init/finalize -> the journal only.",
+          "type": "string",
+          "enum": [
+            "init",
+            "phase_start",
+            "phase_end",
+            "round_start",
+            "round_end",
+            "round_result",
+            "review_scope",
+            "publication_redaction",
+            "model",
+            "tokens",
+            "cost",
+            "failure",
+            "brief_correction",
+            "gate",
+            "delivery",
+            "package",
+            "records",
+            "human_effort",
+            "settled",
+            "note",
+            "finalize",
+            "round_prepared",
+            "round_authorization_required",
+            "round_authorized",
+            "round_ready",
+            "round_quorum_complete",
+            "round_integrated",
+            "round_paused",
+            "invocation_reserved",
+            "provider_request",
+            "inference_start",
+            "provider_response",
+            "invocation_terminal",
+            "invocation_correction",
+            "cache_reuse",
+            "authorization_wait_start",
+            "authorization_wait_end",
+            "pause_start",
+            "pause_end",
+            "retry_backoff_start",
+            "retry_backoff_end",
+            "metadata_correction",
+            "migration_anchor",
+            "policy_amendment",
+            "audit_reopened",
+            "environment_captured",
+            "text_redaction",
+            "environment"
+          ]
+        },
+        "payload": {
+          "description": "REQUIRED in practice. Type-specific body. Deliberately loosely typed so a new event kind can be logged before the schema catches up -- an unloggable fact is a lost fact, and the projection can be added later from the journal.",
+          "type": "object"
+        },
+        "pid": {
+          "description": "PID of the logging process, for debugging concurrent writers.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "What emitted the event, e.g. 'log_event.sh', 'run_critique.sh', 'operator'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "2.1.0",
+            "legacy"
+          ]
+        },
+        "previous_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "event_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "schema_version": {
+                "const": "2.1.0"
+              }
+            },
+            "required": [
+              "schema_version"
+            ]
+          },
+          "then": {
+            "required": [
+              "previous_hash",
+              "event_hash",
+              "payload",
+              "source",
+              "pid"
+            ]
+          }
+        }
+      ]
+    },
+    "provider_cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount",
+        "currency",
+        "source",
+        "unavailable_reason"
+      ],
+      "properties": {
+        "amount": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "api_response",
+            "cli_log",
+            "dashboard_export",
+            "unavailable"
+          ]
+        },
+        "unavailable_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
       }
     }
   }

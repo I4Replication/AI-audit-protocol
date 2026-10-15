@@ -21,7 +21,8 @@ import tempfile
 import zipfile
 
 
-SCHEMA = "1.0.0"
+SCHEMA = "2.0.0"
+DOCUMENT_MANIFEST_SCHEMA = "3.0.0"
 MEMBERS = {"cache-manifest.json", "inputs.json", "document.docx", "document.pdf"}
 LABEL = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -152,7 +153,10 @@ def read_valid_archive(archive_path: pathlib.Path, key: str) -> tuple[bytes, byt
     if manifest.get("cache_key") != key or manifest.get("inputs_sha256") != digest(descriptor_bytes):
         raise InvalidCache("cache manifest is bound to different inputs")
     validation = manifest.get("validation")
-    if not isinstance(validation, dict) or validation.get("status") != "passed":
+    if (not isinstance(validation, dict) or validation.get("status") != "passed" or
+            validation.get("schema_version") != DOCUMENT_MANIFEST_SCHEMA or
+            validation.get("build_kind") != "canonical" or
+            validation.get("all_validations_passed") is not True):
         raise InvalidCache("cache entry was not produced by a passing document build")
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, dict) or set(artifacts) != {"docx", "pdf"}:
@@ -234,8 +238,11 @@ def command_store(args: argparse.Namespace) -> int:
         validation = json.loads(metadata_bytes)
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"invalid validation metadata: {exc}") from exc
-    if not isinstance(validation, dict) or validation.get("status") != "passed":
-        raise ValueError("only a passing document build may enter the cache")
+    if (not isinstance(validation, dict) or validation.get("status") != "passed" or
+            validation.get("schema_version") != DOCUMENT_MANIFEST_SCHEMA or
+            validation.get("build_kind") != "canonical" or
+            validation.get("all_validations_passed") is not True):
+        raise ValueError("only a canonical document-manifest-v3 passing build may enter the cache")
     manifest = {
         "schema_version": SCHEMA,
         "cache_key": args.key,

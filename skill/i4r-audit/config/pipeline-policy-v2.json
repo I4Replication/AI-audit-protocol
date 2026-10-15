@@ -4,62 +4,89 @@
   "policy_source": "config/pipeline-policy-v2.json",
   "models": {
     "coordinator": {
-      "requested_model": "sonnet-5",
-      "spawn_alias": "sonnet",
+      "requested_model": "sonnet-5-5",
+      "spawn_alias": "claude-sonnet-5-5",
       "provider": "anthropic",
-      "reasoning_effort": "max"
+      "reasoning_effort": "xhigh"
     },
     "phase_1_auditors": {
       "auditor_reproduction": {
         "area": 1,
-        "requested_model": "sonnet-5",
-        "spawn_alias": "sonnet",
+        "requested_model": "sonnet-5-5",
+        "spawn_alias": "claude-sonnet-5-5",
         "provider": "anthropic",
-        "reasoning_effort": "max"
+        "reasoning_effort": "xhigh"
       },
       "auditor_data_integrity": {
         "area": 2,
-        "requested_model": "sonnet-5",
-        "spawn_alias": "sonnet",
+        "requested_model": "sonnet-5-5",
+        "spawn_alias": "claude-sonnet-5-5",
         "provider": "anthropic",
-        "reasoning_effort": "max"
+        "reasoning_effort": "xhigh"
       },
       "auditor_text_vs_data": {
         "area": 3,
-        "requested_model": "sonnet-5",
-        "spawn_alias": "sonnet",
+        "requested_model": "sonnet-5-5",
+        "spawn_alias": "claude-sonnet-5-5",
         "provider": "anthropic",
-        "reasoning_effort": "max"
+        "reasoning_effort": "xhigh"
       },
       "auditor_code_methods": {
         "area": 4,
-        "requested_model": "sonnet-5",
-        "spawn_alias": "sonnet",
+        "requested_model": "sonnet-5-5",
+        "spawn_alias": "claude-sonnet-5-5",
         "provider": "anthropic",
-        "reasoning_effort": "max"
+        "reasoning_effort": "xhigh"
       },
       "auditor_privacy_archive": {
         "area": 5,
-        "requested_model": "sonnet-5",
-        "spawn_alias": "sonnet",
+        "requested_model": "sonnet-5-5",
+        "spawn_alias": "claude-sonnet-5-5",
         "provider": "anthropic",
-        "reasoning_effort": "max"
+        "reasoning_effort": "xhigh"
       }
     },
+    "post_fan_out_verifier": {
+      "requested_model": "sonnet-5-5",
+      "spawn_alias": "claude-sonnet-5-5",
+      "provider": "anthropic",
+      "reasoning_effort": "xhigh",
+      "must_equal_auditor_family": true
+    },
     "critics": {
-      "requested_model": "gpt-5.6-terra",
+      "requested_model": "gpt-6.1-sol",
       "provider": "openai",
       "reasoning_effort": "high",
       "must_differ_from_coordinator_family": true
     },
     "targeted_adjudicator": {
-      "requested_model": "gpt-5.6-terra",
+      "requested_model": "gpt-6.1-sol",
       "provider": "openai",
       "reasoning_effort": "max",
       "must_differ_from_coordinator_family": true
     }
   },
   "phase_1": {
+    "runner": "scripts/run_phase1.py",
+    "runtime": {
+        "orchestrator": "scripts/run_phase1.py",
+        "timeout_seconds": 5400,
+        "pre_dispatch_deadline_seconds": 60,
+        "max_provider_budget_usd": 15,
+      "probe_max_normalized_tokens": 350000,
+      "maximum_pre_inference_retryable_rejections_per_role": 2,
+      "probe_cache_key_fields": [
+        "cli_version",
+        "requested_model",
+        "reasoning_effort",
+        "sandbox_policy_sha256",
+        "probe_contract_sha256"
+      ],
+      "safe_mode": true,
+      "network": "deny_all",
+      "session_persistence": false,
+      "parallelism": 5
+    },
     "required_roles": [
       "auditor_reproduction",
       "auditor_data_integrity",
@@ -69,20 +96,188 @@
     ],
     "parallelism": 5,
     "isolated_work_directories": true,
-    "package_is_read_only": true
+    "package_is_read_only": true,
+    "provider_timeout_seconds": 5400,
+    "provider_budget_usd_per_role": 15,
+    "network_access": false,
+    "plugins_enabled": false,
+    "cross_attempt_state": false,
+    "provider_free_preflight": {
+      "required_before_inference": true,
+      "maximum_seconds": 60,
+      "checks": [
+        "exact_sandbox_and_tool_policy",
+        "source_and_evidence_readability",
+        "attempt_output_writability",
+        "canonical_output_promotion"
+      ],
+      "failure_action": "pause_before_any_auditor_inference"
+    },
+    "capability_probe": {
+      "requested_model": "sonnet-5-5",
+      "reasoning_effort": "xhigh",
+      "maximum_normalized_tokens": 350000,
+      "maximum_successful_provider_calls": 1,
+      "required_contracts": [
+        "structured_output",
+        "served_model_identity",
+        "per_model_usage",
+        "exact_sandbox_tools"
+      ],
+      "cache_key_fields": [
+        "claude_cli_version",
+        "requested_model",
+        "reasoning_effort",
+        "sandbox_policy_sha256",
+        "probe_contract_sha256"
+      ]
+    },
+    "deterministic_evidence": {
+      "generated_once": true,
+      "contains_participant_rows": false,
+      "indexes": [
+        "pdf_text",
+        "file_inventory",
+        "workbook_structure_missingness_and_duplicates",
+        "code_entrypoints",
+        "environment_fingerprint",
+        "archive_licence_metadata",
+        "privacy_scan"
+      ],
+      "raw_read_only_access_retained": true,
+      "dual_review_for": [
+        "conclusion_changing_claim",
+        "disclosure_critical_claim"
+      ]
+    },
+    "admission": "clean_exit_report_contract_source_hash_join_and_evidence_manifest",
+    "repair": {
+      "maximum_calls_per_role": 1,
+      "maximum_input_fraction": 0.2,
+      "scientific_fields_must_be_byte_equivalent": true,
+      "byte_frozen_surfaces": [
+        "finding_claim",
+        "finding_evidence_and_results",
+        "finding_impact",
+        "finding_remedy",
+        "report_prose",
+        "every_evidence_artifact"
+      ],
+      "permitted_changes": "structural_json_bindings_only"
+    }
+  },
+  "post_fan_out_verification": {
+    "runner": "scripts/run_verifier.py",
+    "contract_module": "scripts/verifier_contract.py",
+    "role_class": "verifier",
+    "role_pattern": "^verifier_[0-9a-f]{12}$",
+    "round": 0,
+    "model_policy_ref": "models.post_fan_out_verifier",
+    "applies_to": "included_rows_with_no_phase_1_role_in_origin_role_or_independently_found_by",
+    "runtime_contract_ref": "phase_1.runtime",
+    "admission_contract_ref": "phase_1.admission",
+    "repair_contract_ref": "phase_1.repair",
+    "framing": "blind_hypothesis_plus_source_locations",
+    "packet_fields": [
+      "hypothesis_id",
+      "claim",
+      "claim_sha256",
+      "source_location",
+      "source_hashes"
+    ],
+    "withheld_inputs": [
+      "critic_verdicts",
+      "coordinator_reasoning",
+      "adjudication_records",
+      "settled_facts",
+      "finding_ids",
+      "registry_fields_other_than_claim_and_source_location",
+      "comment_and_claim_projections",
+      "auditor_checklist_and_brief"
+    ],
+    "verdicts": [
+      "CONFIRMED",
+      "REFUTED",
+      "UNVERIFIABLE"
+    ],
+    "binding": "claim_sha256",
+    "one_verdict_per_claim": true,
+    "timing": "call_ends_no_later_than_the_integration_that_binds_it",
+    "run_when": "after_a_round_reaches_quorum_and_before_it_is_integrated_or_before_round_1_for_rows_written_at_draft_time",
+    "default_sessions": 0
   },
   "critique": {
     "round_target": 2,
-    "round_cap": 5,
+    "round_cap": 7,
+    "round_cap_amendment": {
+      "tool": "scripts/amend_round_cap.py",
+      "reopen_tool": "scripts/reopen_audit.py",
+      "verifier": "scripts/round_cap_amendment.py",
+      "event": "policy_amendment",
+      "reopen_event": "audit_reopened",
+      "may_only_raise": true,
+      "maximum": 7,
+      "earlier_caps": [
+        5
+      ]
+    },
     "max_attempts_per_role_total": 3,
+    "provider_timeout_seconds": 5400,
+    "critic_route_lock": {
+      "model": "gpt-6.1-sol",
+      "since": "2.7.5"
+    },
+    "max_attempts_per_role_operator_ceiling": 20,
     "attempt_budget_scope": "across_parallel_serial_and_resumed_execution",
     "completion_contract": "clean_process_exit_and_explicit_role_complete_status",
     "model_probe": {
-      "requested_model": "gpt-5.6-terra",
+      "requested_model": "gpt-6.1-sol",
       "reasoning_effort": "high",
       "cache_scope": "one_success_per_audit_model_and_effort",
       "maximum_successful_provider_calls": 1,
-      "reuse_across_rounds": true
+      "reuse_across_rounds": true,
+      "provider_schema_compiler_version_bound": true,
+      "schema_set_hash_bound": true,
+      "cache_key_fields": [
+        "cli_version",
+        "requested_model",
+        "reasoning_effort",
+        "compiler_sha256",
+        "compiler_version",
+        "schema_set_sha256",
+        "probe_contract_sha256"
+      ],
+      "contracts_exercised": [
+        "critic",
+        "targeted_adjudicator"
+      ]
+    },
+    "attempt_kinds": [
+      "local_preflight",
+      "capability_probe",
+      "schema_admission",
+      "role_inference",
+      "output_repair",
+      "cache_replay"
+    ],
+    "schema_admission_maximum_per_role_and_digest": 2,
+    "retryable_error_classes": [
+      "transport",
+      "throttling",
+      "provider_5xx"
+    ],
+    "non_retryable_error_classes": [
+      "authentication",
+      "authorization",
+      "quota",
+      "unsupported_model",
+      "capability",
+      "deterministic_schema"
+    ],
+    "focused_output_repair": {
+      "maximum_calls_per_role": 1,
+      "maximum_input_fraction": 0.2,
+      "scientific_fields_must_be_byte_equivalent": true
     },
     "round_1": {
       "roles": [
@@ -141,7 +336,8 @@
         ],
         "explicit_missing_path_is_fatal": true,
         "generated_packet_verifier": "scripts/verify_diff_packet.py",
-        "always_retain_completeness": true
+        "always_retain_completeness": true,
+        "claim_change_rule": "substantive_specialists_1"
       },
       "parallelism_default": "actual_routed_role_count",
       "runtime_adjudicate_mode": "auto",
@@ -203,7 +399,15 @@
         "coordinator_auditor_disagreement",
         "rejected_criticism"
       ],
-      "confirmed_settled_items": "spot_check_unless_the_current_decision_depends_on_them"
+      "confirmed_settled_items": "spot_check_unless_the_current_decision_depends_on_them",
+      "evidence_complete_input_required": true,
+      "incomplete_trigger_action": "defer_evidence_gap_to_next_critique_round",
+      "required_input_bindings": [
+        "canonical_finding",
+        "critic_records",
+        "source_evidence",
+        "decision_complete_question"
+      ]
     },
     "stopping": {
       "review_scope_event": "review_scope",
@@ -217,7 +421,7 @@
       "target_complete": "after at least two completed rounds, every changed claim id received subsequent review and no unresolved blocking or conclusion-critical item remains",
       "continue_after_target": "continue with routed critics when a changed claim id has not received subsequent review or a blocking or conclusion-critical item remains",
       "converged": "after continuing beyond the target, a completed round returns no factual correction and no unresolved blocking or conclusion-critical item",
-      "cap_with_unresolved": "stop at round 5 and record every unresolved item and every section changed after its last adversarial review",
+      "cap_with_unresolved": "stop at the audit's round cap (critique.round_cap in its policy snapshot) and record every unresolved item and every section changed after its last adversarial review",
       "aborted": "use only for a genuine blocker or failed run, never merely because the target of two rounds was reached"
     }
   },
@@ -231,7 +435,9 @@
     "default_targeted_adjudicator_sessions": 0,
     "default_substantive_non_coordinator_invocations": 11,
     "default_substantive_sessions_including_coordinator": 12,
-    "cold_start_provider_invocations_including_probe": 13,
+    "phase_1_capability_probe_sessions": 1,
+    "critique_capability_probe_sessions": 1,
+    "cold_start_provider_invocations_including_probes": 14,
     "cold_start_critique_provider_invocations": 7,
     "warm_probe_critique_provider_invocations": 6,
     "normal_worst_case_critique_provider_invocations": 19,
@@ -279,6 +485,62 @@
     },
     "publication": "atomic_manifest_last"
   },
+  "metadata": {
+    "schema_version": "2.1",
+    "canonical_journal": "run.events.jsonl",
+    "journal_contract": "append_only_hash_chained_and_locked",
+    "projections": [
+      "run.json",
+      "invocations.jsonl",
+      "run_metrics.json",
+      "RUN_METADATA.md"
+    ],
+    "projection_watermark_fields": [
+      "journal_seq",
+      "journal_hash"
+    ],
+    "invocation_lifecycle_events": [
+      "invocation_reserved",
+      "provider_request",
+      "inference_start",
+      "provider_response",
+      "invocation_terminal",
+      "cache_reuse"
+    ],
+    "round_states": [
+      "prepared",
+      "awaiting_authorization",
+      "ready",
+      "running",
+      "quorum_complete",
+      "integrated"
+    ],
+    "authorization_binding_fields": [
+      "purpose",
+      "round_plan_sha256",
+      "provider",
+      "model_route",
+      "data_classes",
+      "policy_sha256",
+      "expires_at"
+    ],
+    "honest_unknown_usage": true,
+    "requested_and_served_model_separate": true,
+    "elapsed_components": [
+      "audit_elapsed",
+      "provider_duration_sum",
+      "provider_active_interval_union",
+      "authorization_wait",
+      "paused",
+      "retry_backoff",
+      "idle",
+      "human_effort"
+    ],
+    "normalizers": [
+      "v2_to_v2_1",
+      "v1_to_v2_1"
+    ]
+  },
   "verification": {
     "required_runner": "scripts/run_verification.sh",
     "content_bound_manifest": "verification_manifest.json",
@@ -291,22 +553,35 @@
     ]
   },
   "publication": {
-    "primary_artifact_count": 5,
+    "primary_artifact_count": 6,
     "primary_artifacts": [
       "report/*.pdf",
       "claims_script.*",
       "run.json",
       "comment.json",
-      "finalization_receipt.json"
+      "finalization_receipt.json",
+      "document_build_manifest.json"
     ],
     "manifest": "release-manifest.json",
-    "total_file_count": 6
+    "total_file_count_without_docx": 7,
+    "total_file_count_with_docx": 8
   },
   "document": {
     "abstract_max_words": 250,
     "body_max_rendered_pages": 10,
     "executive_summary": false,
     "findings_table_location": "appendix_a",
-    "recommendations_section": false
+    "recommendations_section": false,
+    "draft_body_page_target": 9,
+    "canonical_cap_source": "pipeline-policy.snapshot.json",
+    "canonical_environment_override": "rejected",
+    "preview_flag": "--preview-max-pages",
+    "preview_directory": "report/previews",
+    "preview_is_releasable": false,
+    "build_transaction": "private_then_atomic_pair_promotion",
+    "manifest_schema": "schemas/v3/document-build-manifest.schema.json",
+    "manifest_version": 3,
+    "release_recounts_exact_pdf_at_each_boundary": true,
+    "failed_build_preserves_prior_passing_pair": true
   }
 }

@@ -35,30 +35,54 @@
     },
     "comment_id": {
       "description": "OPTIONAL. Identifier of the published comment itself once it has one (DOI or I4R number). Null until publication.",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "safe_to_publish": {
-      "description": "REQUIRED. Defaults to FALSE. Unlike run.json most of this file is intended to become public eventually, but not before the authors have been notified and any disclosure-flagged finding has been handled -- see findings[].disclosure_flag and governance.pii_present. Never set by a script.",
+      "description": "REQUIRED. Defaults to FALSE. Unlike run.json most of this file is intended to become public eventually. The flag governs external release of this internal metadata record only: it never gates drafting, staging or filing the comment. A disclosure-flagged finding is handled by reporting it in the comment, value-free, and filing the comment with I4R, which decides any notification -- see findings[].disclosure_flag and governance.pii_present. Never set by a script.",
       "type": "boolean",
       "default": false
     },
     "publication_redaction": {
       "description": "OPTIONAL but expected. What must go before release.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
         "fields_requiring_removal": {
-          "description": "JSON pointers to fields to drop or coarsen before release. Baseline set: /governance/pii_description (describes where the exposure is, which is a map to it), any findings[].claim carrying a quasi-identifier, every findings[]/locus (a deposit path can name a participant), /findings/*/verification/verifiers/*/verifier (person codes), /governance/ethics_identifier where the identifier is itself sensitive, and /author_response/note (private correspondence). Anything with disclosure_flag true must be reviewed individually, not by rule.",
+          "description": "JSON pointers to fields to drop or coarsen before release of this metadata record. Baseline set: every findings[]/locus (a deposit path can name a participant), /findings/*/verification/verifiers/*/verifier (person codes), /governance/ethics_identifier where the identifier is itself sensitive, and /author_response/note (private correspondence). /governance/pii_description is not in the baseline: it is value-free and states the same identifier kind, file, column and counts the comment itself reports, so it stays inspected by the release gates rather than masked. A findings[].claim never carries a quasi-identifier, so no claim is listed. Anything with disclosure_flag true is still read individually before a metadata extract is released; it is never withheld from the comment.",
           "type": "array",
-          "items": {"description": "A JSON pointer into this document.", "type": "string"}
+          "items": {
+            "description": "A JSON pointer into this document.",
+            "type": "string"
+          }
         },
         "safe_aggregates": {
           "description": "Fields cleared for release in aggregated form: everything under /bibliographic, /design, /sample (except any free text), /reported_statistics, /package, /rollup, /timing, and the impact / verification_tier / remedy_class distribution of /findings.",
           "type": "array",
-          "items": {"description": "A JSON pointer into this document.", "type": "string"}
+          "items": {
+            "description": "A JSON pointer into this document.",
+            "type": "string"
+          }
         },
-        "note": {"description": "One paragraph of guidance for whoever prepares the release extract.", "type": ["string", "null"]},
-        "cleared_by": {"description": "Who set safe_to_publish, and when.", "type": ["string", "null"]}
+        "note": {
+          "description": "One paragraph of guidance for whoever prepares the release extract.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cleared_by": {
+          "description": "Who set safe_to_publish, and when.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "enumeration_scheme": {
@@ -70,154 +94,833 @@
       "description": "REQUIRED. What was audited.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["doi", "journal", "year", "field"],
+      "required": [
+        "doi",
+        "journal",
+        "year",
+        "field"
+      ],
       "properties": {
-        "doi": {"description": "REQUIRED. DOI of the audited paper, bare form. Must equal run.json's paper_doi.", "type": ["string", "null"], "pattern": "^10\\.[0-9]{4,9}/[^\\s]+$"},
-        "title": {"description": "Full title as published.", "type": ["string", "null"]},
-        "journal": {"description": "REQUIRED. Journal name as published.", "type": ["string", "null"]},
-        "publisher": {"description": "Publisher, which predicts deposit policy better than the journal does.", "type": ["string", "null"]},
-        "year": {"description": "REQUIRED. Year of the version of record.", "type": ["integer", "null"], "minimum": 1900, "maximum": 2100},
-        "field": {"description": "REQUIRED. Broad field, e.g. 'economics', 'sport and exercise psychology', 'epidemiology'.", "type": ["string", "null"]},
-        "subfield": {"description": "Finer classification where it matters for pooling.", "type": ["string", "null"]},
-        "authors_n": {"description": "Number of authors. Cheap, and a plausible covariate for package quality.", "type": ["integer", "null"], "minimum": 1},
-        "corresponding_author_contactable": {"description": "Was a working contact address available at audit time? Bears directly on author_response.", "type": ["boolean", "null"]},
-        "open_access": {"description": "Is the article itself open access?", "type": ["boolean", "null"]},
-        "oa_route": {"description": "'gold', 'green', 'hybrid', 'bronze', 'closed', or null if unknown.", "type": ["string", "null"], "enum": ["gold", "green", "hybrid", "bronze", "closed", null]},
-        "preregistered": {"description": "Does the paper claim a preregistration? Claim, not verification -- whether the preregistration matches the paper is a FINDING, not a bibliographic fact.", "type": ["boolean", "null"]},
-        "preregistration_id": {"description": "Registry and identifier, e.g. 'OSF:ab12c' or 'NCT01234567'.", "type": ["string", "null"]},
-        "registered_report": {"description": "Was it published as a Registered Report (peer review before results)? A different animal from a preregistration.", "type": ["boolean", "null"]},
-        "replication_package_url": {"description": "Where the package lives.", "type": ["string", "null"]},
-        "package_repository": {"description": "Hosting platform: 'osf', 'dataverse', 'figshare', 'zenodo', 'github', 'journal_supplement', 'on_request', 'other'.", "type": ["string", "null"]}
+        "doi": {
+          "description": "REQUIRED. DOI of the audited paper, bare form. Must equal run.json's paper_doi.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^10\\.[0-9]{4,9}/[^\\s]+$"
+        },
+        "title": {
+          "description": "Full title as published.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "journal": {
+          "description": "REQUIRED. Journal name as published.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "publisher": {
+          "description": "Publisher, which predicts deposit policy better than the journal does.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "year": {
+          "description": "REQUIRED. Year of the version of record.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1900,
+          "maximum": 2100
+        },
+        "field": {
+          "description": "REQUIRED. Broad field, e.g. 'economics', 'sport and exercise psychology', 'epidemiology'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subfield": {
+          "description": "Finer classification where it matters for pooling.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authors_n": {
+          "description": "Number of authors. Cheap, and a plausible covariate for package quality.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "corresponding_author_contactable": {
+          "description": "Was a working contact address available at audit time? Bears directly on author_response.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "open_access": {
+          "description": "Is the article itself open access?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "oa_route": {
+          "description": "'gold', 'green', 'hybrid', 'bronze', 'closed', or null if unknown.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "gold",
+            "green",
+            "hybrid",
+            "bronze",
+            "closed",
+            null
+          ]
+        },
+        "preregistered": {
+          "description": "Does the paper claim a preregistration? Claim, not verification -- whether the preregistration matches the paper is a FINDING, not a bibliographic fact.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "preregistration_id": {
+          "description": "Registry and identifier, e.g. 'OSF:ab12c' or 'NCT01234567'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "registered_report": {
+          "description": "Was it published as a Registered Report (peer review before results)? A different animal from a preregistration.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "replication_package_url": {
+          "description": "Where the package lives.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "package_repository": {
+          "description": "Hosting platform: 'osf', 'dataverse', 'figshare', 'zenodo', 'github', 'journal_supplement', 'on_request', 'other'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "design": {
       "description": "REQUIRED. Study design of the audited paper, as the paper describes it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
-        "type": {"description": "REQUIRED. Primary design. Use 'other' plus type_other_description rather than forcing a fit.", "type": ["string", "null"], "enum": ["rct", "observational", "cross_sectional", "longitudinal", "n_of_1", "simulation", "other", null]},
-        "type_other_description": {"description": "Free text, required when type is 'other'.", "type": ["string", "null"]},
-        "secondary_types": {"description": "Additional design labels that also apply -- a longitudinal RCT is both, and forcing one label loses information the meta-paper will want back.", "type": "array", "items": {"description": "A value from the same enumeration as `type`.", "type": "string"}},
-        "randomised": {"description": "Was allocation randomised?", "type": ["boolean", "null"]},
-        "unit_of_randomisation": {"description": "Individual, cluster, session, etc. Null when not randomised.", "type": ["string", "null"]},
-        "blinded": {"description": "'none', 'single', 'double', 'triple', or null.", "type": ["string", "null"], "enum": ["none", "single", "double", "triple", null]},
-        "secondary_data": {"description": "Does the paper analyse data it did not collect? Changes what a replication package can even contain.", "type": ["boolean", "null"]},
-        "notes": {"description": "Free text.", "type": ["string", "null"]}
+        "type": {
+          "description": "REQUIRED. Primary design. Use 'other' plus type_other_description rather than forcing a fit.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "rct",
+            "observational",
+            "cross_sectional",
+            "longitudinal",
+            "n_of_1",
+            "simulation",
+            "other",
+            null
+          ]
+        },
+        "type_other_description": {
+          "description": "Free text, required when type is 'other'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secondary_types": {
+          "description": "Additional design labels that also apply -- a longitudinal RCT is both, and forcing one label loses information the meta-paper will want back.",
+          "type": "array",
+          "items": {
+            "description": "A value from the same enumeration as `type`.",
+            "type": "string"
+          }
+        },
+        "randomised": {
+          "description": "Was allocation randomised?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "unit_of_randomisation": {
+          "description": "Individual, cluster, session, etc. Null when not randomised.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blinded": {
+          "description": "'none', 'single', 'double', 'triple', or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "none",
+            "single",
+            "double",
+            "triple",
+            null
+          ]
+        },
+        "secondary_data": {
+          "description": "Does the paper analyse data it did not collect? Changes what a replication package can even contain.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "notes": {
+          "description": "Free text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "sample": {
       "description": "REQUIRED. Who or what was measured.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["n", "unit_of_observation", "human_subjects"],
+      "required": [
+        "n",
+        "unit_of_observation",
+        "human_subjects"
+      ],
       "properties": {
-        "n": {"description": "REQUIRED. Sample size as reported in the paper. Where the paper and the data disagree, this is the PAPER's number and the disagreement is a finding.", "type": ["integer", "null"], "minimum": 0},
-        "n_in_data": {"description": "Sample size actually present in the deposited data, or null if there is no data. Storing both makes the commonest single finding in the programme queryable rather than buried in prose.", "type": ["integer", "null"], "minimum": 0},
-        "n_analysed": {"description": "Analytic sample for the headline result, after exclusions.", "type": ["integer", "null"], "minimum": 0},
-        "unit_of_observation": {"description": "REQUIRED. What one row is: 'participant', 'participant-session', 'country-year', 'trial', 'firm', etc.", "type": ["string", "null"]},
-        "clusters_n": {"description": "Number of clusters where the design is clustered.", "type": ["integer", "null"], "minimum": 0},
-        "human_subjects": {"description": "REQUIRED. Does the study involve human participants? Gates the whole governance block.", "type": ["boolean", "null"]},
-        "minors": {"description": "Does the sample include anyone under 18? Null when human_subjects is false or when the paper does not say -- and 'the paper does not say' about minors is itself worth recording as null rather than false.", "type": ["boolean", "null"]},
-        "vulnerable_population": {"description": "Patients, prisoners, athletes under institutional authority, or another population with constrained consent.", "type": ["boolean", "null"]},
-        "population_description": {"description": "One line describing the sample.", "type": ["string", "null"]}
+        "n": {
+          "description": "REQUIRED. Sample size as reported in the paper. Where the paper and the data disagree, this is the PAPER's number and the disagreement is a finding.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "n_in_data": {
+          "description": "Sample size actually present in the deposited data, or null if there is no data. Storing both makes the commonest single finding in the programme queryable rather than buried in prose.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "n_analysed": {
+          "description": "Analytic sample for the headline result, after exclusions.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "unit_of_observation": {
+          "description": "REQUIRED. What one row is: 'participant', 'participant-session', 'country-year', 'trial', 'firm', etc.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clusters_n": {
+          "description": "Number of clusters where the design is clustered.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "human_subjects": {
+          "description": "REQUIRED. Does the study involve human participants? Gates the whole governance block.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "minors": {
+          "description": "Does the sample include anyone under 18? Null when human_subjects is false or when the paper does not say -- and 'the paper does not say' about minors is itself worth recording as null rather than false.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "vulnerable_population": {
+          "description": "Patients, prisoners, athletes under institutional authority, or another population with constrained consent.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "population_description": {
+          "description": "One line describing the sample.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "reported_statistics": {
       "description": "REQUIRED. What the paper reports statistically, taken from the paper itself. Nothing here is the audit's verdict; verdicts are findings.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["main_result_significant", "power_analysis_present", "effect_sizes_reported", "intervals_reported", "multiplicity_correction_present"],
+      "required": [
+        "main_result_significant",
+        "power_analysis_present",
+        "effect_sizes_reported",
+        "intervals_reported",
+        "multiplicity_correction_present"
+      ],
       "properties": {
-        "main_result_description": {"description": "One line naming the headline result, so a reader knows what main_result_significant refers to.", "type": ["string", "null"]},
-        "main_result_significant": {"description": "REQUIRED. Does the paper present its main result as statistically significant on its own terms? Null where the paper makes no significance claim (a Bayesian or purely descriptive paper) -- which is different from false.", "type": ["boolean", "null"]},
-        "main_result_p": {"description": "Reported p-value for the main result, as printed. Null for '<.001' style reporting; use main_result_p_reported_as for the literal string.", "type": ["number", "null"], "minimum": 0, "maximum": 1},
-        "main_result_p_reported_as": {"description": "The literal printed form, e.g. 'p < .001' or 'p = .049'. Preserves the boundary cases that a coerced number destroys.", "type": ["string", "null"]},
-        "inference_framework": {"description": "'frequentist', 'bayesian', 'both', 'descriptive', or 'other'.", "type": ["string", "null"], "enum": ["frequentist", "bayesian", "both", "descriptive", "other", null]},
-        "power_analysis_present": {"description": "REQUIRED. Does the paper report a power analysis of any kind, a priori or post hoc?", "type": ["boolean", "null"]},
-        "power_analysis_description": {"description": "Free text. What kind (a priori / sensitivity / post hoc), what target power and effect size, whether the achieved n meets the requirement, and whether a required n was rounded DOWN -- a required n of 140.11 is 141, and this is a recurring checklist item.", "type": ["string", "null"]},
-        "effect_sizes_reported": {"description": "REQUIRED. Are effect sizes reported for the main results?", "type": ["boolean", "null"]},
-        "effect_size_types": {"description": "Which ones, e.g. ['cohens_d', 'eta_squared', 'odds_ratio'].", "type": "array", "items": {"description": "An effect-size measure name.", "type": "string"}},
-        "intervals_reported": {"description": "REQUIRED. Are confidence or credible intervals reported for the main results?", "type": ["boolean", "null"]},
-        "interval_type": {"description": "'confidence', 'credible', 'both', 'none', or null.", "type": ["string", "null"], "enum": ["confidence", "credible", "both", "none", null]},
-        "tests_performed": {"description": "Number of statistical tests the audit can establish were PERFORMED, including those visible only in the code. Null when it cannot be established -- and it usually cannot without code.", "type": ["integer", "null"], "minimum": 0},
-        "tests_reported": {"description": "Number of tests REPORTED in the paper and its supplement. The gap between this and tests_performed is the selective-reporting measure; it is only meaningful when both are non-null, so never fill one by assuming the other.", "type": ["integer", "null"], "minimum": 0},
-        "tests_count_basis": {"description": "How the two counts were defined and counted. Without this the ratio is uninterpretable across audits: 'every call to a test function in the analysis scripts' and 'every hypothesis in the paper' are different denominators.", "type": ["string", "null"]},
-        "multiplicity_correction_present": {"description": "REQUIRED. Does the paper apply any correction for multiple comparisons?", "type": ["boolean", "null"]},
-        "multiplicity_correction_method": {"description": "'bonferroni', 'holm', 'benjamini_hochberg', 'permutation', 'none', 'other'.", "type": ["string", "null"]},
-        "multiplicity_correction_adequate": {"description": "Audit judgement: does the correction cover the family of tests actually performed? Distinct from its mere presence -- a Bonferroni over 3 of 40 tests is present and inadequate.", "type": ["boolean", "null"]},
-        "robustness_checks_claimed": {"description": "How many robustness, sensitivity or specification checks the paper claims to have run. This is the right comparator for tests_performed vs tests_reported: a paper reporting 12 of 41 tests looks selective until you see that 20 of the unreported ones are declared robustness checks, and a paper claiming 15 robustness checks of which 2 are in the code looks quite different again.", "type": ["integer", "null"], "minimum": 0},
-        "robustness_checks_in_code": {"description": "How many of those claimed checks are actually present in the deposited code. Null when there is no code to look in.", "type": ["integer", "null"], "minimum": 0},
-        "robustness_checks_reproduced": {"description": "How many the audit re-ran and reproduced. Null when none was attempted -- which is a fact about the audit, not about the paper.", "type": ["integer", "null"], "minimum": 0},
-        "robustness_checks_description": {"description": "Free text: what kind of checks, which ones could not be located, and whether any of them contradicts the headline result. A robustness check that reverses the main finding and goes unreported is a finding, not a statistic.", "type": ["string", "null"]}
+        "main_result_description": {
+          "description": "One line naming the headline result, so a reader knows what main_result_significant refers to.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "main_result_significant": {
+          "description": "REQUIRED. Does the paper present its main result as statistically significant on its own terms? Null where the paper makes no significance claim (a Bayesian or purely descriptive paper) -- which is different from false.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "main_result_p": {
+          "description": "Reported p-value for the main result, as printed. Null for '<.001' style reporting; use main_result_p_reported_as for the literal string.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "main_result_p_reported_as": {
+          "description": "The literal printed form, e.g. 'p < .001' or 'p = .049'. Preserves the boundary cases that a coerced number destroys.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inference_framework": {
+          "description": "'frequentist', 'bayesian', 'both', 'descriptive', or 'other'.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "frequentist",
+            "bayesian",
+            "both",
+            "descriptive",
+            "other",
+            null
+          ]
+        },
+        "power_analysis_present": {
+          "description": "REQUIRED. Does the paper report a power analysis of any kind, a priori or post hoc?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "power_analysis_description": {
+          "description": "Free text. What kind (a priori / sensitivity / post hoc), what target power and effect size, whether the achieved n meets the requirement, and whether a required n was rounded DOWN -- a required n of 140.11 is 141, and this is a recurring checklist item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "effect_sizes_reported": {
+          "description": "REQUIRED. Are effect sizes reported for the main results?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "effect_size_types": {
+          "description": "Which ones, e.g. ['cohens_d', 'eta_squared', 'odds_ratio'].",
+          "type": "array",
+          "items": {
+            "description": "An effect-size measure name.",
+            "type": "string"
+          }
+        },
+        "intervals_reported": {
+          "description": "REQUIRED. Are confidence or credible intervals reported for the main results?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interval_type": {
+          "description": "'confidence', 'credible', 'both', 'none', or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "confidence",
+            "credible",
+            "both",
+            "none",
+            null
+          ]
+        },
+        "tests_performed": {
+          "description": "Number of statistical tests the audit can establish were PERFORMED, including those visible only in the code. Null when it cannot be established -- and it usually cannot without code.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tests_reported": {
+          "description": "Number of tests REPORTED in the paper and its supplement. The gap between this and tests_performed is the selective-reporting measure; it is only meaningful when both are non-null, so never fill one by assuming the other.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tests_count_basis": {
+          "description": "How the two counts were defined and counted. Without this the ratio is uninterpretable across audits: 'every call to a test function in the analysis scripts' and 'every hypothesis in the paper' are different denominators.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "multiplicity_correction_present": {
+          "description": "REQUIRED. Does the paper apply any correction for multiple comparisons?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "multiplicity_correction_method": {
+          "description": "'bonferroni', 'holm', 'benjamini_hochberg', 'permutation', 'none', 'other'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "multiplicity_correction_adequate": {
+          "description": "Audit judgement: does the correction cover the family of tests actually performed? Distinct from its mere presence -- a Bonferroni over 3 of 40 tests is present and inadequate.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "robustness_checks_claimed": {
+          "description": "How many robustness, sensitivity or specification checks the paper claims to have run. This is the right comparator for tests_performed vs tests_reported: a paper reporting 12 of 41 tests looks selective until you see that 20 of the unreported ones are declared robustness checks, and a paper claiming 15 robustness checks of which 2 are in the code looks quite different again.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "robustness_checks_in_code": {
+          "description": "How many of those claimed checks are actually present in the deposited code. Null when there is no code to look in.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "robustness_checks_reproduced": {
+          "description": "How many the audit re-ran and reproduced. Null when none was attempted -- which is a fact about the audit, not about the paper.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "robustness_checks_description": {
+          "description": "Free text: what kind of checks, which ones could not be located, and whether any of them contradicts the headline result. A robustness check that reverses the main finding and goes unreported is a finding, not a statistic.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "package": {
       "description": "REQUIRED. What the replication package contains, as received. The package-level facts here should agree with run.json's package block; disagreement means the package changed under the audit.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["data_present", "code_present", "runs_as_shipped"],
+      "required": [
+        "data_present",
+        "code_present",
+        "runs_as_shipped"
+      ],
       "properties": {
-        "package_present": {"description": "Is there a replication package at all? False makes most of the rest null, and is a finding in its own right.", "type": ["boolean", "null"]},
-        "data_present": {"description": "REQUIRED. Is analysis data included? 'partial' cases (some studies deposited, some not) are recorded as true plus data_completeness.", "type": ["boolean", "null"]},
-        "data_completeness": {"description": "'complete', 'partial', 'synthetic_only', 'none'. A package with synthetic data only cannot reproduce a published number and must not be scored as having data.", "type": ["string", "null"], "enum": ["complete", "partial", "synthetic_only", "none", null]},
-        "data_completeness_note": {"description": "What is missing, specifically.", "type": ["string", "null"]},
-        "code_present": {"description": "REQUIRED. Is analysis code included?", "type": ["boolean", "null"]},
-        "code_languages": {"description": "Languages found, e.g. ['R', 'Stata'].", "type": "array", "items": {"description": "A language name.", "type": "string"}},
-        "runs_as_shipped": {"description": "REQUIRED. Did the code run to completion without modification? 'partial' = some entry points ran. 'not_attempted' = nobody tried, which is a fact about the audit and must not be recorded as 'no'.", "type": ["string", "null"], "enum": ["yes", "no", "partial", "not_attempted", null]},
-        "runs_as_shipped_note": {"description": "What had to change to make it run: paths, missing packages, a hard-coded fetch, a locale assumption.", "type": ["string", "null"]},
-        "reproduces_headline": {"description": "Did the headline published number come back out? 'exact', 'within_rounding', 'qualitatively', 'no', 'not_attempted'. Separate from runs_as_shipped: code can run cleanly and produce different numbers.", "type": ["string", "null"], "enum": ["exact", "within_rounding", "qualitatively", "no", "not_attempted", null]},
-        "readme": {"description": "Is there a README or equivalent orientation document?", "type": ["boolean", "null"]},
-        "codebook": {"description": "Is there a codebook or data dictionary defining the variables?", "type": ["boolean", "null"]},
-        "seed": {"description": "Is a random seed set where results depend on one? Null when nothing is stochastic. Note that a seed can be set and results still vary if it permutes an already-nondeterministic ordering.", "type": ["boolean", "null"]},
-        "session_info": {"description": "Is the computational environment captured (sessionInfo(), renv.lock, requirements.txt, a container)?", "type": ["boolean", "null"]},
-        "session_info_form": {"description": "Which form, e.g. 'sessionInfo() text', 'renv.lock', 'Dockerfile', 'none'.", "type": ["string", "null"]},
-        "licence": {"description": "Licence as stated in the package, e.g. 'CC0-1.0', 'CC-BY-4.0', 'MIT', or null when none is stated. Null and 'none stated' are the same thing here and both mean the deposit is not legally reusable.", "type": ["string", "null"]},
-        "licence_spdx": {"description": "SPDX identifier where the licence maps to one.", "type": ["string", "null"]},
-        "das_present": {"description": "Does the paper carry a data availability statement?", "type": ["boolean", "null"]},
-        "das_text": {"description": "The statement, verbatim. Verbatim because the mismatch is usually in its exact wording.", "type": ["string", "null"]},
-        "das_matches_deposit": {"description": "Does the data availability statement describe what is actually deposited? False covers both directions: a statement promising more than exists, and one that undersells a complete deposit. Null when there is no statement to compare.", "type": ["boolean", "null"]},
-        "das_mismatch_description": {"description": "REQUIRED in practice when das_matches_deposit is false: what the statement claims, and what is there.", "type": ["string", "null"]},
-        "file_count": {"description": "Regular files in the package as received.", "type": ["integer", "null"], "minimum": 0},
-        "total_bytes": {"description": "Total size in bytes.", "type": ["integer", "null"], "minimum": 0},
-        "formats": {"description": "Extensions present, lower-cased without the dot.", "type": "array", "items": {"description": "A file extension.", "type": "string"}},
-        "proprietary_format_dependency": {"description": "Does reuse require proprietary software (a .sav, .dta or .mat with no open export)? A barrier to verification that is invisible in a file count.", "type": ["boolean", "null"]}
+        "package_present": {
+          "description": "Is there a replication package at all? False makes most of the rest null, and is a finding in its own right.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "data_present": {
+          "description": "REQUIRED. Is analysis data included? 'partial' cases (some studies deposited, some not) are recorded as true plus data_completeness.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "data_completeness": {
+          "description": "'complete', 'partial', 'synthetic_only', 'none'. A package with synthetic data only cannot reproduce a published number and must not be scored as having data.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "complete",
+            "partial",
+            "synthetic_only",
+            "none",
+            null
+          ]
+        },
+        "data_completeness_note": {
+          "description": "What is missing, specifically.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code_present": {
+          "description": "REQUIRED. Is analysis code included?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "code_languages": {
+          "description": "Languages found, e.g. ['R', 'Stata'].",
+          "type": "array",
+          "items": {
+            "description": "A language name.",
+            "type": "string"
+          }
+        },
+        "runs_as_shipped": {
+          "description": "REQUIRED. Did the code run to completion without modification? 'partial' = some entry points ran. 'not_attempted' = nobody tried, which is a fact about the audit and must not be recorded as 'no'.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "yes",
+            "no",
+            "partial",
+            "not_attempted",
+            null
+          ]
+        },
+        "runs_as_shipped_note": {
+          "description": "What had to change to make it run: paths, missing packages, a hard-coded fetch, a locale assumption.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reproduces_headline": {
+          "description": "Did the headline published number come back out? 'exact', 'within_rounding', 'qualitatively', 'no', 'not_attempted'. Separate from runs_as_shipped: code can run cleanly and produce different numbers.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "exact",
+            "within_rounding",
+            "qualitatively",
+            "no",
+            "not_attempted",
+            null
+          ]
+        },
+        "readme": {
+          "description": "Is there a README or equivalent orientation document?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "codebook": {
+          "description": "Is there a codebook or data dictionary defining the variables?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "seed": {
+          "description": "Is a random seed set where results depend on one? Null when nothing is stochastic. Note that a seed can be set and results still vary if it permutes an already-nondeterministic ordering.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "session_info": {
+          "description": "Is the computational environment captured (sessionInfo(), renv.lock, requirements.txt, a container)?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "session_info_form": {
+          "description": "Which form, e.g. 'sessionInfo() text', 'renv.lock', 'Dockerfile', 'none'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "licence": {
+          "description": "Licence as stated in the package, e.g. 'CC0-1.0', 'CC-BY-4.0', 'MIT', or null when none is stated. Null and 'none stated' are the same thing here and both mean the deposit is not legally reusable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "licence_spdx": {
+          "description": "SPDX identifier where the licence maps to one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "das_present": {
+          "description": "Does the paper carry a data availability statement?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "das_text": {
+          "description": "The statement, verbatim. Verbatim because the mismatch is usually in its exact wording.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "das_matches_deposit": {
+          "description": "Does the data availability statement describe what is actually deposited? False covers both directions: a statement promising more than exists, and one that undersells a complete deposit. Null when there is no statement to compare.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "das_mismatch_description": {
+          "description": "REQUIRED in practice when das_matches_deposit is false: what the statement claims, and what is there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file_count": {
+          "description": "Regular files in the package as received.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_bytes": {
+          "description": "Total size in bytes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "formats": {
+          "description": "Extensions present, lower-cased without the dot.",
+          "type": "array",
+          "items": {
+            "description": "A file extension.",
+            "type": "string"
+          }
+        },
+        "proprietary_format_dependency": {
+          "description": "Does reuse require proprietary software (a .sav, .dta or .mat with no open export)? A barrier to verification that is invisible in a file count.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
       }
     },
     "governance": {
       "description": "REQUIRED. Ethics, funding, conflicts, consent and personal data. Recorded for every paper, including those with no human subjects, so that 'not applicable' is distinguishable from 'not checked'.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["coi_statement_present", "funding_statement_present", "pii_present"],
+      "required": [
+        "coi_statement_present",
+        "funding_statement_present",
+        "pii_present"
+      ],
       "properties": {
-        "coi_statement_present": {"description": "REQUIRED. Is there a conflict-of-interest statement?", "type": ["boolean", "null"]},
-        "coi_declared": {"description": "Does it declare an actual conflict, as opposed to declaring none?", "type": ["boolean", "null"]},
-        "coi_text": {"description": "The statement, verbatim.", "type": ["string", "null"]},
-        "funding_statement_present": {"description": "REQUIRED. Is there a funding statement?", "type": ["boolean", "null"]},
-        "funders": {"description": "Named funders.", "type": "array", "items": {"description": "A funder name.", "type": "string"}},
-        "funding_none_declared": {"description": "Does the statement affirmatively declare no funding? Different from having no statement.", "type": ["boolean", "null"]},
-        "ethics_identifier": {"description": "Ethics approval reference as printed, or null if none is given. A paper with human subjects and no identifier is a finding.", "type": ["string", "null"]},
-        "ethics_body": {"description": "Approving committee or board.", "type": ["string", "null"]},
-        "consent_covers_republication": {"description": "Does the consent, as described, cover republication of the data in the deposit? Null when it cannot be determined from the paper -- which is the usual answer, and recording that honestly is the point. False means the deposit appears to exceed what participants agreed to.", "type": ["boolean", "null"]},
-        "consent_evidence": {"description": "What the paper or package actually says about consent and data sharing, quoted or cited.", "type": ["string", "null"]},
-        "pii_present": {"description": "REQUIRED. Does the deposited package contain personal or re-identifying data? Includes quasi-identifiers -- an identifier beside a date or a clock is the recurring case. True obliges responsible disclosure before the comment circulates.", "type": ["boolean", "null"]},
-        "pii_description": {"description": "What and where, at the coarsest granularity that is still actionable for the authors. Do NOT reproduce an identifier here: this file goes in the registry, and the audit's own bright-line rule applies to its own artefacts.", "type": ["string", "null"]},
-        "pii_detector_scope": {"description": "What the PII scan actually covered: which files, which encodings, which identifier forms, and which negative controls were tested. A clean scan is worthless without its scope -- six false cleans across three audits, every one with a passing positive control.", "type": ["string", "null"]},
-        "anonymisation_claimed": {"description": "Does the paper or deposit claim the data are anonymised? The contradiction only exists if the claim was made; check before asserting one.", "type": ["boolean", "null"]},
-        "disclosure_notified": {"description": "Were authors and journal notified before publication, where the comment makes sensitive fields easier to locate?", "type": ["boolean", "null"]},
-        "disclosure_notified_at": {"description": "When.", "type": ["string", "null"], "format": "date-time"}
+        "coi_statement_present": {
+          "description": "REQUIRED. Is there a conflict-of-interest statement?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "coi_declared": {
+          "description": "Does it declare an actual conflict, as opposed to declaring none?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "coi_text": {
+          "description": "The statement, verbatim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "funding_statement_present": {
+          "description": "REQUIRED. Is there a funding statement?",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "funders": {
+          "description": "Named funders.",
+          "type": "array",
+          "items": {
+            "description": "A funder name.",
+            "type": "string"
+          }
+        },
+        "funding_none_declared": {
+          "description": "Does the statement affirmatively declare no funding? Different from having no statement.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ethics_identifier": {
+          "description": "Ethics approval reference as printed, or null if none is given. A paper with human subjects and no identifier is a finding.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ethics_body": {
+          "description": "Approving committee or board.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consent_covers_republication": {
+          "description": "Does the consent, as described, cover republication of the data in the deposit? Null when it cannot be determined from the paper -- which is the usual answer, and recording that honestly is the point. False means the deposit appears to exceed what participants agreed to.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "consent_evidence": {
+          "description": "What the paper or package actually says about consent and data sharing, quoted or cited.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pii_present": {
+          "description": "REQUIRED. Does the deposited package contain personal or re-identifying data? Includes quasi-identifiers -- an identifier beside a date or a clock is the recurring case. True obliges at least one disclosure-flagged finding in the comment, a non-empty disclosure.flags and a non-empty disclosure.statement (finalize_run.sh refuses otherwise for audits initialised at skill 2.6.9 or later, or reopened on it, and warns for older ones). It never pauses or delays drafting, critique or filing.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pii_description": {
+          "description": "What and where, value-free: the kind of identifier, the package-relative file and column (or the directory and a file count when file names are themselves participant codes), and the rows or participants affected. This matches the comment's disclosure-flagged finding. Do NOT reproduce an identifier or any identifying value here: this file goes in the registry, and the audit's own bright-line rule applies to its own artefacts.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pii_detector_scope": {
+          "description": "What the PII scan actually covered: which files, which encodings, which identifier forms, and which negative controls were tested. A clean scan is worthless without its scope -- six false cleans across three audits, every one with a passing positive control.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "anonymisation_claimed": {
+          "description": "Does the paper or deposit claim the data are anonymised? The contradiction only exists if the claim was made; check before asserting one. Personal data in the deposit is a finding either way: the claim decides only whether there is also a text-versus-deposit contradiction.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "disclosure_notified": {
+          "description": "Has I4R notified the authors or the journal? The audit never notifies anyone directly: the comment, filed with I4R, is the disclosure route and I4R decides any notification. A false or null value never blocks, pauses or delays the audit.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "disclosure_notified_at": {
+          "description": "When.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
       }
     },
     "findings": {
       "description": "REQUIRED (may be empty; an audit that finds nothing is a result). One entry per finding in the published comment, in comment order. Every entry must be traceable back to an auditor report and an adjudication entry -- findings vanish at synthesis, and this array is the machine-readable half of LEDGER.md.",
       "type": "array",
-      "items": {"$ref": "#/$defs/finding"}
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
     },
     "disclosure": {
       "description": "REQUIRED. FIELD 3 of SCHEME.md: privacy, consent, identifiability and licence defects in the deposited materials or the article. ORTHOGONAL to impact and verification_tier, and may co-occur with ANY impact value including 'none' -- a package can be perfectly reproducible and still expose participants, which is the entire reason this is a separate field. A disclosure defect never raises impact, and impact 'none' never suppresses a disclosure flag (Rule 5). It is also the only field here whose defect can, on its own, be consistent with removal of an article.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["flags", "urgency"],
+      "required": [
+        "flags",
+        "urgency"
+      ],
       "properties": {
         "flags": {
           "description": "REQUIRED. Zero or more disclosure defects. Empty array means none found, which is a claim about what was checked -- record the scan's scope in governance.pii_detector_scope, because a clean scan whose scope was wrong is the failure this toolkit has hit six times.",
@@ -225,321 +928,1151 @@
           "items": {
             "description": "identifiability_direct: direct identifiers in the deposit -- names, addresses, IDs, contact details, faces, unredacted free text. identifiability_indirect: re-identification feasible by combining quasi-identifiers, small cells, geography or dates, including unsuppressed low-count cells. consent_scope_exceeded: deposit or analysis goes beyond the recorded consent, including open deposit where consent specified restricted access, or use after withdrawal. ethics_approval_absent: no IRB/IACUC/REB record where the research type requires one, or approval does not cover the deposited use -- this records an ABSENT RECORD and alleges nothing about anyone evading review (Rule 3). licence_absent: no licence stated for data or code, so reuse rights are undefined. licence_incompatible: stated licence conflicts with an upstream source, a DUA, or the repository. third_party_rights: redistribution of material the depositors do not have the right to redistribute. special_category_data: health, genetic, biometric, sexual-orientation, immigration, criminal-justice data, data on minors, or data on identifiable protected groups, exposed without adequate control.",
             "type": "string",
-            "enum": ["identifiability_direct", "identifiability_indirect", "consent_scope_exceeded", "ethics_approval_absent", "licence_absent", "licence_incompatible", "third_party_rights", "special_category_data"]
+            "enum": [
+              "identifiability_direct",
+              "identifiability_indirect",
+              "consent_scope_exceeded",
+              "ethics_approval_absent",
+              "licence_absent",
+              "licence_incompatible",
+              "third_party_rights",
+              "special_category_data"
+            ]
           }
         },
         "urgency": {
-          "description": "REQUIRED, exactly one. 'none': no disclosure defect found. 'routine': the defect is formal with no live exposure, typical of licence_absent -- normal queue. 'prompt': real but not immediate exposure risk, where re-identification requires effort or auxiliary data -- expedite. 'immediate': identifiable individuals are exposed in a live public deposit -- ESCALATE TO THE COORDINATOR BEFORE THE COMMENT IS DRAFTED OR CIRCULATED, and do not publish a worked example that itself demonstrates the re-identification route. 'immediate' routes on its own, outside the impact queue.",
+          "description": "REQUIRED, exactly one. 'none': no disclosure defect found. 'routine': the defect is formal with no live exposure, typical of licence_absent -- normal queue. 'prompt': real but not immediate exposure risk, where re-identification requires effort or auxiliary data -- expedite. 'immediate': identifiable individuals are exposed in a live public deposit -- REPORTED IN THE COMMENT as a disclosure-flagged finding (identifier kind, file and column, counts, verified remedy); filing the comment with I4R is the escalation, and drafting is never paused. Never publish an identifying value, or a procedure or worked example that demonstrates re-identification. 'immediate' is flagged on its own, independent of impact, and never held back from the comment.",
           "type": "string",
-          "enum": ["none", "routine", "prompt", "immediate"]
+          "enum": [
+            "none",
+            "routine",
+            "prompt",
+            "immediate"
+          ]
         },
-        "statement": {"description": "What the defect is, at the coarsest granularity that is still actionable for the authors. Never reproduce an identifier here.", "type": ["string", "null"]},
-        "consistent_with": {"description": "DESCRIPTIVE ONLY, as elsewhere: which editorial action this is consistent with under published standards. Not a recommendation.", "type": ["string", "null"]},
-        "findings_flagged": {"description": "DERIVED at finalize. Ids of the findings carrying disclosure_flag true.", "type": ["array", "null"], "items": {"description": "A finding id.", "type": "string"}}
+        "statement": {
+          "description": "What the defect is, value-free: the kind of identifier, the package-relative file and column (or the directory and a file count when file names are themselves participant codes), the rows or participants affected, and the verified remedy. finalize_run.sh requires it when governance.pii_present is true; it matches the comment's disclosure-flagged finding. Never reproduce an identifier or any identifying value here, and never describe how a person could be re-identified.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consistent_with": {
+          "description": "DESCRIPTIVE ONLY, as elsewhere: which editorial action this is consistent with under published standards. Not a recommendation.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "findings_flagged": {
+          "description": "DERIVED at finalize. Ids of the findings carrying disclosure_flag true.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "A finding id.",
+            "type": "string"
+          }
+        }
       }
     },
     "assertions_withheld": {
       "description": "OPTIONAL but written by default. Makes Rule 3 machine-visible rather than a convention people remember: the programme reports only what the artifacts show and makes NO statement about intent, motive, knowledge, competence or good faith. This is a correctness constraint, not politeness -- intent is not observable from a replication package, and the literature shows that people who infer it from artifacts misclassify in both directions. The programme is not a finding body.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
-        "intent": {"description": "Always 'not_assessed'.", "type": ["string", "null"], "enum": ["not_assessed", null]},
-        "misconduct": {"description": "Always 'not_assessed'.", "type": ["string", "null"], "enum": ["not_assessed", null]},
-        "note": {"description": "The standing disclaimer, carried with the record so it travels with any extract.", "type": ["string", "null"]}
+        "intent": {
+          "description": "Always 'not_assessed'.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "not_assessed",
+            null
+          ]
+        },
+        "misconduct": {
+          "description": "Always 'not_assessed'.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "not_assessed",
+            null
+          ]
+        },
+        "note": {
+          "description": "The standing disclaimer, carried with the record so it travels with any extract.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "rollup": {
       "description": "REQUIRED. Comment-level summary, entirely DERIVED from findings[] by finalize_run.sh apart from `reproduces` and `credits`. Rule 1: a comment takes the MAXIMUM impact across its findings, because editorial correspondence is determined by the worst surviving defect. Three constraints on that maximum, all enforced here. (1) The roll-up never deletes anything: impact_max sits beside the full findings array, because multiple findings cannot simply be added together and the multiplicity must survive. (2) The maximum does NOT inherit a tier -- tier_of_max is the tier of the finding that set the maximum, not the worst tier in the comment; a conclusion_contradicted established at T1 is not a two-week job because some T4 finding sits below it. (3) No aggregation upward by accumulation: multiple value_wrong findings never sum to conclusion_narrowed. If the errors jointly undermine a claim, that is a NEW finding with its own evidence and its own tier.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["impact_max", "findings_total", "count_by_remedy_class"],
+      "required": [
+        "impact_max",
+        "findings_total",
+        "count_by_remedy_class"
+      ],
       "properties": {
-        "impact_max": {"$ref": "#/$defs/impact", "description": "REQUIRED, DERIVED. The highest-ranked impact across findings[]. Null only when there are no findings."},
-        "impact_max_rank": {"$ref": "#/$defs/impact_rank", "description": "DERIVED. Its rank."},
-        "impact_max_finding": {"description": "DERIVED. Id of the finding that set the maximum, so the claim can be read without scanning the array.", "type": ["string", "null"]},
-        "tier_of_max": {"$ref": "#/$defs/verification_tier", "description": "DERIVED. Verification tier OF THE FINDING THAT SET THE MAXIMUM -- not the maximum tier in the comment."},
+        "impact_max": {
+          "$ref": "#/$defs/impact",
+          "description": "REQUIRED, DERIVED. The highest-ranked impact across findings[]. Null only when there are no findings."
+        },
+        "impact_max_rank": {
+          "$ref": "#/$defs/impact_rank",
+          "description": "DERIVED. Its rank."
+        },
+        "impact_max_finding": {
+          "description": "DERIVED. Id of the finding that set the maximum, so the claim can be read without scanning the array.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier_of_max": {
+          "$ref": "#/$defs/verification_tier",
+          "description": "DERIVED. Verification tier OF THE FINDING THAT SET THE MAXIMUM -- not the maximum tier in the comment."
+        },
         "tier_distribution": {
           "description": "DERIVED. How many findings sit at each tier. The workload shape of the comment, which the maximum alone conceals.",
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
           "properties": {
-            "T1": {"description": "Findings at T1.", "type": ["integer", "null"], "minimum": 0},
-            "T2": {"description": "Findings at T2.", "type": ["integer", "null"], "minimum": 0},
-            "T3": {"description": "Findings at T3.", "type": ["integer", "null"], "minimum": 0},
-            "T4": {"description": "Findings at T4.", "type": ["integer", "null"], "minimum": 0},
-            "T5": {"description": "Findings at T5.", "type": ["integer", "null"], "minimum": 0}
+            "T1": {
+              "description": "Findings at T1.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "T2": {
+              "description": "Findings at T2.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "T3": {
+              "description": "Findings at T3.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "T4": {
+              "description": "Findings at T4.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "T5": {
+              "description": "Findings at T5.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
           }
         },
-        "total_expected_verifier_hours": {"description": "DERIVED. Sum of expected_verifier_hours across findings. A planning figure built from design-time priors, not a measurement.", "type": ["number", "null"], "minimum": 0},
-        "total_actual_verifier_hours": {"description": "DERIVED. Sum of actual_verifier_hours where reported. Compare with the expected total to recalibrate the tier ranges.", "type": ["number", "null"], "minimum": 0},
-        "residual_unverifiable": {"description": "DERIVED, Rule 2d. True when the comment contains at least one 'unverifiable' finding AND impact_max is something higher. Without it, a comment reading 'conclusion_contradicted' would falsely imply the rest of the package was checked and sound. The flag says: this is the worst thing we found, AND there is territory we could not enter.", "type": ["boolean", "null"]},
-        "claims_affected": {"description": "DERIVED from distinct claim_ref values. Three separate conclusion_narrowed findings against three independent claims is materially different from one, and the maximum alone conceals that. Null when no finding carries a claim_ref.", "type": ["integer", "null"], "minimum": 0},
-        "paper_only": {"description": "DERIVED, Rule 1.5. True only if EVERY finding is paper_only. The scheduling advantage and the non-contestability both evaporate as soon as one finding needs the deposit, so this is a conjunction and never a majority.", "type": ["boolean", "null"]},
-        "n_paper_only": {"description": "DERIVED. How many findings are paper_only -- these are verified first, ahead of all others, regardless of tier or impact.", "type": ["integer", "null"], "minimum": 0},
-        "overall_rationale": {"description": "One or two lines on the comment as a whole. Not a severity judgement -- the scheme has no severity field, and the maximum is computed, not decided.", "type": ["string", "null"]},
-        "findings_total": {"description": "REQUIRED, DERIVED. findings.length.", "type": "integer", "minimum": 0},
+        "total_expected_verifier_hours": {
+          "description": "DERIVED. Sum of expected_verifier_hours across findings. A planning figure built from design-time priors, not a measurement.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_actual_verifier_hours": {
+          "description": "DERIVED. Sum of actual_verifier_hours where reported. Compare with the expected total to recalibrate the tier ranges.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "residual_unverifiable": {
+          "description": "DERIVED, Rule 2d. True when the comment contains at least one 'unverifiable' finding AND impact_max is something higher. Without it, a comment reading 'conclusion_contradicted' would falsely imply the rest of the package was checked and sound. The flag says: this is the worst thing we found, AND there is territory we could not enter.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "claims_affected": {
+          "description": "DERIVED from distinct claim_ref values. Three separate conclusion_narrowed findings against three independent claims is materially different from one, and the maximum alone conceals that. Null when no finding carries a claim_ref.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "paper_only": {
+          "description": "DERIVED, Rule 1.5. True only if EVERY finding is paper_only. The scheduling advantage and the non-contestability both evaporate as soon as one finding needs the deposit, so this is a conjunction and never a majority.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "n_paper_only": {
+          "description": "DERIVED. How many findings are paper_only -- these are verified first, ahead of all others, regardless of tier or impact.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "overall_rationale": {
+          "description": "One or two lines on the comment as a whole. Not a severity judgement -- the scheme has no severity field, and the maximum is computed, not decided.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "findings_total": {
+          "description": "REQUIRED, DERIVED. findings.length.",
+          "type": "integer",
+          "minimum": 0
+        },
         "count_by_remedy_class": {
           "description": "REQUIRED, DERIVED. Findings per remedy class. This is the distribution the programme most wants: most defects in published work are one line of code or one number, and saying so with counts is the argument for auditing at all.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["one_line_code", "one_number", "reanalysis", "not_fixable"],
+          "required": [
+            "one_line_code",
+            "one_number",
+            "reanalysis",
+            "not_fixable"
+          ],
           "properties": {
-            "one_line_code": {"description": "Fixable by a one-line code change.", "type": "integer", "minimum": 0},
-            "one_number": {"description": "Fixable by correcting a single reported number.", "type": "integer", "minimum": 0},
-            "reanalysis": {"description": "Requires re-running or redesigning an analysis.", "type": "integer", "minimum": 0},
-            "not_fixable": {"description": "Cannot be fixed with the data that exist.", "type": "integer", "minimum": 0}
+            "one_line_code": {
+              "description": "Fixable by a one-line code change.",
+              "type": "integer",
+              "minimum": 0
+            },
+            "one_number": {
+              "description": "Fixable by correcting a single reported number.",
+              "type": "integer",
+              "minimum": 0
+            },
+            "reanalysis": {
+              "description": "Requires re-running or redesigning an analysis.",
+              "type": "integer",
+              "minimum": 0
+            },
+            "not_fixable": {
+              "description": "Cannot be fixed with the data that exist.",
+              "type": "integer",
+              "minimum": 0
+            },
+            "disclose_in_paper": {
+              "description": "Fixable by disclosing something the paper omits.",
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
-        "count_by_impact": {"description": "DERIVED. Map of impact value to count.", "type": ["object", "null"]},
-        "n_changing_conclusions": {"description": "DERIVED. Findings with changes_conclusion true. The single number an editor reads first.", "type": ["integer", "null"], "minimum": 0},
-        "n_disclosure_flagged": {"description": "DERIVED. Findings with disclosure_flag true.", "type": ["integer", "null"], "minimum": 0},
-        "n_multiply_corroborated": {"description": "DERIVED. Findings that two or more roles reached INDEPENDENTLY (provenance.independent_corroboration_count >= 2). The programme's strongest confidence signal, as one number.", "type": ["integer", "null"], "minimum": 0},
-        "max_independent_corroboration": {"description": "DERIVED. The highest independent_corroboration_count across the findings -- the best-corroborated thing in the comment.", "type": ["integer", "null"], "minimum": 0},
-        "n_human_verified": {"description": "DERIVED. Findings with at least one human verifier recorded.", "type": ["integer", "null"], "minimum": 0},
-        "n_unverified": {"description": "DERIVED. Findings that shipped with no human verification at all. Read alongside n_changing_conclusions: an unverified finding that changes a conclusion is the one to look at first.", "type": ["integer", "null"], "minimum": 0},
-        "reproduces": {"description": "Overall reproduction verdict for the paper's main results: 'full', 'partial', 'none', 'not_attempted'. Reported first in the comment because it is usually the dominant result.", "type": ["string", "null"], "enum": ["full", "partial", "none", "not_attempted", null]},
-        "hypotheses_refuted_n": {"description": "How many hypotheses the audit tested and REFUTED -- things we suspected and cleared the paper of. Reported as prominently as the findings; a comment with a high count is a more credible comment, and nothing else in the registry records it.", "type": ["integer", "null"], "minimum": 0},
-        "credits": {"description": "What the authors did well, specifically. Recorded because the protocol requires it in the comment and because a registry of only defects misrepresents the corpus.", "type": "array", "items": {"description": "One thing the paper or package did well.", "type": "string"}}
+        "count_by_impact": {
+          "description": "DERIVED. Map of impact value to count.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "n_changing_conclusions": {
+          "description": "DERIVED. Findings with changes_conclusion true. The single number an editor reads first.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "n_disclosure_flagged": {
+          "description": "DERIVED. Findings with disclosure_flag true.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "n_multiply_corroborated": {
+          "description": "DERIVED. Findings that two or more roles reached INDEPENDENTLY (provenance.independent_corroboration_count >= 2). The programme's strongest confidence signal, as one number.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "max_independent_corroboration": {
+          "description": "DERIVED. The highest independent_corroboration_count across the findings -- the best-corroborated thing in the comment.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "n_human_verified": {
+          "description": "DERIVED. Findings with at least one human verifier recorded.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "n_unverified": {
+          "description": "DERIVED. Findings that shipped with no human verification at all. Read alongside n_changing_conclusions: an unverified finding that changes a conclusion is the one to look at first.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reproduces": {
+          "description": "Overall reproduction verdict for the paper's main results: 'full', 'partial', 'none', 'not_attempted'. Reported first in the comment because it is usually the dominant result.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "full",
+            "partial",
+            "none",
+            "not_attempted",
+            null
+          ]
+        },
+        "hypotheses_refuted_n": {
+          "description": "How many hypotheses the audit tested and REFUTED -- things we suspected and cleared the paper of. Reported as prominently as the findings; a comment with a high count is a more credible comment, and nothing else in the registry records it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "credits": {
+          "description": "What the authors did well, specifically. Recorded because the protocol requires it in the comment and because a registry of only defects misrepresents the corpus.",
+          "type": "array",
+          "items": {
+            "description": "One thing the paper or package did well.",
+            "type": "string"
+          }
+        }
       }
     },
     "timing": {
       "description": "REQUIRED. Dates. days_elapsed is the field the meta-paper will plot against everything else.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["publication_date", "audit_date"],
+      "required": [
+        "publication_date",
+        "audit_date"
+      ],
       "properties": {
-        "publication_date": {"description": "REQUIRED. Date of the version of record (ISO 8601 date). Where only a year is known, use the first of the year and say so in notes -- do not leave it null, and do not pretend to a day.", "type": ["string", "null"], "format": "date"},
-        "online_first_date": {"description": "Online-first date where it differs materially from the version of record.", "type": ["string", "null"], "format": "date"},
-        "package_deposit_date": {"description": "When the replication package was deposited or last modified, if the repository reports it. A package modified after publication is worth knowing about before comparing it to the paper.", "type": ["string", "null"], "format": "date"},
-        "audit_start_date": {"description": "Date the audit began; equals run.json started_at's date.", "type": ["string", "null"], "format": "date"},
-        "audit_date": {"description": "REQUIRED. Date the audit completed; equals run.json ended_at's date. This is the reference date for days_elapsed.", "type": ["string", "null"], "format": "date"},
-        "days_elapsed": {"description": "DERIVED. audit_date minus publication_date, in days. Negative would mean auditing before publication and is an error.", "type": ["integer", "null"]},
-        "notes": {"description": "Free text, e.g. 'publication_date is year-only, coerced to 1 January'.", "type": ["string", "null"]}
+        "publication_date": {
+          "description": "REQUIRED. Date of the version of record (ISO 8601 date). Where only a year is known, use the first of the year and say so in notes -- do not leave it null, and do not pretend to a day.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "online_first_date": {
+          "description": "Online-first date where it differs materially from the version of record.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "package_deposit_date": {
+          "description": "When the replication package was deposited or last modified, if the repository reports it. A package modified after publication is worth knowing about before comparing it to the paper.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "audit_start_date": {
+          "description": "Date the audit began; equals run.json started_at's date.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "audit_date": {
+          "description": "REQUIRED. Date the audit completed; equals run.json ended_at's date. This is the reference date for days_elapsed.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "days_elapsed": {
+          "description": "DERIVED. audit_date minus publication_date, in days. Negative would mean auditing before publication and is an error.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "notes": {
+          "description": "Free text, e.g. 'publication_date is year-only, coerced to 1 January'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "author_response": {
       "description": "REQUIRED. What the authors did. Structured rather than free text because the meta-paper reports time-to-response and outcome rates, which means every transition needs its own date -- a status with no date can be counted but not timed, and the timing is half the question. Present from the start with status 'not_notified'; updated as the correspondence proceeds.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["status"],
+      "required": [
+        "status"
+      ],
       "properties": {
-        "status": {"description": "REQUIRED. Furthest state reached. 'no_response' is a terminal state distinct from 'notified', and should only be set once a stated waiting period has expired -- record that period in note.", "type": "string", "enum": ["not_notified", "notified", "acknowledged", "disputed", "correction_submitted", "corrected", "retracted", "no_response"]},
-        "channel": {"description": "How contact was made. Null while status is 'not_notified'.", "type": ["string", "null"], "enum": ["authors_direct", "journal", "both", null]},
-        "notified_at": {"description": "Date the authors or journal were first notified. The clock for every interval below starts here.", "type": ["string", "null"], "format": "date"},
-        "acknowledged_at": {"description": "Date of the first substantive acknowledgement.", "type": ["string", "null"], "format": "date"},
-        "disputed_at": {"description": "Date the authors first disputed a finding.", "type": ["string", "null"], "format": "date"},
-        "correction_submitted_at": {"description": "Date a correction was submitted to the journal.", "type": ["string", "null"], "format": "date"},
-        "corrected_at": {"description": "Date a correction or corrigendum was published.", "type": ["string", "null"], "format": "date"},
-        "retracted_at": {"description": "Date of retraction.", "type": ["string", "null"], "format": "date"},
-        "no_response_declared_at": {"description": "Date we concluded there would be no response.", "type": ["string", "null"], "format": "date"},
-        "days_to_first_response": {"description": "DERIVED. Earliest of acknowledged_at/disputed_at/correction_submitted_at minus notified_at, in days. Null while none has occurred.", "type": ["integer", "null"]},
-        "days_to_outcome": {"description": "DERIVED. corrected_at, retracted_at or no_response_declared_at minus notified_at, in days.", "type": ["integer", "null"]},
-        "findings_disputed": {"description": "Ids of the findings the authors dispute, from findings[].id. Lets a dispute rate be computed per finding rather than per comment.", "type": "array", "items": {"description": "A finding id.", "type": "string"}},
-        "findings_accepted": {"description": "Ids of the findings the authors accept.", "type": "array", "items": {"description": "A finding id.", "type": "string"}},
-        "correction_url": {"description": "DOI or URL of the published correction, corrigendum or retraction notice.", "type": ["string", "null"]},
-        "note": {"description": "Free text. Private correspondence -- redact before any release.", "type": ["string", "null"]}
+        "status": {
+          "description": "REQUIRED. Furthest state reached. 'no_response' is a terminal state distinct from 'notified', and should only be set once a stated waiting period has expired -- record that period in note.",
+          "type": "string",
+          "enum": [
+            "not_notified",
+            "notified",
+            "acknowledged",
+            "disputed",
+            "correction_submitted",
+            "corrected",
+            "retracted",
+            "no_response"
+          ]
+        },
+        "channel": {
+          "description": "How contact was made. Null while status is 'not_notified'.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "authors_direct",
+            "journal",
+            "both",
+            null
+          ]
+        },
+        "notified_at": {
+          "description": "Date the authors or journal were first notified. The clock for every interval below starts here.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "acknowledged_at": {
+          "description": "Date of the first substantive acknowledgement.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "disputed_at": {
+          "description": "Date the authors first disputed a finding.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "correction_submitted_at": {
+          "description": "Date a correction was submitted to the journal.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "corrected_at": {
+          "description": "Date a correction or corrigendum was published.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "retracted_at": {
+          "description": "Date of retraction.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "no_response_declared_at": {
+          "description": "Date we concluded there would be no response.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "days_to_first_response": {
+          "description": "DERIVED. Earliest of acknowledged_at/disputed_at/correction_submitted_at minus notified_at, in days. Null while none has occurred.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "days_to_outcome": {
+          "description": "DERIVED. corrected_at, retracted_at or no_response_declared_at minus notified_at, in days.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "findings_disputed": {
+          "description": "Ids of the findings the authors dispute, from findings[].id. Lets a dispute rate be computed per finding rather than per comment.",
+          "type": "array",
+          "items": {
+            "description": "A finding id.",
+            "type": "string"
+          }
+        },
+        "findings_accepted": {
+          "description": "Ids of the findings the authors accept.",
+          "type": "array",
+          "items": {
+            "description": "A finding id.",
+            "type": "string"
+          }
+        },
+        "correction_url": {
+          "description": "DOI or URL of the published correction, corrigendum or retraction notice.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "Free text. Private correspondence -- redact before any release.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "run_ref": {
       "description": "OPTIONAL. Pointer to the process telemetry for this audit.",
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
-        "run_json_path": {"description": "Path to run.json, normally './run.json' inside the registry subdirectory.", "type": ["string", "null"]},
-        "run_json_sha256": {"description": "Hash of the run.json this record was filed with, so a later edit to either half is detectable.", "type": ["string", "null"]},
-        "protocol_version": {"description": "Copied from run.json so the comment record is interpretable on its own.", "type": ["string", "null"]}
+        "run_json_path": {
+          "description": "Path to run.json, normally './run.json' inside the registry subdirectory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_json_sha256": {
+          "description": "Hash of the run.json this record was filed with, so a later edit to either half is detectable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protocol_version": {
+          "description": "Copied from run.json so the comment record is interpretable on its own.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "notes": {
       "description": "OPTIONAL. Anything the schema has no field for. A recurring note is a missing field; review these when revising the schema.",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "$defs": {
     "impact": {
       "title": "FIELD 1 -- impact (SCHEME.md v1.0, Part 2)",
       "description": "What the audit found about the published claim. Exactly one value per finding, ordered by rank. The ladder cuts at the CONCLUSION, not at the size of the error -- every normative source (ICMJE, COPE, ACM, statcheck) draws the line at whether the claim survives, so a large error that leaves the claim standing ranks below a small one that does not. NO VALUE NAMES A CAUSE: the scheme deliberately occupies only the 'Error in X' and 'Unreliable X' columns of the Retraction Watch gradient and never enters 'Falsification/Fabrication', because intent is not observable from a replication package and coders who infer it get it wrong in both directions (Rule 3).",
-      "type": ["string", "null"],
-      "enum": ["none", "unverifiable", "value_wrong", "conclusion_narrowed", "conclusion_unsupported", "conclusion_contradicted", "artefact_of_construction", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "none",
+        "unverifiable",
+        "value_wrong",
+        "conclusion_narrowed",
+        "conclusion_unsupported",
+        "conclusion_contradicted",
+        "artefact_of_construction",
+        null
+      ]
     },
     "impact_rank": {
       "title": "impact rank",
       "description": "DERIVED at finalize from impact: none=0, unverifiable=1, value_wrong=2, conclusion_narrowed=3, conclusion_unsupported=4, conclusion_contradicted=5, artefact_of_construction=6. Stored so a query can take a maximum without hard-coding the ladder.",
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 0,
       "maximum": 6
     },
     "verification_tier": {
       "title": "FIELD 2 -- verification_tier (SCHEME.md v1.0, Part 2)",
       "description": "What it COSTS a human verifier to confirm or reject the finding as stated -- not the gravity of the finding, and not the time the original auditor spent, and not the time to fix the paper. Named verification_tier rather than severity_tier precisely because it measures cost: keeping the word 'severity' on a cost measure invites the conflation the whole three-field design exists to prevent. Gravity is read off impact, and the two are independent -- a T1 check can yield artefact_of_construction, a T4 grind can yield none. Tiers exist for scheduling and workload allocation, and are defined by inputs required and determinism versus judgement, NOT by specialist skill: every verifier in this programme is competent in R and statistics, so there is no expertise to route to. T1: recompute one or two quantities from the printed paper or one deposited value, deterministic arithmetic, under 30 min. T2: extract one target quantity from the deposit and run a bounded slice of the pipeline, 0.5-2 h. T3: build the environment and reproduce a full pipeline or a whole table end to end, needs a tolerance judgement on near-matches, 4 h - 2 days. T4: reproduce, then re-run under a specified alternative specification and compare -- contestable, because whether the alternative is the plausible one is a judgement, 2-5 days. T5: establish a structural property, that a result is entailed by construction or that a validation was never performed anywhere in the pipeline; argument rather than comparison, 1-2 weeks and may not converge.",
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 1,
       "maximum": 5
     },
     "impact_locus": {
       "title": "impact locus facet (SCHEME.md v1.0, Part 2, Field 1)",
       "description": "OPTIONAL facet on impact: which STAGE of the research pipeline the defect lives in, for aggregate reporting across the corpus. Modelled on the Retraction Watch object split and the I4R coding-error taxonomy. Do not confuse with package_locus, which is a file path inside the deposit: this field says 'the defect is in the cleaning step', package_locus says 'it is in code/02_clean.R line 44'.",
-      "type": ["string", "null"],
-      "enum": ["data", "cleaning", "analysis_code", "estimation", "inference", "sample", "reporting", "figure", "text", "environment", "other", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "data",
+        "cleaning",
+        "analysis_code",
+        "estimation",
+        "inference",
+        "sample",
+        "reporting",
+        "figure",
+        "text",
+        "environment",
+        "other",
+        null
+      ]
     },
     "unverifiable_reason": {
       "title": "unverifiable reason (SCHEME.md v1.0, Rule 2c)",
       "description": "Why the check could not be performed, in the AEA Data Editor's failure vocabulary. REQUIRED whenever impact is 'unverifiable': the scheme states plainly that unverifiable with no cause recorded is not a finding, and finalize_run.sh enforces that rather than warning about it.",
-      "type": ["string", "null"],
-      "enum": ["data_missing", "data_not_available", "code_missing", "code_not_functional", "discrepancy_in_output", "software_not_available", "insufficient_compute", "missing_readme", "insufficient_documentation", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "data_missing",
+        "data_not_available",
+        "code_missing",
+        "code_not_functional",
+        "discrepancy_in_output",
+        "software_not_available",
+        "insufficient_compute",
+        "missing_readme",
+        "insufficient_documentation",
+        null
+      ]
     },
     "finding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "claim", "impact", "verification_tier", "paper_only", "disclosure_flag", "remedy_class", "changes_conclusion", "provenance"],
+      "required": [
+        "id",
+        "claim",
+        "impact",
+        "verification_tier",
+        "paper_only",
+        "disclosure_flag",
+        "remedy_class",
+        "changes_conclusion",
+        "provenance"
+      ],
       "allOf": [
         {
           "description": "Strict finding semantics added in schema v2. Standards-compliant validators enforce these fields even for legacy records; the bundled v1 normalizer fails rather than inventing any missing value.",
-          "required": ["evidence", "confidence"],
+          "required": [
+            "evidence",
+            "confidence"
+          ],
           "properties": {
-            "impact": {"type": "string", "enum": ["none", "unverifiable", "value_wrong", "conclusion_narrowed", "conclusion_unsupported", "conclusion_contradicted", "artefact_of_construction"]},
-            "verification_tier": {"type": "integer", "minimum": 1, "maximum": 5},
-            "evidence": {"type": "object"},
-            "confidence": {"type": "string", "enum": ["CONFIRMED", "LIKELY", "SPECULATIVE"]}
+            "impact": {
+              "type": "string",
+              "enum": [
+                "none",
+                "unverifiable",
+                "value_wrong",
+                "conclusion_narrowed",
+                "conclusion_unsupported",
+                "conclusion_contradicted",
+                "artefact_of_construction"
+              ]
+            },
+            "verification_tier": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "evidence": {
+              "type": "object"
+            },
+            "confidence": {
+              "type": "string",
+              "enum": [
+                "CONFIRMED",
+                "LIKELY",
+                "SPECULATIVE"
+              ]
+            }
           }
         },
         {
           "if": {
-            "required": ["impact"],
-            "properties": {"impact": {"const": "unverifiable"}}
+            "required": [
+              "impact"
+            ],
+            "properties": {
+              "impact": {
+                "const": "unverifiable"
+              }
+            }
           },
           "then": {
-            "required": ["unverifiable_reason", "blocked_tier", "unverifiable_basis"],
+            "required": [
+              "unverifiable_reason",
+              "blocked_tier",
+              "unverifiable_basis"
+            ],
             "properties": {
-              "unverifiable_reason": {"type": "string"},
-              "blocked_tier": {"type": "integer", "minimum": 1, "maximum": 5},
-              "unverifiable_basis": {"type": "string", "minLength": 1}
+              "unverifiable_reason": {
+                "type": "string"
+              },
+              "blocked_tier": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5
+              },
+              "unverifiable_basis": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }
       ],
       "properties": {
-        "id": {"description": "REQUIRED. Short identifier unique within this comment, e.g. 'F3'. Stable once published: author_response references it.", "type": "string", "minLength": 1},
-        "claim": {"description": "REQUIRED. The finding in ONE line, in plain words, leading with the problem rather than the method. Must not contain a participant identifier or any quasi-identifier. Must state the observable and the discrepancy, never a cause: 'the deposited data yield X, the article reports Y', not 'the authors changed Y to X' (Rule 3).", "type": "string", "minLength": 1},
-        "section": {"description": "Where it appears in the comment, e.g. 'Section 4.2'.", "type": ["string", "null"]},
-        "checklist_item": {"description": "Which of the twelve checklist items in reference/checklist.md this came from. Lets the programme see which checklist items actually earn their place and which have never once fired.", "type": ["integer", "null"], "minimum": 1, "maximum": 12},
-        "impact": {"$ref": "#/$defs/impact", "description": "REQUIRED. What the audit found about the published claim."},
-        "impact_rank": {"$ref": "#/$defs/impact_rank", "description": "DERIVED at finalize from impact."},
-        "locus": {"$ref": "#/$defs/impact_locus", "description": "OPTIONAL. Which pipeline stage the defect lives in."},
-        "verification_tier": {"$ref": "#/$defs/verification_tier", "description": "REQUIRED. What it costs a verifier to check this finding. Independent of impact."},
+        "id": {
+          "description": "REQUIRED. Short identifier unique within this comment, e.g. 'F3'. Stable once published: author_response references it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "claim": {
+          "description": "REQUIRED. The finding in ONE line, in plain words, leading with the problem rather than the method. Must not contain a participant identifier or any quasi-identifier. Naming the kind of identifier, the file, the column and counts is required for a disclosure finding and is not a quasi-identifier; never quote a value. Must state the observable and the discrepancy, never a cause: 'the deposited data yield X, the article reports Y', not 'the authors changed Y to X' (Rule 3).",
+          "type": "string",
+          "minLength": 1
+        },
+        "section": {
+          "description": "Where it appears in the comment, e.g. 'Section 4.2'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checklist_item": {
+          "description": "Which of the twelve checklist items in reference/checklist.md this came from. Lets the programme see which checklist items actually earn their place and which have never once fired.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 12
+        },
+        "impact": {
+          "$ref": "#/$defs/impact",
+          "description": "REQUIRED. What the audit found about the published claim."
+        },
+        "impact_rank": {
+          "$ref": "#/$defs/impact_rank",
+          "description": "DERIVED at finalize from impact."
+        },
+        "locus": {
+          "$ref": "#/$defs/impact_locus",
+          "description": "OPTIONAL. Which pipeline stage the defect lives in."
+        },
+        "verification_tier": {
+          "$ref": "#/$defs/verification_tier",
+          "description": "REQUIRED. What it costs a verifier to check this finding. Independent of impact."
+        },
         "expected_verifier_hours": {
           "description": "Expected verifier-hours for THIS finding. The T1-T5 hour ranges in SCHEME.md are design-time judgements calibrated against the AEA, ACRE and I4R workflows -- no source publishes verifier-hours per finding type, and the scheme says so explicitly. Recording an expectation per finding, alongside whatever the first cohort actually takes, is the cheapest route to replacing those ranges with observed medians. Treat every value here as a prior, not a measurement.",
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0
         },
         "actual_verifier_hours": {
           "description": "What verification actually took, once someone has done it. The other half of the pair that turns the tier ranges from judgement into data. Null until a verifier reports.",
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0
         },
         "paper_only": {
           "description": "REQUIRED. Is the finding established from the published article ALONE -- no package, no data, no code, no environment? A flag rather than a tier, deliberately: paper-only findings are the cheapest to verify AND frequently the gravest (an accuracy below the no-information rate implied by the paper's own confusion matrix is a five-minute check and fatal), so encoding 'cheap' as a low tier is right while encoding 'cheap' as 'minor' would be badly wrong, and a tier would smuggle in that second reading. The flag also captures what matters strategically: a paper-only finding cannot be disputed on grounds of how the auditors handled the data, because they did not handle it. SCHEDULING RULE: paper_only findings are verified FIRST, ahead of all others, regardless of tier or impact. Not redundant with the tier in either direction -- recomputing a meta-analysis from a printed forest plot is paper_only at T2-T3, and checking a single deposited constant is T1 but not paper_only.",
           "type": "boolean"
         },
-        "unverifiable_reason": {"$ref": "#/$defs/unverifiable_reason", "description": "REQUIRED when impact is 'unverifiable'; null otherwise. Enforced at finalize."},
+        "unverifiable_reason": {
+          "$ref": "#/$defs/unverifiable_reason",
+          "description": "REQUIRED when impact is 'unverifiable'; null otherwise. Enforced at finalize."
+        },
         "blocked_tier": {
           "description": "For an 'unverifiable' finding only: the tier of the check that COULD NOT BE RUN, as distinct from verification_tier, which is the cost of establishing that it cannot be run. Discovering that the estimation script is absent is usually T1-T2 even though running it would have been T3, and tiering the finding at T3 would clog the work schedule with tasks nobody can do. Recorded separately so the coordinator can see what capacity would be released if the package were completed. REQUIRED when impact is 'unverifiable'; null otherwise.",
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1,
           "maximum": 5
         },
         "unverifiable_basis": {
           "description": "Required when impact is 'unverifiable'. A concise, evidence-bound explanation of what was sought, what was attempted, and why the intended check remains blocked. This is distinct from the categorical unverifiable_reason and must not speculate about absent materials.",
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1
         },
-        "check_nature": {"description": "Was the check deterministic, deterministic within a tolerance, or a judgement? T4-T5 findings are judgement-heavy by construction and should say so, because a contestable check needs to be stated explicitly enough to be disagreed with (Rule 4).", "type": ["string", "null"], "enum": ["deterministic", "deterministic_with_tolerance", "judgement", null]},
-        "claim_ref": {"description": "Which published claim this bears on, e.g. 'section 4.1, main result' or 'abstract, sentence 3'. Needed for the claims_affected roll-up: three findings against three independent claims is materially different from three against one.", "type": ["string", "null"]},
+        "check_nature": {
+          "description": "Was the check deterministic, deterministic within a tolerance, or a judgement? T4-T5 findings are judgement-heavy by construction and should say so, because a contestable check needs to be stated explicitly enough to be disagreed with (Rule 4).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "deterministic",
+            "deterministic_with_tolerance",
+            "judgement",
+            null
+          ]
+        },
+        "claim_ref": {
+          "description": "Which published claim this bears on, e.g. 'section 4.1, main result' or 'abstract, sentence 3'. Needed for the claims_affected roll-up: three findings against three independent claims is materially different from three against one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "evidence": {
           "description": "The reproduction path. Rule 4: a finding no second verifier could re-derive from the comment is not admissible at any tier. These four fields are that path in machine-readable form.",
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
-          "required": ["artifact", "operation"],
+          "required": [
+            "artifact",
+            "operation"
+          ],
           "properties": {
-            "artifact": {"description": "What was inspected, e.g. 'deposit/code/main_analysis.R + deposit/data/analysis.csv'.", "type": "string", "minLength": 1},
-            "operation": {"description": "What was done to it, e.g. 'execute as supplied, unmodified, R 4.4.1'.", "type": "string", "minLength": 1},
-            "expected": {"description": "What the article says the result is. Free-form: a number, a string, or an object of several quantities."},
-            "observed": {"description": "What the artifact actually yields. Same form as expected."},
-            "tolerance_note": {"description": "Required in practice for any near-match: state the observed difference and why it is or is not attributable to floating point, seed, platform or solver version. Rule 6 -- do not round a contestable difference away.", "type": ["string", "null"]}
+            "artifact": {
+              "description": "What was inspected, e.g. 'deposit/code/main_analysis.R + deposit/data/analysis.csv'.",
+              "type": "string",
+              "minLength": 1
+            },
+            "operation": {
+              "description": "What was done to it, e.g. 'execute as supplied, unmodified, R 4.4.1'.",
+              "type": "string",
+              "minLength": 1
+            },
+            "expected": {
+              "description": "What the article says the result is. Free-form: a number, a string, or an object of several quantities."
+            },
+            "observed": {
+              "description": "What the artifact actually yields. Same form as expected."
+            },
+            "tolerance_note": {
+              "description": "Required in practice for any near-match: state the observed difference and why it is or is not attributable to floating point, seed, platform or solver version. Rule 6 -- do not round a contestable difference away.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         },
         "consistent_with": {
           "description": "DESCRIPTIVE ONLY. Which editorial action, under published standards (COPE/ICMJE/NISO), a finding of this impact is consistent with -- so a reader can locate it against those standards. The programme does NOT recommend, request, or assert that any action be taken, and this field must never be written or read as a recommendation.",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        "disclosure_flag": {"description": "REQUIRED. Does this finding involve, or make easier to locate, a privacy/consent/identifiability/licence defect? The substance lives in the comment-level disclosure object (Field 3); this boolean marks which findings it attaches to, drives the disclosure roll-up, and obliges review before this record is released.", "type": "boolean"},
-        "remedy_class": {"description": "REQUIRED. What fixing it takes. 'one_line_code' = a one-line change to the analysis code. 'one_number' = correct a printed value. 'reanalysis' = re-run or redesign an analysis. 'not_fixable' = cannot be fixed with the data that exist. Every remedy asserted here must have been CHECKED against the platform or the code, not assumed -- a comment once told authors that fixing a live exposure required a new deposit when the repository supported a direct modification request.", "type": "string", "enum": ["one_line_code", "one_number", "reanalysis", "not_fixable"]},
-        "remedy_description": {"description": "The specific remedy, e.g. 'set n_init=10 in cluster.py line 88 and regenerate Table 3'.", "type": ["string", "null"]},
-        "remedy_verified": {"description": "Was the remedy checked to be possible and sufficient? A recommendation is a claim.", "type": ["boolean", "null"]},
-        "verification_script": {"description": "Path, relative to the audit directory, of the script that reproduces this finding. The cheapest possible answer to 'how do you know?'.", "type": ["string", "null"]},
-        "changes_conclusion": {"description": "REQUIRED. Does this change a conclusion the paper actually draws? Usually false, and saying so plainly is what makes the true ones credible.", "type": "boolean"},
-        "changes_conclusion_which": {"description": "Which conclusion, quoted or cited. Required in practice when changes_conclusion is true.", "type": ["string", "null"]},
-        "confidence": {"description": "The audit's own confidence label, as used in the auditor reports: CONFIRMED, LIKELY or SPECULATIVE. A SPECULATIVE finding in a published comment should be rare and visibly hedged in the prose.", "type": ["string", "null"], "enum": ["CONFIRMED", "LIKELY", "SPECULATIVE", null]},
-        "benign_explanations_ruled_out": {"description": "The innocent explanations considered, and how each was excluded. A finding without this is not finished.", "type": "array", "items": {"description": "One benign explanation and how it was ruled out.", "type": "string"}},
-        "affects": {"description": "Which published objects it touches, e.g. ['Table 3', 'Figure 2', 'abstract'].", "type": "array", "items": {"description": "A table, figure, section or statement in the paper.", "type": "string"}},
+        "disclosure_flag": {
+          "description": "REQUIRED. Does this finding involve, or make easier to locate, a privacy/consent/identifiability/licence defect? The substance lives in the comment-level disclosure object (Field 3); this boolean marks which findings it attaches to and drives the disclosure roll-up. A flagged finding is always reported in the comment. The flag obliges a read-through of this metadata record before any extract of it is released; it never withholds the finding from the comment.",
+          "type": "boolean"
+        },
+        "remedy_class": {
+          "description": "REQUIRED. What fixing it takes. 'one_line_code' = a one-line change to the analysis code. 'one_number' = correct a printed value. 'reanalysis' = re-run or redesign an analysis. 'not_fixable' = cannot be fixed with the data that exist. 'disclose_in_paper' = neither the code nor the data is wrong; the paper must state something it currently omits (an exclusion, a deviation, a limitation). Filing these as one_line_code inflated that bucket, which is the very count the programme reports. Every remedy asserted here must have been CHECKED against the platform or the code, not assumed -- a comment once told authors that fixing a live exposure required a new deposit when the repository supported a direct modification request.",
+          "type": "string",
+          "enum": [
+            "one_line_code",
+            "one_number",
+            "reanalysis",
+            "not_fixable",
+            "disclose_in_paper"
+          ]
+        },
+        "remedy_description": {
+          "description": "The specific remedy, e.g. 'set n_init=10 in cluster.py line 88 and regenerate Table 3'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remedy_verified": {
+          "description": "Was the remedy checked to be possible and sufficient? A recommendation is a claim.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verification_script": {
+          "description": "Path, relative to the audit directory, of the script that reproduces this finding. The cheapest possible answer to 'how do you know?'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "changes_conclusion": {
+          "description": "REQUIRED. Does this change a conclusion the paper actually draws? Usually false, and saying so plainly is what makes the true ones credible.",
+          "type": "boolean"
+        },
+        "changes_conclusion_which": {
+          "description": "Which conclusion, quoted or cited. Required in practice when changes_conclusion is true.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "description": "The audit's own confidence label, as used in the auditor reports: CONFIRMED, LIKELY or SPECULATIVE. A SPECULATIVE finding in a published comment should be rare and visibly hedged in the prose.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "CONFIRMED",
+            "LIKELY",
+            "SPECULATIVE",
+            null
+          ]
+        },
+        "benign_explanations_ruled_out": {
+          "description": "The innocent explanations considered, and how each was excluded. A finding without this is not finished.",
+          "type": "array",
+          "items": {
+            "description": "One benign explanation and how it was ruled out.",
+            "type": "string"
+          }
+        },
+        "affects": {
+          "description": "Which published objects it touches, e.g. ['Table 3', 'Figure 2', 'abstract'].",
+          "type": "array",
+          "items": {
+            "description": "A table, figure, section or statement in the paper.",
+            "type": "string"
+          }
+        },
         "package_locus": {
           "description": "OPTIONAL. Where in the replication package the defect lives, package-relative: 'code/03_model.R:88', 'data/wave2.csv column session_date'. Distinct from `locus`, which names the pipeline STAGE (cleaning, estimation, reporting); this names the file. Makes 'which file was wrong' queryable across the registry instead of readable only in prose. CAUTION: a path can itself be a quasi-identifier -- deposits routinely key filenames by participant (MSTE_AC_sub_E_5.mat) -- so every locus must be reviewed before this record appears in any published subset. finalize_run.sh warns when a locus looks like it contains a participant code; the warning is a prompt to look, not a licence to trust its silence. Prefer a directory and a column name over a per-participant filename wherever the finding survives the loss of precision.",
           "type": "array",
-          "items": {"description": "One package-relative location, optionally with a line number or column name.", "type": "string"}
+          "items": {
+            "description": "One package-relative location, optionally with a line number or column name.",
+            "type": "string"
+          }
         },
         "verification": {
           "description": "OPTIONAL on input, always present after finalize. Independent human verification of this finding, and what each verifier concluded. Feeds the R verification notebook: a finding nobody has checked and a finding three people reproduced are different objects, and the registry should not flatten them into the same row.",
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
           "properties": {
-            "verifier_count": {"description": "DERIVED at finalize from verifiers.length. Zero is a legitimate and important value: it says this finding shipped on the audit's own authority.", "type": ["integer", "null"], "minimum": 0},
+            "verifier_count": {
+              "description": "DERIVED at finalize from verifiers.length. Zero is a legitimate and important value: it says this finding shipped on the audit's own authority.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
             "verifiers": {
               "description": "One entry per person or role who independently checked the finding after it was drafted.",
               "type": "array",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["verifier", "outcome"],
+                "required": [
+                  "verifier",
+                  "outcome"
+                ],
                 "properties": {
-                  "verifier": {"description": "REQUIRED. Who checked: a person code or a role name. Not a real name if this record may be released.", "type": "string"},
-                  "at": {"description": "Date of the check.", "type": ["string", "null"], "format": "date"},
-                  "method": {"description": "What they actually did -- 're-ran work/f1_effect_size.R', 'recomputed by hand from Table 2'. A verification whose method is unrecorded cannot be repeated.", "type": ["string", "null"]},
-                  "outcome": {"description": "REQUIRED. What they found. 'reproduced_with_deviation' is the interesting middle case: the defect is real but not exactly as stated, and the claim needs narrowing.", "type": "string", "enum": ["reproduced", "reproduced_with_deviation", "not_reproduced", "inconclusive", "not_attempted"]},
-                  "notes": {"description": "Free text, especially for a deviation or an inconclusive result.", "type": ["string", "null"]}
+                  "verifier": {
+                    "description": "REQUIRED. Who checked: a person code or a role name. Not a real name if this record may be released.",
+                    "type": "string"
+                  },
+                  "at": {
+                    "description": "Date of the check.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "method": {
+                    "description": "What they actually did -- 're-ran work/f1_effect_size.R', 'recomputed by hand from Table 2'. A verification whose method is unrecorded cannot be repeated.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "outcome": {
+                    "description": "REQUIRED. What they found. 'reproduced_with_deviation' is the interesting middle case: the defect is real but not exactly as stated, and the claim needs narrowing.",
+                    "type": "string",
+                    "enum": [
+                      "reproduced",
+                      "reproduced_with_deviation",
+                      "not_reproduced",
+                      "inconclusive",
+                      "not_attempted"
+                    ]
+                  },
+                  "notes": {
+                    "description": "Free text, especially for a deviation or an inconclusive result.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
                 }
               }
             },
-            "all_reproduced": {"description": "DERIVED at finalize. True when there is at least one verifier and every one returned 'reproduced'. Anything else -- including no verifiers at all -- is false or null, so this can never be read as verified-by-default.", "type": ["boolean", "null"]}
+            "all_reproduced": {
+              "description": "DERIVED at finalize. True when there is at least one verifier and every one returned 'reproduced'. Anything else -- including no verifiers at all -- is false or null, so this can never be read as verified-by-default.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
           }
         },
         "provenance": {
           "description": "REQUIRED. Where this finding came from. Findings die at synthesis and get resurrected by critics several rounds later; recording origin makes that traceable and tells the programme which auditor roles are earning their keep.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["origin_role"],
+          "required": [
+            "origin_role"
+          ],
           "properties": {
-            "origin_role": {"description": "REQUIRED. The role that first raised it: one of the five auditor roles, a critic role, or 'coordinator'. A finding first raised by a CRITIC is one the fan-out missed, which is exactly the number the programme needs.", "type": "string"},
+            "origin_role": {
+              "description": "REQUIRED. The role that first raised it: one of the five auditor roles, a critic role, or 'coordinator'. A finding first raised by a CRITIC is one the fan-out missed, which is exactly the number the programme needs.",
+              "type": "string"
+            },
             "independently_found_by": {
               "description": "Roles that reached this finding on their own, WITHOUT having seen anyone else's report -- which in this pipeline means the five fan-out auditors, who run concurrently and cannot read each other, and any critic working from the package rather than from the draft. Convergence has been the programme's strongest confidence signal: four of four auditors independently finding the same column transposition, five of five independently refuting the coordinator's central premise. Include origin_role here; it found it independently by definition. A role belongs in this list only if the answer to 'could they have got it from someone else's report?' is no.",
               "type": "array",
-              "items": {"description": "A role name that reached the finding independently.", "type": "string"}
+              "items": {
+                "description": "A role name that reached the finding independently.",
+                "type": "string"
+              }
             },
             "independent_corroboration_count": {
               "description": "DERIVED at finalize from independently_found_by.length. 1 means one role saw it and nobody else did; 4 means four arrived at it separately. This is the weight the meta-paper should put on a finding, and it is NOT the same as the number of people who agree with it.",
-              "type": ["integer", "null"],
+              "type": [
+                "integer",
+                "null"
+              ],
               "minimum": 0
             },
             "agreed_after_seeing": {
               "description": "Roles that endorsed this finding AFTER reading another role's report or the draft comment. Kept strictly apart from independently_found_by and never added to it. Agreement downstream of exposure is nearly worthless as evidence -- it is as consistent with anchoring as with confirmation -- and merging the two would let a single auditor's error acquire the appearance of four-way corroboration simply by being circulated. Recorded because knowing that nobody objected is still worth something, just much less.",
               "type": "array",
-              "items": {"description": "A role name that agreed after exposure to the finding.", "type": "string"}
+              "items": {
+                "description": "A role name that agreed after exposure to the finding.",
+                "type": "string"
+              }
             },
-            "auditor_report": {"description": "Path of the report it first appeared in, e.g. 'report/03_text_vs_data.md'.", "type": ["string", "null"]},
-            "adjudication_entry": {"description": "Identifier of the ADJUDICATION.md entry that settled it, e.g. 'ADJ-07'.", "type": ["string", "null"]},
-            "ledger_row": {"description": "Identifier or row number in LEDGER.md.", "type": ["string", "null"]},
-            "round_introduced": {"description": "Critique round in which it entered the comment; 0 for the fan-out.", "type": ["integer", "null"], "minimum": 0},
-            "contested_by_critic": {"description": "Did any critic challenge it? A finding that survived a challenge is stronger evidence than one nobody tested.", "type": ["boolean", "null"]},
-            "survived_contest": {"description": "Did it survive that challenge unchanged? False with the finding still present means it was narrowed, and the narrowing should show in claim.", "type": ["boolean", "null"]}
+            "auditor_report": {
+              "description": "Path of the report it first appeared in, e.g. 'report/03_text_vs_data.md'.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "adjudication_entry": {
+              "description": "Identifier of the ADJUDICATION.md entry that settled it, e.g. 'ADJ-07'.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ledger_row": {
+              "description": "Identifier or row number in LEDGER.md.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "round_introduced": {
+              "description": "Critique round in which it entered the comment; 0 for the fan-out.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "contested_by_critic": {
+              "description": "Did any critic challenge it? A finding that survived a challenge is stronger evidence than one nobody tested.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "survived_contest": {
+              "description": "Did it survive that challenge unchanged? False with the finding still present means it was narrowed, and the narrowing should show in claim.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
           }
         }
       }

@@ -27,17 +27,20 @@
 #
 # Snippets live in <snippets-dir> (default <audit-dir>/verification_snippets) and are keyed by
 # claim id:
-#     C-2.5.R              R code, inlined verbatim into the section's chunk
-#     C-2.12.unverifiable  first line is the reason; claim cannot be checked from the deposit
-#     C-7.8.judgement      first line is the judgement, remaining lines the basis for it
+#     C-5.R                R code, inlined verbatim into the section's chunk
+#     C-12.unverifiable    first line is the reason; claim cannot be checked from the deposit
+#     C-8.judgement        first line is the judgement, remaining lines the basis for it
+# Claim ids are flat (C-<n>, from the report's generated [claim N] tags); run_verification.sh
+# binds only that form.
 # Three states, not two: a claim resting on an assessment rather than an arithmetic result is
 # marked JUDGEMENT and states what the judgement was, so a verifier can disagree on the merits.
 set -uo pipefail
 
-AUDIT=""; OUT=""; SNIPS=""; TITLE=""
+AUDIT=""; OUT=""; SNIPS=""; TITLE=""; HARNESS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) OUT="$2"; shift 2;;
+    --harness) HARNESS="$2"; shift 2;;   # run_snippets.sh only: a JSON spec, never a release notebook
     -s) SNIPS="$2"; shift 2;;
     -t) TITLE="$2"; shift 2;;
     -*) echo "unknown option $1" >&2; exit 2;;
@@ -51,24 +54,34 @@ OUT="${OUT:-$AUDIT/verification.Rmd}"
 SNIPS="${SNIPS:-$AUDIT/verification_snippets}"
 PLAN="$AUDIT/work/verification_plan.json"
 
+if [ -n "$HARNESS" ]; then
+  # The snippet harness needs no report: it runs named snippet files, before any projection exists.
+  [ -f "$HARNESS" ] || { echo "no such harness spec: $HARNESS" >&2; exit 2; }
+  [ -n "${OUT:-}" ] && [ "$OUT" != "$AUDIT/verification.Rmd" ] || {
+    echo "--harness needs -o outside the audit's verification.Rmd" >&2; exit 2; }
+  REPORT=/dev/null; ADJ=/dev/null
+else
 REPORT="$AUDIT/report/REPORT_final.md"
 [ -f "$REPORT" ] || REPORT="$AUDIT/report/REPORT_v1.md"
 [ -f "$REPORT" ] || { echo "no REPORT_final.md or REPORT_v1.md under $AUDIT/report" >&2; exit 2; }
 ADJ="$AUDIT/report/ADJUDICATION.md"
 [ -f "$ADJ" ] || { echo "WARN: no ADJUDICATION.md — provenance will be blank" >&2; ADJ=/dev/null; }
+fi
 PKG="$AUDIT/pkg"
 [ -d "$PKG" ] || { echo "no pkg/ under $AUDIT — the notebook has nothing to read" >&2; exit 2; }
 
-python3 - "$REPORT" "$ADJ" "$PKG" "$SNIPS" "$OUT" "$TITLE" "$PLAN" <<'PYGEN'
+LINT="$(cd "$(dirname "$0")" && pwd)/snippet_lint.R"
+python3 - "$REPORT" "$ADJ" "$PKG" "$SNIPS" "$OUT" "$TITLE" "$PLAN" "$HARNESS" "$LINT" <<'PYGEN'
 import sys, re, os, pathlib, html, json, hashlib
 
-report_p, adj_p, pkg_p, snips_p, out_p, title, plan_p = sys.argv[1:8]
+report_p, adj_p, pkg_p, snips_p, out_p, title, plan_p, harness_p, lint_p = sys.argv[1:10]
+harness = json.loads(pathlib.Path(harness_p).read_text()) if harness_p else None
 report = pathlib.Path(report_p).read_text()
 adj    = pathlib.Path(adj_p).read_text() if os.path.exists(adj_p) else ""
 
 # ---------------------------------------------------------------- claim extraction
-# A claim is a bolded numbered lead: **2.5 The analytic sample recovers...** or **A2. Recovered...**
-# plus, from the abstract, each sentence carrying a numeral. Abstract sentences are claims in
+# A claim is a generated [claim N] tag in the report body (one per finding; a v2 audit keeps exactly
+# the ids in work/verification_plan.json) plus, in legacy notebooks, each abstract sentence carrying a numeral. Abstract sentences are claims in
 # their own right: they are the version of the finding that most readers will ever see, and in
 # calibration a correction reached the body and not the abstract three separate times.
 def para_split(s):
@@ -96,11 +109,9 @@ for para in para_split(report):
     elif re.match(r"^##\s+(Abstract|Executive summary)", first): cur_sec = "Abstract"
     elif re.match(r"^##\s+", first): cur_sec = first.lstrip("# ").strip()
     flat = " ".join(para.split())
-    m = re.match(r"\*\*([0-9]+\.[0-9]+|A[0-9]+)\.?\s+(.+?)\*\*(.*)$", flat)
-    if m:
-        cid = "C-" + m.group(1)
-        claims.append(dict(id=cid, head=m.group(2).strip(), body=m.group(3).strip(),
-                           sec=cur_sec, full=flat))
+    # Claims come only from the generated [claim N] tags. The older bolded-lead form (**2.5 ...**)
+    # minted dotted ids that run_verification.sh can never bind, and build_docx.sh renders the same
+    # syntax as a subsection heading, so every subsection became a spurious unbindable claim.
     # Merged page-1 format: findings are tagged inline as [claim N] inside a section body.
     for cm in re.finditer(r"\[claim (\d+)\]", flat):
         n = int(cm.group(1))
@@ -144,7 +155,17 @@ if am:
 # authoritative.  Legacy notebooks may retain independently derived abstract
 # cross-checks, but a v2 notebook must have exactly one section per canonical
 # finding ID—no silent extras and no count-only join.
-if os.path.isfile(plan_p):
+if not os.path.isfile(plan_p) and any(c["id"].startswith("C-ABS.") for c in claims):
+    # run_verification.sh binds only flat C-<n> ids, so a legacy notebook with abstract cross-checks
+    # would render and then be refused. Stop here, where the remedy is still one command away.
+    raise SystemExit("work/verification_plan.json is missing, and without it the abstract's numbered "
+                     "sentences become C-ABS.<n> sections that run_verification.sh cannot bind. Run "
+                     "python3 scripts/generate_finding_artifacts.py \"$AUDIT_DIR\" --apply to write the plan.")
+if harness is not None:
+    # run_snippets.sh: exactly the claims it names, each from the file it names, in notebook order.
+    claims = [dict(id=item["id"], head=f"snippet {os.path.basename(item['path'])}", body="",
+                   sec="run_snippets.sh harness", full="") for item in harness["claims"]]
+elif os.path.isfile(plan_p):
     plan = json.loads(pathlib.Path(plan_p).read_text())
     if not isinstance(plan, list):
         raise SystemExit("verification plan must be a JSON array")
@@ -236,6 +257,8 @@ deposit = []
 for root, _, files in os.walk(pkg_p):
     for f in sorted(files):
         p = os.path.join(root, f)
+        if not os.path.isfile(p):
+            continue   # a dangling in-package symlink: intake accepts it, and there are no bytes to inventory
         ext = os.path.splitext(f)[1].lower()
         deposit.append((os.path.relpath(p, pkg_p), ext, LOADERS.get(ext, "unknown"),
                         os.path.getsize(p)))
@@ -246,6 +269,10 @@ req = ["knitr", "rmarkdown"] + [pkgmap[n] for n in needed]
 
 # ---------------------------------------------------------------- snippets
 def snippet(cid):
+    if harness is not None:
+        path = pathlib.Path(next(item["path"] for item in harness["claims"] if item["id"] == cid))
+        kind = {".r": "code", ".unverifiable": "unverifiable", ".judgement": "judgement"}[path.suffix.lower()]
+        return kind, path.read_text().rstrip("\n"), hashlib.sha256(path.read_bytes()).hexdigest()
     base = os.path.join(snips_p, cid)
     for ext, kind in ((".R", "code"), (".r", "code"), (".unverifiable", "unverifiable"),
                       (".judgement", "judgement")):
@@ -294,8 +321,13 @@ w("### Deposit inventory")
 w("")
 w("| File | Loader |")
 w("|---|---|")
+def md_code(text):
+    # A one-backtick span that opens with "r " or "r#" is knitr inline R code (`r expr`): a deposit file named
+    # "r code OSF.docx" was evaluated as R and stopped the knit with "Failed to parse the inline R code". A padded
+    # double-backtick span renders the same code text and is not inline code; every other name keeps one backtick.
+    return f"`` {text} ``" if re.match(r"r[ #]", text) else f"`{text}`"
 for rel, ext, loader, size in deposit:
-    w(f"| `{rel}` | `{loader}` ({size:,} bytes) |")
+    w(f"| {md_code(rel)} | `{loader}` ({size:,} bytes) |")
 w("")
 w("### Required packages")
 w("")
@@ -395,6 +427,16 @@ read_omv_deposit <- function(path, ...) {
 .V$obs   <- list()   # id|key -> observed, verdict
 .V$state <- list()   # id     -> JUDGEMENT / UNVERIFIABLE marker
 .V$order <- character(0)
+.V$current <- NULL   # the claim whose chunk is running; set by each chunk
+
+## A chunk may record outcomes only under its own claim id. A snippet written before a renumber
+## still says expect("C-3", ...) in what is now C-4's chunk; without this the two claims' results
+## swap silently and verification passes.
+.bind_claim <- function(id) {
+  if (!is.null(.V$current) && !identical(id, .V$current))
+    stop(sprintf("the %s chunk recorded an outcome under %s; the snippet's claim id is stale (renumbered?) -- edit its source to use %s",
+                 .V$current, id, .V$current))
+}
 
 .fmt <- function(x) {
   if (is.numeric(x)) {
@@ -411,6 +453,7 @@ read_omv_deposit <- function(path, ...) {
 ## point of the notebook: a verifier compares a prediction against a result, never reads back
 ## whatever the code happened to produce.
 expect <- function(id, ..., tol = 0, note = NULL) {
+  .bind_claim(id)
   vals <- list(...)
   if (is.null(names(vals)) || any(names(vals) == "")) stop("expect(): every value needs a name")
   cat(sprintf("---- %s : expected -------------------------------------------------\n", id))
@@ -427,6 +470,7 @@ expect <- function(id, ..., tol = 0, note = NULL) {
 ## check() prints the observation and the verdict. It never stops the run: a failure that
 ## aborts the notebook hides every claim after it, which is the opposite of what is wanted.
 check <- function(id, ...) {
+  .bind_claim(id)
   vals <- list(...)
   if (is.null(names(vals)) || any(names(vals) == "")) stop("check(): every value needs a name")
   for (k in names(vals)) {
@@ -474,6 +518,7 @@ observed_of <- function(claim, key) {
 ## Third state, distinct from both a check and a silence: the claim rests on an assessment.
 ## State the assessment so the verifier can reject it on the merits.
 judgement <- function(id, statement, basis = "") {
+  .bind_claim(id)
   .V$state[[id]] <- list(id = id, verdict = "JUDGEMENT", detail = statement, basis = basis)
   cat(sprintf("---- %s : JUDGEMENT ------------------------------------------------\n", id))
   cat("     assessment: ", statement, "\n", sep = "")
@@ -484,6 +529,7 @@ judgement <- function(id, statement, basis = "") {
 
 ## Fourth outcome, and never a silence: the deposit cannot settle it.
 unverifiable <- function(id, reason, observed = NULL) {
+  .bind_claim(id)
   .V$state[[id]] <- list(id = id, verdict = "UNVERIFIABLE", detail = reason, basis = "")
   cat(sprintf("---- %s : UNVERIFIABLE ---------------------------------------------\n", id))
   cat("     reason: ", reason, "\n", sep = "")
@@ -535,6 +581,7 @@ for c in claims:
         w(f"<!-- I4R-SNIPPET-SHA256: {snippet_sha} -->")
     w("")
     w(f"```{{r {c['id'].replace('.', '_').replace('-', '_')}}}")
+    w(f'.V$current <- "{c["id"]}"')
     w("tryCatch({")
     if kind == "code":
         w(body)
@@ -568,6 +615,7 @@ for c in claims:
         w("## ------------------------------------------------------------------------")
         w(f'stop("TODO: no check written for {c["id"]} — see the stub comment above")')
     w(f'}}, error = function(e) runtime_failure("{c["id"]}", e))')
+    w(".V$current <- NULL")
     w("```")
     w("")
 
@@ -608,7 +656,12 @@ stubs <- if (length(STUB_CLAIMS))
              verdict = "FAIL", detail = "TODO stub: no check has been written for this claim",
              stringsAsFactors = FALSE) else NULL
 all_rows <- rbind(rows, states, stubs)
-covered <- unique(all_rows$claim)
+foreign <- !all_rows$claim %in% ALL_CLAIMS
+if (any(foreign)) {
+  all_rows$verdict[foreign] <- "FAIL"
+  all_rows$detail[foreign] <- "outcome recorded for an id that is not a claim of this comment"
+}
+covered <- unique(all_rows$claim[!foreign])
 missing_claims <- setdiff(ALL_CLAIMS, covered)
 if (length(missing_claims)) {
   all_rows <- rbind(all_rows,
@@ -665,6 +718,10 @@ unlink(SCRATCH, recursive = TRUE)
 if (n_fail > 0)
   stop(sprintf("verification failed: %d check(s) did not reproduce (see the table above)", n_fail))
 '''
+if harness is not None:
+    # Same ledger, but its two outputs go to the harness's own temporary files: nothing is bound.
+    summary_r = (summary_r.replace('"verification_summary.csv"', json.dumps(harness["summary_csv"]))
+                          .replace('"verification_status.txt"', json.dumps(harness["status_txt"])))
 w(summary_r.strip())
 w("```")
 w("")
@@ -683,6 +740,27 @@ sys.stderr.write(f"TODO stubs       : {len(stub_ids)}\n")
 if stub_ids:
     sys.stderr.write("stub ids         : " + ", ".join(stub_ids) + "\n")
 sys.stderr.write(f"wrote            : {out_p}\n")
+
+# Static warning, stderr only: the notebook bytes and the exit status never depend on it.
+import shutil, subprocess, tempfile
+rscript = shutil.which("Rscript")
+if os.environ.get("I4R_SNIPPET_LINT", "1") != "0" and rscript and os.path.isfile(lint_p):
+    code = [(c["id"], snippet(c["id"])) for c in claims]
+    with tempfile.TemporaryDirectory(prefix="i4r-snippet-lint.") as tmp:
+        setup_file = os.path.join(tmp, "setup.R"); pathlib.Path(setup_file).write_text(setup)
+        claim_args = []
+        for cid, (kind, body, _sha) in code:
+            if kind == "code":
+                f = os.path.join(tmp, cid + ".R"); pathlib.Path(f).write_text(body + "\n")
+                claim_args.append(f"{cid}={f}")
+        try:
+            lint = subprocess.run([rscript, "--no-init-file", lint_p, setup_file,
+                                   prelude if os.path.exists(prelude) else "", snips_p, *claim_args],
+                                  text=True, capture_output=True, timeout=120)
+            for line in lint.stdout.splitlines():
+                if line.startswith(("WARN: ", "NOTE: ")): sys.stderr.write(line + "\n")
+        except (OSError, subprocess.TimeoutExpired):
+            sys.stderr.write("NOTE: snippet lint skipped (Rscript did not answer)\n")
 PYGEN
 rc=$?
 [ $rc -ne 0 ] && { echo "generation failed" >&2; exit $rc; }

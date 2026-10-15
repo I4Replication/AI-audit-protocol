@@ -159,11 +159,10 @@ if hits:
     for ln, txt in hits[:8]: print(f"     line {ln}: {txt}")
 else:
     print("  ok: no process narration")
-# 3d. length early-warning — the hard page gate lives in build_docx.sh on the rendered PDF.
-# Budget scales with the cap: ~600 words per rendered page at the reference.docx geometry
-# (12pt, 10pt paragraph spacing), so a 10-page cap allows ~6000 words of prose plus tables.
-import os
-max_pages = int(os.environ.get("MAX_PAGES", "10"))
+# 3d. length early-warning — the authoritative cap is read and hash-checked by
+# build_docx.sh.  This warning deliberately has no environment override: canonical
+# release builds always use the policy-bound ten-page cap.
+max_pages = 10
 budget = 600 * max_pages
 words = len(s.split())
 if words > budget:

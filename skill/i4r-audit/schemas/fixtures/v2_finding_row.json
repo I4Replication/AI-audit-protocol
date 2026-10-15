@@ -17,7 +17,7 @@
     "source_hashes": [
       {"path": "work/check_primary.txt", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
     ],
-    "rerun_command": "python work/check_primary.py",
+    "rerun_command": "Rscript work/check_primary.R",
     "expected": 10,
     "observed": 9,
     "tolerance_basis": "Exact integer comparison."
@@ -42,12 +42,12 @@
   "dependencies": {
     "environment_fingerprint": "sha256:environment-a",
     "finding_ids": [],
-    "artifact_paths": ["work/check_primary.txt", "work/check_primary.py"]
+    "artifact_paths": ["work/check_primary.txt", "work/check_primary.R"]
   },
   "settled": {"approved": true, "valid_for_report_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
   "benign_explanations_ruled_out": ["The discrepancy is larger than the stated rounding precision."],
   "report_section": "Section 3.1",
-  "verification_snippet": {"kind": "code", "path": "work/check_primary.py", "basis": "The bounded rerun produces the observed value exactly."},
+  "verification_snippet": {"kind": "code", "path": "work/check_primary.R", "basis": "The bounded rerun produces the observed value exactly."},
   "disclosure_flag": false,
   "remedy": {"class": "one_number", "description": "Correct the printed value.", "verified": true},
   "changes_conclusion": false,

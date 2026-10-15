@@ -1,0 +1,36 @@
+{
+ "schema_version": "i4r-baseline-reference-provenance-1",
+ "source": "i4r-audit 2.7.7, reference/ (copied verbatim on 2026-10-09; the baseline prompt tells the agent which pipeline-process instructions in them to ignore)",
+ "files": {
+  "checklist.md": {
+   "sha256": "ca70f64bbe97110cac59813a1675ee98c4be80b2c5e06f78a5b4c67eef45bf98",
+   "bytes": 7404,
+   "source_path": "reference/checklist.md"
+  },
+  "brief_template.md": {
+   "sha256": "3d2565f698e52a1c8e9cf19ed8e6f10a352a895411fadfaec3b1be575d22e416",
+   "bytes": 3837,
+   "source_path": "reference/brief_template.md"
+  },
+  "report_structure.md": {
+   "sha256": "f419473e4b9be7c31cee4023fa011871334524915071deedc8fffa19f17d794b",
+   "bytes": 12845,
+   "source_path": "reference/report_structure.md"
+  },
+  "SCHEME.md": {
+   "sha256": "c419caee282e33e06e717dc5d61aac0c45d386a2295ba903ae72d7684901a763",
+   "bytes": 47512,
+   "source_path": "reference/SCHEME.md"
+  },
+  "house_citations.md": {
+   "sha256": "14945718116548751b3da00621faa9675862d1832df66a68590d3c9c621619d5",
+   "bytes": 1954,
+   "source_path": "reference/house_citations.md"
+  },
+  "FINDINGS_FORMAT.md": {
+   "sha256": "8f854d33e2e1d07f3b7db43fe0d3d2687c30f01163da08c7fe1d3fdde05cb2b3",
+   "source_path": null,
+   "note": "baseline's own: the comment.json finding subset it fills"
+  }
+ }
+}

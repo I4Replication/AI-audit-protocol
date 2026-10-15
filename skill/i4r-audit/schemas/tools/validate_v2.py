@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -22,10 +23,24 @@ IMPACT_RANK = {
 }
 CONFIDENCE = {"CONFIRMED", "LIKELY", "SPECULATIVE"}
 DOMAINS = {"statistics", "data", "text", "code_methods", "privacy_archive", "framing", "other"}
-CACHE_USAGE = {"none", "read", "write", "read_write", "probe_cache"}
+CACHE_USAGE = {"none", "read", "write", "read_write", "probe_cache", "not_applicable"}
 ERROR_CLASSES = {
     "transient", "permanent", "schema", "authentication", "authorization",
-    "quota", "model", "timeout", "transport", "unknown",
+    "quota", "model", "unsupported_model", "capability", "deterministic_schema",
+    "throttling", "provider_5xx", "server_5xx", "timeout", "transport",
+    # A provider-side content-safety classifier refused the request. Not a skill gate,
+    # never retried with identical content; the mitigation is stewardship framing.
+    "provider_safety_refusal",
+    # 2.7.4: one response hit the Claude CLI's per-response output cap; retried once.
+    "output_limit",
+    # The frozen input snapshot changed around a provider call (content, inventory or manifest):
+    # a fault of the host, not of the provider or the response. Never retried or repaired.
+    "environment",
+    "unknown",
+}
+ATTEMPT_KINDS = {
+    "local_preflight", "capability_probe", "schema_admission", "role_inference",
+    "output_repair", "cache_replay",
 }
 STOPPING_REASONS = {
     "target_complete",
@@ -140,6 +155,14 @@ def _validate_registry_evidence(evidence: Any, path: str) -> list[dict[str, Any]
     return hashes
 
 
+# Maximum of the operator attempt knob (MAX_TRIES / I4R_MAX_ATTEMPTS); the policy default is 3.
+ATTEMPT_CEILING_MAX = 20
+# The round caps a live v2 run may carry (config/check_policy_drift.py pins this against the policy):
+# 2.6.8 and earlier froze 5 into every audit's snapshot, 2.6.9 ships 7, and an older audit reaches 7
+# only through a journaled amendment (scripts/amend_round_cap.py), recorded in run.policy_amendments.
+LIVE_ROUND_TARGET = 2
+LIVE_ROUND_CAPS = (5, 7)
+
 def validate_finding_row(finding: dict[str, Any], path: str = "finding_row") -> None:
     finding = _object(finding, path)
     _required(finding, ("id", "claim", "domain", "source_location", "status", "ledger_disposition", "coordinator_approved", "impact", "impact_rank", "verification_tier", "paper_only", "confidence", "evidence", "unverifiable_basis", "verifications", "dependencies", "settled", "disclosure_flag", "remedy", "changes_conclusion", "changes_conclusion_which", "provenance"), path)
@@ -227,14 +250,22 @@ def validate_finding_row(finding: dict[str, Any], path: str = "finding_row") -> 
     promotable = status in {"confirmed", "verified", "accepted"} and finding["coordinator_approved"]
     requires_independent_confirmation = promotable or finding["changes_conclusion"] is True
     if requires_independent_confirmation:
+        origin = str(((finding.get("provenance") or {}).get("origin_role")) or "")
+        found_by = (finding.get("provenance") or {}).get("independently_found_by") or []
+        coordinator_hint = ("" if origin.startswith("auditor") or any(str(r).startswith("auditor") for r in found_by)
+                            else " (no Phase-1 auditor raised this row: a finding raised after fan-out gets its"
+                                 " Sonnet-family confirmation only from python3 scripts/run_verifier.py <audit-dir>"
+                                 " --findings <id>, run before this integration; see INSTALL.md, 'Confirming findings"
+                                 " raised after fan-out', and reference/adjudication_guide.md,"
+                                 " 'Findings the coordinator raises')")
         if len(confirmed_reviewers) < 2:
-            _fail(f"{path}.verifications", "promotable or conclusion-changing row requires two confirmed reviewers")
+            _fail(f"{path}.verifications", "promotable or conclusion-changing row requires two confirmed reviewers" + coordinator_hint)
         if len(confirmed_invocations) < 2:
             _fail(f"{path}.verifications", "confirmations must bind two distinct invocation IDs")
         if len(confirmed_evidence_records) < 2:
             _fail(f"{path}.verifications", "confirmations must bind two distinct evidence records")
         if len(confirmed_families) < 2 or confirmed_families & {"unknown", "unavailable"}:
-            _fail(f"{path}.verifications", "confirmations must span two known model families")
+            _fail(f"{path}.verifications", "confirmations must span two known model families" + coordinator_hint)
     if promotable:
         if not source_hashes:
             _fail(f"{path}.evidence.source_hashes", "approved confirmed row requires source hashes")
@@ -497,39 +528,239 @@ def validate_invocation(value: dict[str, Any], path: str = "invocation") -> None
     _required(obj, required, path)
     _text(obj["invocation_id"], f"{path}.invocation_id")
     _text(obj["role"], f"{path}.role")
-    _integer(obj["attempt"], f"{path}.attempt", 1)
+    if obj["attempt"] is not None:
+        _integer(obj["attempt"], f"{path}.attempt", 1)
     status = obj["status"]
     if status not in {"started", "completed", "failed", "cancelled", "timed_out", "legacy_record"}:
         _fail(f"{path}.status", "unsupported status")
     if not isinstance(obj["provider_call"], bool):
         _fail(f"{path}.provider_call", "expected boolean")
+    attempt_kind = obj.get("attempt_kind")
+    if attempt_kind is not None and attempt_kind not in ATTEMPT_KINDS:
+        _fail(f"{path}.attempt_kind", "unsupported attempt kind")
+    provider_request_status = obj.get("provider_request_status")
+    if provider_request_status is not None and provider_request_status not in {
+        "not_requested", "requested", "accepted", "rejected", "unknown",
+    }:
+        _fail(f"{path}.provider_request_status", "unsupported provider-request status")
+    inference_start_status = obj.get("inference_start_status")
+    if inference_start_status is not None and inference_start_status not in {
+        "not_started", "started", "unknown",
+    }:
+        _fail(f"{path}.inference_start_status", "unsupported inference-start status")
+    if inference_start_status == "started" and obj["attempt"] is None:
+        _fail(f"{path}.attempt", "accepted inference start requires an allocated attempt")
+    if inference_start_status == "not_started" and obj["attempt"] is not None:
+        _fail(f"{path}.attempt", "non-started inference cannot consume an attempt")
+    if attempt_kind == "cache_replay":
+        if obj["provider_call"] or not obj.get("source_invocation_id"):
+            _fail(path, "cache replay requires provider_call=false and source_invocation_id")
     if obj["cache_usage"] not in CACHE_USAGE:
         _fail(f"{path}.cache_usage", "unsupported cache disposition")
+    if obj["provider_call"]:
+        if obj["cache_usage"] == "not_applicable":
+            _fail(f"{path}.cache_usage", "provider calls may not use not_applicable")
+    elif obj["cache_usage"] not in {"read", "probe_cache", "not_applicable"}:
+        _fail(
+            f"{path}.cache_usage",
+            "non-provider records require read, probe_cache, or not_applicable",
+        )
     if obj["session_id"] is not None:
         _text(obj["session_id"], f"{path}.session_id")
+    if "observed_model_ids" in obj:
+        model_ids = _list(obj["observed_model_ids"], f"{path}.observed_model_ids")
+        if not model_ids:
+            _fail(f"{path}.observed_model_ids", "must contain at least one served model ID")
+        seen_model_ids: set[str] = set()
+        for index, model_id in enumerate(model_ids):
+            served = _text(model_id, f"{path}.observed_model_ids[{index}]")
+            if served in seen_model_ids:
+                _fail(f"{path}.observed_model_ids[{index}]", "duplicate served model ID")
+            seen_model_ids.add(served)
+        primary_model = obj.get("observed_model")
+        if not isinstance(primary_model, str) or primary_model not in seen_model_ids:
+            _fail(
+                f"{path}.observed_model_ids",
+                "must include observed_model as the primary served model",
+            )
+    served_model = obj.get("served_model", obj.get("observed_model"))
+    assurance = obj.get("identity_assurance")
+    if assurance is not None and assurance not in {"observed", "requested_only", "unavailable"}:
+        _fail(f"{path}.identity_assurance", "unsupported identity assurance")
+    if assurance == "observed" and not isinstance(served_model, str):
+        _fail(f"{path}.served_model", "observed assurance requires served identity")
+    if assurance == "requested_only" and served_model is not None:
+        _fail(f"{path}.served_model", "requested-only assurance requires null served identity")
+    if obj.get("served_model") is not None and obj.get("observed_model") not in {
+        None, obj.get("served_model"),
+    }:
+        _fail(f"{path}.observed_model", "legacy alias disagrees with served_model")
     if obj["error_class"] is not None and obj["error_class"] not in ERROR_CLASSES:
         _fail(f"{path}.error_class", "unsupported error class")
     effort = obj["reasoning_effort"]
     if effort not in {"low", "medium", "high", "xhigh", "max", "ultra", "provider_default", "unknown"}:
         _fail(f"{path}.reasoning_effort", "unsupported effort")
     usage = _object(obj["usage"], f"{path}.usage")
-    token_fields = ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_tokens", "total_tokens")
-    _required(usage, ("obtainable", *token_fields, "source"), f"{path}.usage")
-    counts = [usage[name] for name in token_fields]
-    for name, count in zip(token_fields, counts):
-        if count is not None:
-            _integer(count, f"{path}.usage.{name}", 0)
-    if usage["obtainable"]:
-        if status != "legacy_record" and any(count is None for count in counts):
-            _fail(f"{path}.usage", "obtainable usage requires every token category and the provider total")
-        if usage["source"] == "unavailable":
-            _fail(f"{path}.usage.source", "cannot be unavailable when usage is obtainable")
-    elif any(count is not None for count in counts) or usage["source"] != "unavailable":
-        _fail(f"{path}.usage", "unobtainable usage requires null counts and source=unavailable")
+    legacy_token_fields = (
+        "input_tokens", "output_tokens", "cached_input_tokens", "reasoning_tokens", "total_tokens",
+    )
+    component_fields = (
+        "input_tokens", "output_tokens", "cached_input_tokens",
+        "cache_creation_input_tokens", "reasoning_tokens",
+    )
+    extension_fields = (
+        "cache_creation_input_tokens", "unavailable_reasons", "total_tokens_kind",
+        "total_tokens_components", "total_tokens_unavailable_reason",
+    )
+    _required(usage, ("obtainable", *legacy_token_fields, "source"), f"{path}.usage")
+    if not isinstance(usage["obtainable"], bool):
+        _fail(f"{path}.usage.obtainable", "expected boolean")
+
+    extension_present = any(name in usage for name in extension_fields)
+    if extension_present:
+        _required(usage, extension_fields, f"{path}.usage")
+        reasons = _object(usage["unavailable_reasons"], f"{path}.usage.unavailable_reasons")
+        extra_reasons = sorted(set(reasons) - set(component_fields))
+        if extra_reasons:
+            _fail(
+                f"{path}.usage.unavailable_reasons",
+                "unsupported component reason(s): " + ", ".join(extra_reasons),
+            )
+        observed_components: set[str] = set()
+        for name in component_fields:
+            count = usage[name]
+            reason = reasons.get(name)
+            if count is None:
+                _text(reason, f"{path}.usage.unavailable_reasons.{name}")
+            else:
+                _integer(count, f"{path}.usage.{name}", 0)
+                observed_components.add(name)
+                if reason is not None:
+                    _fail(
+                        f"{path}.usage.unavailable_reasons.{name}",
+                        "must be absent when the component is observed",
+                    )
+
+        total = usage["total_tokens"]
+        if total is not None:
+            _integer(total, f"{path}.usage.total_tokens", 0)
+        kind = usage["total_tokens_kind"]
+        if kind not in {"provider_reported", "derived", "unavailable"}:
+            _fail(f"{path}.usage.total_tokens_kind", "unsupported total-token provenance")
+        components = _list(
+            usage["total_tokens_components"], f"{path}.usage.total_tokens_components"
+        )
+        named_components: list[str] = []
+        for index, component in enumerate(components):
+            name = _text(component, f"{path}.usage.total_tokens_components[{index}]")
+            if name not in component_fields:
+                _fail(
+                    f"{path}.usage.total_tokens_components[{index}]",
+                    "unsupported token component",
+                )
+            named_components.append(name)
+        if len(named_components) != len(set(named_components)):
+            _fail(f"{path}.usage.total_tokens_components", "components must be unique")
+        unavailable_reason = usage["total_tokens_unavailable_reason"]
+        if kind == "provider_reported":
+            if total is None or named_components or unavailable_reason is not None:
+                _fail(
+                    f"{path}.usage",
+                    "provider-reported total requires a numeric total, no components, and no unavailable reason",
+                )
+        elif kind == "derived":
+            if total is None or not named_components or unavailable_reason is not None:
+                _fail(
+                    f"{path}.usage",
+                    "derived total requires a numeric total, named components, and no unavailable reason",
+                )
+            missing = [name for name in named_components if name not in observed_components]
+            if missing:
+                _fail(
+                    f"{path}.usage.total_tokens_components",
+                    "derived total names unavailable component(s): " + ", ".join(missing),
+                )
+            expected_total = sum(usage[name] for name in named_components)
+            if total != expected_total:
+                _fail(
+                    f"{path}.usage.total_tokens",
+                    f"derived total {total} does not equal named-component sum {expected_total}",
+                )
+        else:
+            if total is not None or named_components:
+                _fail(
+                    f"{path}.usage",
+                    "unavailable total requires total_tokens=null and no components",
+                )
+            _text(unavailable_reason, f"{path}.usage.total_tokens_unavailable_reason")
+
+        any_observed = bool(observed_components) or total is not None
+        if usage["obtainable"] != any_observed:
+            _fail(
+                f"{path}.usage.obtainable",
+                "must be true exactly when at least one token count is observed",
+            )
+        if any_observed and usage["source"] == "unavailable":
+            _fail(f"{path}.usage.source", "observed usage may not use source=unavailable")
+        if not any_observed and usage["source"] != "unavailable":
+            _fail(f"{path}.usage.source", "fully unavailable usage requires source=unavailable")
+        if status == "completed" and obj["provider_call"]:
+            if usage["input_tokens"] is None or usage["output_tokens"] is None:
+                _fail(f"{path}.usage", "completed invocation requires observed input and output tokens")
+            if kind == "unavailable":
+                _fail(f"{path}.usage", "completed invocation requires a provider-reported or derived total")
+    else:
+        # Backward-compatible all-or-nothing v2 shape. New partial records must use the
+        # provenance extension above; old immutable ledgers remain valid without rewriting.
+        counts = [usage[name] for name in legacy_token_fields]
+        for name, count in zip(legacy_token_fields, counts):
+            if count is not None:
+                _integer(count, f"{path}.usage.{name}", 0)
+        if usage["obtainable"]:
+            if status != "legacy_record" and any(count is None for count in counts):
+                _fail(
+                    f"{path}.usage",
+                    "partial usage requires explicit unavailable reasons and total-token provenance",
+                )
+            if usage["source"] == "unavailable":
+                _fail(f"{path}.usage.source", "cannot be unavailable when usage is obtainable")
+        elif any(count is not None for count in counts) or usage["source"] != "unavailable":
+            _fail(f"{path}.usage", "unobtainable usage requires null counts and source=unavailable")
+    usage_by_model = obj.get("usage_by_model")
+    if usage_by_model is not None:
+        partitions = _list(usage_by_model, f"{path}.usage_by_model")
+        seen_models: set[str] = set()
+        for index, partition in enumerate(partitions):
+            part = _object(partition, f"{path}.usage_by_model[{index}]")
+            _required(part, ("model", "identity_assurance", "usage"), f"{path}.usage_by_model[{index}]")
+            model = _text(part["model"], f"{path}.usage_by_model[{index}].model")
+            if model in seen_models:
+                _fail(f"{path}.usage_by_model[{index}].model", "duplicate model partition")
+            seen_models.add(model)
+            if part["identity_assurance"] not in {"observed", "requested_only"}:
+                _fail(f"{path}.usage_by_model[{index}].identity_assurance", "unsupported assurance")
+            _object(part["usage"], f"{path}.usage_by_model[{index}].usage")
+    if obj.get("turn_count") is not None:
+        _integer(obj["turn_count"], f"{path}.turn_count", 0)
+    if obj.get("provider_duration_seconds") is not None:
+        duration = obj["provider_duration_seconds"]
+        if isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration < 0:
+            _fail(f"{path}.provider_duration_seconds", "expected non-negative number")
+    provider_cost = obj.get("provider_cost")
+    if provider_cost is not None:
+        cost = _object(provider_cost, f"{path}.provider_cost")
+        _required(cost, ("amount", "currency", "source", "unavailable_reason"), f"{path}.provider_cost")
+        if cost["amount"] is None:
+            _text(cost["unavailable_reason"], f"{path}.provider_cost.unavailable_reason")
+        elif isinstance(cost["amount"], bool) or not isinstance(cost["amount"], (int, float)) or cost["amount"] < 0:
+            _fail(f"{path}.provider_cost.amount", "expected non-negative number or null")
     if status == "completed":
-        _text(obj["observed_model"], f"{path}.observed_model")
-        if obj["model_source"] == "unavailable":
-            _fail(f"{path}.model_source", "completed invocation requires a model identity source")
+        if assurance == "requested_only":
+            _text(obj["requested_model"], f"{path}.requested_model")
+        else:
+            _text(served_model, f"{path}.served_model")
+            if obj["model_source"] == "unavailable":
+                _fail(f"{path}.model_source", "completed invocation requires an identity disposition")
         if effort == "unknown":
             _fail(f"{path}.reasoning_effort", "live completed invocation may not use unknown")
         _text(obj["started_at"], f"{path}.started_at")
@@ -543,8 +774,9 @@ def validate_invocation(value: dict[str, Any], path: str = "invocation") -> None
 def validate_run(value: dict[str, Any]) -> None:
     obj = _object(value, "run")
     _required(obj, ("schema_version", "audit_id", "round_target", "round_cap", "rounds_run", "stopping_reason", "invocations"), "run")
-    if obj["schema_version"] != "2.0.0":
-        _fail("run.schema_version", "must equal 2.0.0")
+    if obj["schema_version"] not in {"2.0.0", "2.1.0"}:
+        _fail("run.schema_version", "must equal 2.0.0 or 2.1.0")
+    metadata_2_1 = obj["schema_version"] == "2.1.0"
     target = obj["round_target"]
     cap = obj["round_cap"]
     if target is not None:
@@ -554,8 +786,32 @@ def validate_run(value: dict[str, Any]) -> None:
     if target is not None and cap is not None and target > cap:
         _fail("run.round_target", "must not exceed round_cap")
     normalized_v1 = isinstance(obj.get("normalization"), dict)
-    if not normalized_v1 and (target, cap) != (2, 5):
-        _fail("run.round_target", "live v2 policy requires round_target=2 and round_cap=5")
+    if not normalized_v1 and (target != LIVE_ROUND_TARGET or cap not in LIVE_ROUND_CAPS):
+        _fail("run.round_target", f"live v2 policy requires round_target={LIVE_ROUND_TARGET} and round_cap in "
+                                  f"{list(LIVE_ROUND_CAPS)} (a raised cap needs a journaled amendment)")
+    amendments = obj.get("policy_amendments")
+    if amendments is not None:
+        # The chain of raises must start at a cap a live audit was initialised with and end at this run's cap;
+        # finalize binds each step to the snapshot history and the archived snapshots (round_cap_amendment.py).
+        previous = None
+        for index, entry_value in enumerate(_list(amendments, "run.policy_amendments")):
+            entry = _object(entry_value, f"run.policy_amendments[{index}]")
+            _required(entry, ("seq", "at", "leaf", "from", "to", "reason", "snapshot_sha256"),
+                      f"run.policy_amendments[{index}]")
+            if entry["leaf"] != "critique.round_cap":
+                _fail(f"run.policy_amendments[{index}].leaf", "only critique.round_cap may be amended")
+            low = _integer(entry["from"], f"run.policy_amendments[{index}].from", 1)
+            high = _integer(entry["to"], f"run.policy_amendments[{index}].to", 1)
+            _text(entry["reason"], f"run.policy_amendments[{index}].reason")
+            if high <= low:
+                _fail(f"run.policy_amendments[{index}]", "a round-cap amendment may only raise the cap")
+            if not normalized_v1 and (low not in LIVE_ROUND_CAPS or high not in LIVE_ROUND_CAPS):
+                _fail(f"run.policy_amendments[{index}]", f"amended caps must be in {list(LIVE_ROUND_CAPS)}")
+            if previous is not None and low != previous:
+                _fail(f"run.policy_amendments[{index}].from", "amendments must chain: from == the previous to")
+            previous = high
+        if previous is not None and previous != cap:
+            _fail("run.round_cap", "must equal the last round-cap amendment's 'to'")
     rounds_run = obj["rounds_run"]
     if rounds_run is not None:
         rounds_run = _integer(rounds_run, "run.rounds_run", 0)
@@ -602,17 +858,125 @@ def validate_run(value: dict[str, Any]) -> None:
         if _list(obj.get("unreviewed_sections", []), "run.unreviewed_sections"):
             _fail("run.unreviewed_sections", "converged requires no unreviewed section")
         rounds = _list(obj.get("rounds", []), "run.rounds")
+        # a trailing round prepared or authorized but never started is not part of the review (finalize's rule)
+        while rounds and isinstance(rounds[-1], dict) and not rounds[-1].get("started_at") \
+                and rounds[-1].get("state") in ("prepared", "awaiting_authorization", "ready"):
+            rounds = rounds[:-1]
         if not rounds or not isinstance(rounds[-1], dict) or rounds[-1].get("factual_corrections") != 0:
             _fail("run.rounds", "converged requires a final beyond-target round with factual_corrections=0")
     if reason == "aborted":
         _text(obj.get("stopping_reason_detail"), "run.stopping_reason_detail")
     invocation_ids: set[str] = set()
+    attempts: dict[tuple[Any, Any], list[int]] = {}
     for index, invocation in enumerate(_list(obj["invocations"], "run.invocations")):
         validate_invocation(invocation, f"run.invocations[{index}]")
         invocation_id = invocation["invocation_id"]
         if invocation_id in invocation_ids:
             _fail(f"run.invocations[{index}].invocation_id", "duplicate invocation ID")
         invocation_ids.add(invocation_id)
+        if invocation.get("inference_start_status") == "started":
+            # Role attempts are numbered round-wide by the persistent budget; a capability probe is
+            # numbered within the driver invocation that ran it, so probe sequences group per invocation.
+            key = (invocation.get("role"), invocation.get("round"))
+            if invocation.get("attempt_kind") == "capability_probe":
+                key = key + (str(invocation.get("invocation_id") or "").split(":")[0],)
+            attempts.setdefault(key, []).append(invocation.get("attempt"))
+    for key, allocated in attempts.items():
+        if allocated != list(range(1, len(allocated) + 1)) or len(allocated) > ATTEMPT_CEILING_MAX:
+            _fail("run.invocations", f"accepted inference attempts for {key[:2]} must be contiguous 1..N, N<={ATTEMPT_CEILING_MAX}")
+
+    if metadata_2_1:
+        _required(
+            obj,
+            ("journal_watermark", "pause_reason", "post_delta_gates_passed", "events"),
+            "run",
+        )
+        events = _list(obj["events"], "run.events")
+        previous_hash = None
+        saw_live_chain = False
+        # text_redaction (lifecycle_journal 2.7.6) masks a free-text field of an earlier event in this projection; the
+        # masked copy cannot re-hash to the journal's event_hash, so such an event is checked by chain continuity only.
+        redacted_seqs = set()
+        for _event in events:
+            if isinstance(_event, dict) and _event.get("type") == "text_redaction":
+                try:
+                    redacted_seqs.add(int((_event.get("payload") or {}).get("seq")))
+                except (TypeError, ValueError):
+                    pass
+        quorum_events: set[int] = set()
+        integrated_events: set[int] = set()
+        for index, event_value in enumerate(events):
+            event = _object(event_value, f"run.events[{index}]")
+            _required(
+                event,
+                ("schema_version", "seq", "at", "type", "payload", "source", "pid",
+                 "previous_hash", "event_hash"),
+                f"run.events[{index}]",
+            )
+            event_schema = event["schema_version"]
+            if event_schema == "2.1.0":
+                saw_live_chain = True
+            elif event_schema == "legacy" and not saw_live_chain:
+                pass
+            else:
+                _fail(f"run.events[{index}].schema_version", "legacy events are allowed only as an immutable prefix")
+            if event["seq"] != index + 1:
+                _fail(f"run.events[{index}]", "metadata 2.1 events require contiguous 1-based sequence")
+            if event["previous_hash"] != previous_hash:
+                _fail(f"run.events[{index}].previous_hash", "hash chain is broken")
+            material = {key: val for key, val in event.items() if key != "event_hash"}
+            digest = hashlib.sha256(json.dumps(
+                material, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            ).encode("utf-8")).hexdigest()
+            if event["seq"] in redacted_seqs and any(
+                    (event.get("payload") or {}).get(field) == "[redacted]"
+                    for field in ("text", "notes", "note", "detail", "description", "recipient")):
+                digest = event["event_hash"]
+            if event["event_hash"] != digest:
+                _fail(f"run.events[{index}].event_hash", "does not hash the canonical event")
+            previous_hash = digest
+            payload = event.get("payload") or {}
+            if event.get("type") in {"round_quorum_complete", "round_end"} and isinstance(payload.get("round"), int):
+                quorum_events.add(payload["round"])
+            if event.get("type") in {"round_integrated", "round_result"} and isinstance(payload.get("round"), int):
+                integrated_events.add(payload["round"])
+        mark = _object(obj["journal_watermark"], "run.journal_watermark")
+        expected_mark = {
+            "journal_seq": len(events),
+            "journal_hash": previous_hash,
+        }
+        if mark != expected_mark:
+            _fail("run.journal_watermark", f"must equal {expected_mark}")
+
+        round_rows = _list(obj.get("rounds", []), "run.rounds")
+        valid_states = {
+            "prepared", "awaiting_authorization", "ready", "running",
+            "quorum_complete", "integrated",
+        }
+        integrated = 0
+        for index, round_value in enumerate(round_rows):
+            row = _object(round_value, f"run.rounds[{index}]")
+            state = row.get("state")
+            if state not in valid_states:
+                _fail(f"run.rounds[{index}].state", "metadata 2.1 round requires a state-machine state")
+            integrated += int(state == "integrated")
+            if state == "awaiting_authorization" and row.get("started_at") is not None:
+                _fail(f"run.rounds[{index}]", "awaiting authorization cannot be projected as started")
+            if state in {"running", "quorum_complete", "integrated"} and row.get("started_at") is None:
+                _fail(f"run.rounds[{index}].started_at", "running-or-later round needs dispatch start")
+        if not normalized_v1 and obj.get("rounds_run") != integrated:
+            _fail("run.rounds_run", "must count quorum-complete integrated rounds only")
+        if reason == "target_complete":
+            if integrated < 2:
+                _fail("run.stopping_reason", "target completion requires two integrated rounds")
+            completed_rounds = quorum_events & integrated_events
+            if len(completed_rounds) < 2:
+                _fail(
+                    "run.events",
+                    "target completion requires two rounds with both quorum-complete and integrated lifecycle events",
+                )
+            if obj.get("post_delta_gates_passed") is not True:
+                _fail("run.post_delta_gates_passed", "target completion requires passing post-delta gates")
 
 
 VALIDATORS = {

@@ -276,6 +276,53 @@ class DiffPacketTests(unittest.TestCase):
         self.assertNotEqual(stale_ledger.returncode, 0)
         self.assertIn("invocation ledger bound prefix is stale", stale_ledger.stderr)
 
+    def test_metadata_2_1_requested_only_confirmation_flows_from_settled_to_diff(self) -> None:
+        run_path = self.audit / "run.json"
+        run = json.loads(run_path.read_text())
+        run["schema_version"] = "2.1.0"
+        run_path.write_text(json.dumps(run, sort_keys=True) + "\n")
+
+        ledger_path = self.audit / "invocations.jsonl"
+        ledger = [json.loads(line) for line in ledger_path.read_text().splitlines() if line.strip()]
+        terra = next(row for row in ledger if row["invocation_id"] == "diff-inv-b")
+        terra.update({
+            "requested_model": "gpt-5.6-terra",
+            "observed_model": None,
+            "served_model": None,
+            "model_source": "declared",
+            "identity_assurance": "requested_only",
+        })
+        ledger_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in ledger)
+        )
+
+        settled = self.row("F1", "statistics", settled=True)
+        changed_before = self.row("F2", "data")
+        changed_after = copy.deepcopy(changed_before)
+        changed_after["claim"] = "Participant count corrected"
+        changed_after["dependencies"]["finding_ids"] = ["F1"]
+        before = self.write_rows("work/findings.before.jsonl", [settled, changed_before])
+        self.write_rows("work/findings.jsonl", [settled, changed_after])
+
+        made = subprocess.run(
+            ["bash", str(SETTLED), str(self.audit)], text=True, capture_output=True
+        )
+        self.assertEqual(made.returncode, 0, made.stderr)
+        result = self.run_diff(before, "requested-only.json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        packet = json.loads((self.audit / "critique/requested-only.json").read_text())
+        self.assertEqual(
+            [row["fact_id"] for row in packet["settled_fact_references"]], ["F1"]
+        )
+
+        # The same invocation is inadmissible for historical metadata, whose contract required
+        # an observed served-model identity.
+        run["schema_version"] = "2.0.0"
+        run_path.write_text(json.dumps(run, sort_keys=True) + "\n")
+        legacy = self.run_diff(before, "legacy-requested-only.json")
+        self.assertNotEqual(legacy.returncode, 0)
+        self.assertIn("confirmation does not match canonical invocation", legacy.stderr)
+
     def test_stale_registry_report_and_source_hashes_fail_closed(self) -> None:
         settled = self.row("F1", "statistics", settled=True)
         changed_before = self.row("F2", "data")

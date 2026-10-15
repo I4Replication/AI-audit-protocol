@@ -23,6 +23,8 @@ def assessment(finding_id: str, verdict: str = "CONFIRMED") -> dict[str, object]
         "evidence": {
             "artifact_refs": [{"path": f"source/evidence/work/{finding_id}.txt",
                                "sha256": "a" * 64}],
+            "operation": "Compare the canonical claim with the frozen evidence artifact.",
+            "result": f"The frozen evidence yields the bounded {finding_id} result.",
             "reproducible_script": None,
         },
         "requested_correction": (
@@ -73,6 +75,16 @@ class AdjudicationPolicyTests(unittest.TestCase):
         two = one + [("data", critic(assessment("F1")))]
         self.assertEqual(self.kinds(one, registry), ["high_impact_evidence_gap"])
         self.assertEqual(self.kinds(two, registry), [])
+
+    def test_a_merged_or_excluded_high_impact_row_raises_no_evidence_gap(self) -> None:
+        """2.6.2: rows merged into another finding carry no evidence obligation of their own."""
+        for status in ("MERGED", "EXCLUDED"):
+            registry = {"f18": {"id": "F18", "changes_conclusion": False, "impact_rank": 3,
+                                "ledger_disposition": {"status": status, "target": "F1", "reason": "x"}}}
+            self.assertEqual(self.kinds([("stats", critic(assessment("F1")))], registry), [], status)
+        included = {"f1": {"id": "F1", "changes_conclusion": False, "impact_rank": 3,
+                           "ledger_disposition": {"status": "INCLUDED", "target": None, "reason": None}}}
+        self.assertEqual(self.kinds([("stats", critic(assessment("F1")))], included), ["high_impact_evidence_gap"])
 
     def test_failed_settled_spot_check_is_explicit_cache_conflict(self) -> None:
         rows = [("fairness", critic(failed_spot_check=True))]

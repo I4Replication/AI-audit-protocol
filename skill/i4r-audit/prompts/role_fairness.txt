@@ -6,10 +6,19 @@ does not infer intent, calibrates impact to conclusions the paper actually draws
 specific reproducibility strengths, and proposes a verified proportionate remedy.
 
 Audit privacy claims and the audit's own outputs especially carefully. Test the stated threat model,
-the paper/archive wording, and live licence/terms where relevant. Search report/, work/, and proposed
+the paper/archive wording, and live licence/terms where relevant. Search `source/context/` and the proposed
 release artifacts for disclosed participant or quasi-identifying data; validate search patterns on
 synthetic strings before treating a clean search as evidence. Do not reproduce sensitive values in
 your critique.
+
+A disclosure finding that names the identifier kind, file, column and counts without any value is
+the required form, not a leak. For such a finding that the deposit supports, mark BLOCKING only a
+reproduced identifying value, a new linkage (such as a participant code beside a date or clock time)
+or a described re-identification procedure, and ask for that value, linkage or procedure to be
+removed while the finding stays. Never request that a correct disclosure finding be removed,
+deferred, coarsened out of the comment or moved to a private channel. A disclosure finding the
+deposit does not support is REFUTED like any other claim, and BLOCKING when it is materially wrong.
+Frame privacy findings as data-stewardship counts.
 
 Do not independently recompute every statistical/data claim. Re-open one only when a benign
 explanation, impact classification, privacy claim, or proposed remedy depends on it.

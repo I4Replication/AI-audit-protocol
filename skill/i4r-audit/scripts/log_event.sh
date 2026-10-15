@@ -27,10 +27,16 @@
 #   log_event.sh gate gate=check_consistency round=3 exit_status=$?   # capture $? IMMEDIATELY
 #   log_event.sh delivery artifact_path=report/comment.docx recipient='I4R editorial'
 #   log_event.sh human_effort phase=critique person_minutes=95   # self-reported; accumulates
+#   log_event.sh human_effort notes='unattended; no human performed any phase'  # why null
 #   log_event.sh settled used=true generated_after_round=1 path=SETTLED.md entries=14
 #   log_event.sh review_scope changed_claim_ids:='["F2"]' rereviewed_claim_ids:='["F2"]' \
 #                      unresolved_blocking_item_ids:='[]' \
 #                      unresolved_conclusion_critical_item_ids:='[]' unreviewed_sections:='[]'
+#   log_event.sh text_redaction seq=12 field=detail reason='held a home path'  # masks run.json only
+#
+# Logged text is provider-visible (the coordinator reads run.json) and published with the comment. An
+# e-mail address, a private absolute path or a participant-code token is refused (2.7.6); text already in
+# the append-only journal is masked in run.json by a later text_redaction naming its seq and field.
 #
 # Values are typed automatically: bare integers and decimals become numbers, true/false become
 # booleans, `null` and the empty string become null, everything else is a string. Use `key:=<json>`
@@ -41,18 +47,28 @@
 # `at` is optional. `payload` is required and already JSON-typed. The complete batch is validated
 # before the lock is taken; a malformed or unprojectable event leaves run.json unchanged.
 #
-# SAFE TO CALL REPEATEDLY AND CONCURRENTLY. Every write takes an exclusive lock, rewrites the file
-# through a temporary in the same directory, and renames it into place, so a reader never sees a
-# half-written file and two writers never lose each other's event. A stale lock whose owner
-# process is dead is broken automatically after 5 seconds.
+# SAFE TO CALL REPEATEDLY AND CONCURRENTLY. Every write takes an exclusive lock, appends to the
+# hash-chained journal, and rewrites each projection through a temporary in the same directory
+# with a rename into place, so a reader never sees a half-written file and two writers never lose
+# each other's event. The lock is an fcntl lock on <audit>/.run.events.lock: the OS releases it
+# when its holder dies, so a dead process cannot leave a stale lock. A LIVE holder that stops
+# making progress is refused after LOCK_TIMEOUT seconds (default 60) with a message naming it.
+# (Legacy v1/v2.0 audits use the directory lock <run.json>.lock further down, which does break a
+# dead holder's lock after 5 seconds.)
 #
-# Exit status: 0 written, 2 refused (bad arguments, missing file, lock timeout). Never silent.
+# Exit status: 0 written, 2 refused (bad arguments, missing file, unprojectable event, lock
+# timeout). Never silent.
 set -uo pipefail
 
 SELF="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/$(basename "$0")"
 LOCK_TIMEOUT="${LOCK_TIMEOUT:-60}"     # seconds to wait for the write lock
 
-TYPES="init phase_start phase_end round_start round_end round_result review_scope model tokens cost failure brief_correction gate delivery package records human_effort settled note finalize"
+# The six invocation-lifecycle types (invocation_reserved, provider_request, inference_start,
+# provider_response, invocation_terminal, cache_reuse) are NOT accepted here. They have typed
+# APIs in record_invocation.py that validate the whole record; admitted through this generic
+# key=value path with no required keys, a bare `invocation_terminal invocation_id=x` was
+# committed to the append-only journal and wedged the audit on every later projection.
+TYPES="init publication_redaction phase_start phase_end round_prepared round_authorization_required round_authorized round_ready round_start round_end round_quorum_complete round_integrated round_paused round_result review_scope authorization_wait_start authorization_wait_end pause_start pause_end retry_backoff_start retry_backoff_end metadata_correction migration_anchor model tokens cost failure brief_correction gate delivery package records human_effort settled note finalize text_redaction"
 PHASES="intake fan_out adjudication critique release"
 
 die () { echo "FATAL: log_event.sh: $*" >&2; exit 2; }
@@ -122,15 +138,19 @@ acquire_lock () {
 required_keys () {
   case "$1" in
     phase_start|phase_end) echo "phase" ;;
-    round_start|round_end|round_result) echo "round" ;;
+    round_prepared|round_authorization_required|round_authorized|round_ready|round_start|round_end|round_quorum_complete|round_integrated|round_paused|round_result) echo "round" ;;
     review_scope) echo "changed_claim_ids rereviewed_claim_ids unresolved_blocking_item_ids unresolved_conclusion_critical_item_ids unreviewed_sections" ;;
+    publication_redaction) echo "fields_requiring_removal" ;;
     model) echo "role model_id provider" ;;
     tokens|cost) echo "role" ;;
     failure) echo "kind detail" ;;
     brief_correction) echo "description" ;;
     gate) echo "gate exit_status" ;;
     records) echo "artifact" ;;
-    human_effort) echo "phase person_minutes" ;;
+    # human_effort is validated below rather than here: phase+person_minutes are required
+    # TOGETHER when minutes are reported, but a notes-only event is allowed so a run can record
+    # why no minutes exist. See the human_effort block after the required-key loop.
+    human_effort) echo "" ;;
     settled) echo "used" ;;
     *) echo "" ;;
   esac
@@ -176,9 +196,18 @@ for number, line in enumerate(lines, 1):
         raise SystemExit(f"FATAL: event batch line {number} needs a nonempty string type")
     if not isinstance(value.get("payload"), dict):
         raise SystemExit(f"FATAL: event batch line {number} needs an object payload")
+    if "at" in value["payload"]:
+        # the journal records only the line's top-level "at"; one inside the payload is ignored data
+        raise SystemExit(f"FATAL: event batch line {number}: put \"at\" at the top level of the line, not inside \"payload\"")
     if "at" in value and (not isinstance(value["at"], str) or not value["at"]):
         raise SystemExit(f"FATAL: event batch line {number} at must be a nonempty string")
     event_type = value["type"]
+    if event_type in ("policy_amendment", "audit_reopened"):
+        raise SystemExit(f"FATAL: event batch line {number}: {event_type} is written only by its tool "
+                         "(scripts/amend_round_cap.py, scripts/reopen_audit.py), never logged by hand")
+    if event_type in ("environment_captured", "environment"):
+        raise SystemExit(f"FATAL: event batch line {number}: the software environment is journaled only by "
+                         "scripts/capture_environment.sh (as environment_captured), never logged by hand")
     if event_type not in types:
         raise SystemExit(f"FATAL: event batch line {number} has unknown type {event_type!r}")
     missing = [key for key in required[event_type] if key not in value["payload"]]
@@ -289,21 +318,16 @@ write_events () {
         | .status = (if .status == "initialized" then "running" else .status end)
 
       elif $type == "phase_end" then
-        # A phase closed in the same second it opened was stamped retroactively, not measured.
-        # Record null rather than 0: a zero that looks measured is worse than an honest gap, and
-        # the rest of this record already follows that rule. Added 2026-08-22, after two audits
-        # filed 0h00m intake and release phases that nobody had actually timed.
+        # wall_clock_seconds is DERIVED whole seconds, minimum 0, exactly as run.schema.json
+        # states and exactly as the metadata-2.1 projection computes it. This branch used to
+        # substitute null for any duration under two seconds on the theory that such a phase was
+        # stamped retroactively; that contradicted the schema, misfired on every genuinely short
+        # phase, and existed in this legacy path only, so the two projections disagreed.
         # NOTE: no apostrophes in this comment. It sits inside a single-quoted shell string.
         .phases[$p.phase].ended_at = $t
         | .phases[$p.phase].ran = (.phases[$p.phase].started_at != null)
-        | (dur(.phases[$p.phase].started_at; $t)) as $d
-        | .phases[$p.phase].wall_clock_seconds =
-            (if $d == null then null elif $d < 2 then null else $d end)
-        | .phases[$p.phase].notes =
-            (($p.notes // .phases[$p.phase].notes) as $n
-             | if ($d != null and $d < 2)
-               then (($n // "") + " [duration not recorded: opened and closed in the same second, so it was stamped retroactively rather than measured]" | ltrimstr(" "))
-               else $n end)
+        | .phases[$p.phase].wall_clock_seconds = (dur(.phases[$p.phase].started_at; $t))
+        | .phases[$p.phase].notes = ($p.notes // .phases[$p.phase].notes)
 
       elif $type == "round_start" then
         ensure_round($p.round)
@@ -443,12 +467,12 @@ write_events () {
            else . end)
 
       elif $type == "delivery" then
-        .delivery = ((.delivery // {}) + {
+        .delivery = {
           delivered_at: ($p.delivered_at // $t),
-          artifact_path: ($p.artifact_path // (.delivery.artifact_path? // null)),
-          artifact_sha256: ($p.artifact_sha256 // (.delivery.artifact_sha256? // null)),
-          release_dir: ($p.release_dir // (.delivery.release_dir? // null)),
-          recipient: ($p.recipient // (.delivery.recipient? // null)) })
+          artifact_path: ($p.artifact_path // null),
+          artifact_sha256: ($p.artifact_sha256 // null),
+          release_dir: ($p.release_dir // null),
+          recipient: ($p.recipient // null) }
 
       elif $type == "package" then
         .package = ((.package // {}) + ($p | del(.at)))
@@ -456,8 +480,10 @@ write_events () {
       elif $type == "human_effort" then
         # Person-minutes ACCUMULATE: effort on a phase is reported in whatever chunks the
         # person remembers, and overwriting would silently discard every earlier report.
-        .human_effort.person_minutes_by_phase[$p.phase] =
-          (((.human_effort.person_minutes_by_phase[$p.phase]) // 0) + $p.person_minutes)
+        (if ($p | has("phase")) then
+           .human_effort.person_minutes_by_phase[$p.phase] =
+             (((.human_effort.person_minutes_by_phase[$p.phase]) // 0) + $p.person_minutes)
+         else . end)
         | .human_effort.people_involved = ($p.people_involved // .human_effort.people_involved)
         | .human_effort.notes = ($p.notes // .human_effort.notes)
 
@@ -551,6 +577,13 @@ main () {
   else
     [ $# -ge 1 ] || die "no event type given (one of: $TYPES), and no --batch file given"
     TYPE="$1"; shift
+    case "$TYPE" in
+      # 2.6.9: a raised round cap and a reopened audit are operator acts with a reason, journaled by their tool
+      policy_amendment) die "policy_amendment is written only by scripts/amend_round_cap.py, never logged by hand" ;;
+      audit_reopened) die "audit_reopened is written only by scripts/reopen_audit.py (or amend_round_cap.py --reopen), never logged by hand" ;;
+      # 2.7.4: a live measurement of this machine; run.json's environment is the projection of the latest one
+      environment_captured|environment) die "the software environment is journaled only by scripts/capture_environment.sh <audit-dir> (as environment_captured), never logged by hand" ;;
+    esac
     in_list "$TYPE" "$TYPES" || die "unknown event type '$TYPE' (one of: $TYPES)"
 
     # Per-type required keys. Refusing here rather than writing a half-specified event is
@@ -569,7 +602,45 @@ main () {
         esac
       done
     fi
+    if [ "$TYPE" = "human_effort" ]; then
+      local he_phase=0 he_minutes=0 he_note=0
+      for a in "$@"; do
+        case "$a" in
+          phase=*|phase:=*) he_phase=1 ;;
+          person_minutes=*|person_minutes:=*) he_minutes=1 ;;
+          notes=*|notes:=*|people_involved=*|people_involved:=*) he_note=1 ;;
+        esac
+      done
+      if [ "$he_phase" -ne "$he_minutes" ]; then
+        die "human_effort: phase= and person_minutes= must be given together"
+      fi
+      if [ "$he_phase" -eq 0 ] && [ "$he_note" -eq 0 ]; then
+        die "human_effort needs either phase=<p> person_minutes=<n>, or notes=<text> (and/or people_involved=<n>) to record why no minutes exist"
+      fi
+    fi
     EVENT_COUNT=1
+  fi
+
+  # Metadata 2.1 writes only to the hash-chained journal. The Python layer
+  # appends and regenerates run.json/invocations.jsonl under one journal lock.
+  # Keep the legacy jq transaction below for immutable v1/v2.0 audits.
+  local SCHEMA_VERSION_NOW
+  SCHEMA_VERSION_NOW=$(jq -r '.schema_version // empty' "$RUN" 2>/dev/null)
+  if [ "$SCHEMA_VERSION_NOW" = "2.1.0" ]; then
+    local ROOT_21 rc21
+    ROOT_21=$(cd "$(dirname "$RUN")" 2>/dev/null && pwd) || die "cannot resolve audit root"
+    if [ -n "$BATCH" ]; then
+      python3 "$(dirname "$SELF")/lifecycle_journal.py" append-batch "$ROOT_21" "$BATCH_TMP" >/dev/null
+    else
+      python3 "$(dirname "$SELF")/lifecycle_journal.py" append-kv "$ROOT_21" "$TYPE" "$@" >/dev/null
+    fi
+    rc21=$?
+    [ -n "$BATCH_TMP" ] && rm -f "$BATCH_TMP"
+    BATCH_TMP=""
+    # 2, not 1: "refused" is the documented exit for a write that did not happen, and the legacy
+    # path below already uses it. The journal printed its own reason on stderr.
+    if [ "$rc21" -ne 0 ]; then return 2; fi
+    return 0
   fi
 
   LOCK="$RUN.lock"
@@ -593,8 +664,11 @@ self_test () {
   echo "== log_event.sh self-test in $T =="
 
   mkdir -p "$T/a/pkg"; printf 'x\n' > "$T/a/pkg/f.csv"
+  # the model the shipped policy freezes (sonnet-5-5 since 2.7.0); init refuses any other
+  local SHIPPED_MODEL
+  SHIPPED_MODEL=$(jq -r '.models.coordinator.requested_model // empty' "$(dirname "$SELF")/../config/pipeline-policy-v2.json")
   bash "$INIT" "$T/a" --audit-id t-1 --doi 10.1234/abc \
-       --auditor-model sonnet-5 --auditor-family claude --auditor-provider anthropic \
+       --auditor-model "$SHIPPED_MODEL" --auditor-family claude --auditor-provider anthropic \
        --protocol-version p1 --gate-set-version g1 > /dev/null 2>&1
   if [ $? -ne 0 ]; then echo "  FAIL: could not initialise a run to test against"; rm -rf "$T"; return 1; fi
   local RUN="$T/a/run.json"
@@ -768,8 +842,8 @@ self_test () {
   bash "$SELF" --run "$RUN" --batch "$BATCH" > /dev/null 2>&1
   rc=$?
   after_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
-  if [ "$rc" -ne 1 ] || [ "$before_hash" != "$after_hash" ]; then
-    echo "  FAIL: projection failure partially committed a batch (rc $rc)"; fails=1
+  if [ "$rc" -ne 2 ] || [ "$before_hash" != "$after_hash" ]; then
+    echo "  FAIL: projection failure partially committed a batch or did not exit 2 (rc $rc)"; fails=1
   else echo "  ok: projection failure leaves the whole batch uncommitted"; fi
 
   # 11. NEGATIVE CONTROLS -- each must refuse with exit 2 specifically
@@ -792,12 +866,27 @@ self_test () {
   if [ $? -ne 2 ]; then echo "  FAIL: --batch without a JSONL path was accepted"; fails=1
   else echo "  ok: --batch without a path refused (exit 2)"; fi
 
-  # 12. a stale lock left by a dead process must not wedge the run
-  mkdir -p "$RUN.lock"; printf '999999\n' > "$RUN.lock/pid"; printf '%s\n' "$(( $(date +%s) - 60 ))" > "$RUN.lock/ts"
-  bash "$SELF" --run "$RUN" note text="after stale lock" > /dev/null 2>&1
+  # 12. the LIVE lock: a holder that will not let go is refused after LOCK_TIMEOUT with exit 2,
+  #     and a write goes through once it is released. (This used to plant a <run.json>.lock
+  #     directory, which the metadata-2.1 path never reads, so it asserted nothing.)
+  python3 - "$(dirname "$RUN")" <<'PYHOLD' &
+import fcntl, pathlib, sys, time
+handle = (pathlib.Path(sys.argv[1]) / ".run.events.lock").open("a+b")
+fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+time.sleep(4)
+PYHOLD
+  holder=$!
+  sleep 1
+  LOCK_TIMEOUT=1 bash "$SELF" --run "$RUN" note text="while locked" > /dev/null 2>"$T/lock.err"
   rc=$?
-  if [ "$rc" -ne 0 ]; then echo "  FAIL: a stale lock from a dead pid blocked the write (rc $rc)"; fails=1
-  else echo "  ok: stale lock from a dead pid broken automatically"; fi
+  if [ "$rc" -ne 2 ] || ! grep -q "LOCK_TIMEOUT" "$T/lock.err"; then
+    echo "  FAIL: a held journal lock should be refused with exit 2 after LOCK_TIMEOUT (rc $rc)"; fails=1
+  else echo "  ok: a live lock holder is refused after LOCK_TIMEOUT with exit 2 and a reason"; fi
+  wait "$holder" 2>/dev/null
+  bash "$SELF" --run "$RUN" note text="after lock released" > /dev/null 2>&1
+  rc=$?
+  if [ "$rc" -ne 0 ]; then echo "  FAIL: the write after the lock was released failed (rc $rc)"; fails=1
+  else echo "  ok: the write went through once the lock was released"; fi
 
   rm -rf "$T"
   if [ "$fails" -ne 0 ]; then echo "SELF-TEST FAILED"; return 1; fi

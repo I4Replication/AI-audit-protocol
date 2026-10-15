@@ -5,12 +5,10 @@
   "safe_to_publish": false,
   "publication_redaction": {
     "fields_requiring_removal": [
-      "/governance/pii_description",
       "/governance/ethics_identifier",
       "/author_response/note",
       "/findings/*/package_locus",
-      "/findings/*/verification/verifiers/*/verifier",
-      "/disclosure/statement"
+      "/findings/*/verification/verifiers/*/verifier"
     ],
     "safe_aggregates": [
       "/bibliographic",
@@ -21,7 +19,7 @@
       "/rollup",
       "/timing"
     ],
-    "note": "F2 is disclosure-flagged at urgency 'prompt': the authors and the journal must be notified before this record leaves the registry, and pii_description must be coarsened first. Do not publish any worked example that demonstrates the re-identification route. package_locus on every finding needs a read-through before release: a deposit path can name a participant.",
+    "note": "F2 is disclosure-flagged at urgency 'prompt'. It is reported in the comment, value-free (file, column, counts and a verified remedy), and the comment is filed with I4R, which decides any notification; nothing about it delays drafting or filing. pii_description and disclosure.statement are value-free and stay inspected by the release gates. Before any extract of this internal record leaves the registry, read package_locus on every finding: a deposit path can name a participant. Never publish an identifying value or a procedure that demonstrates re-identification.",
     "cleared_by": null
   },
   "enumeration_scheme": "v1.0",
@@ -136,18 +134,18 @@
     "consent_covers_republication": null,
     "consent_evidence": "The paper states written informed consent was obtained; neither the paper nor the deposit says whether it covered open republication of participant-level data.",
     "pii_present": true,
-    "pii_description": "One deposited file pairs a participant code with a session date; the pairing narrows most participants to a single club training slot. Reported to the authors at the coarsest level that lets them find it; the file and column names are in the disclosure email, not in this record.",
-    "pii_detector_scope": "Scanned all 213 files under pkg/. Forms covered: bare P-codes, underscore-prefixed codes (CYC_P07), and club-prefixed codes; dates in ISO, dd/mm/yyyy and dd.mm.yyyy; clocks hh:mm:ss. Two xlsx workbooks and one rds were decoded before scanning rather than pattern-matched as bytes. Negative control: ordinary prose from the paper's Methods does not fire. Positive controls used out-of-range ids (P999).",
+    "pii_description": "Quasi-identifier: data/wave1_sessions.csv pairs the participant-code column with the session_date column in all 82 rows (82 participants). The paper's anonymisation statement does not mention the dates. Reported in the comment as a disclosure-flagged finding with counts only; no value is reproduced here or there.",
+    "pii_detector_scope": "Scanned all 213 files under pkg/. Forms covered: bare letter-and-number participant codes, underscore-prefixed codes and club-prefixed codes; dates in ISO, dd/mm/yyyy and dd.mm.yyyy; clocks hh:mm:ss; column headers naming names, birth dates, e-mail, IP address, phone and postal address. Two xlsx workbooks and one rds were decoded before scanning rather than pattern-matched as bytes. Negative control: ordinary prose from the paper's Methods does not fire. Positive controls used synthetic out-of-range ids. Only counts were printed.",
     "anonymisation_claimed": true,
-    "disclosure_notified": true,
-    "disclosure_notified_at": "2026-07-16T09:00:00Z"
+    "disclosure_notified": null,
+    "disclosure_notified_at": null
   },
   "disclosure": {
     "flags": [
       "identifiability_indirect"
     ],
     "urgency": "prompt",
-    "statement": "One deposited file pairs a participant code with the date of that participant's testing session. Combined with the club training schedules published on the three clubs' own websites, the pairing narrows most participants to a single slot. Re-identification requires that auxiliary information, so the exposure is real but not immediate.",
+    "statement": "The deposited file data/wave1_sessions.csv pairs each participant's code with the date of their testing session (column session_date) in all 82 rows, one per participant. Singling anyone out would still need auxiliary information, so the exposure is real but not immediate. No value is reproduced. Verified remedy: drop the session_date column or coarsen it to study week, then replace the file through the repository.",
     "consistent_with": "correction (deposit modification); the repository supports a direct file modification request, so no new deposit is required",
     "findings_flagged": [
       "F2"
@@ -248,7 +246,7 @@
     },
     {
       "id": "F2",
-      "claim": "A deposited file pairs each participant's code with the date of their testing session.",
+      "claim": "The deposited file data/wave1_sessions.csv pairs each participant's code with the date of their testing session (column session_date) in all 82 rows.",
       "section": "Section 7",
       "checklist_item": 7,
       "impact": "none",
@@ -263,18 +261,20 @@
       "check_nature": "deterministic",
       "claim_ref": null,
       "evidence": {
-        "artifact": "pkg/data/ (one file; named in the disclosure email, not here)",
-        "operation": "scan every deposited file for a participant code and a date on one row",
+        "artifact": "pkg/data/wave1_sessions.csv",
+        "operation": "count the rows in which the participant-code column and the session_date column are both non-missing; the script prints counts only, never a value",
         "expected": "no participant code beside a date",
-        "observed": "one file pairs both across all rows",
+        "observed": "82 of 82 rows carry both",
         "tolerance_note": null
       },
       "consistent_with": "correction (deposit metadata); removal is not in question",
       "disclosure_flag": true,
       "remedy_class": "one_line_code",
-      "remedy_description": "Drop the date column, or coarsen it to study week, and request a direct file modification through the repository -- OSF supports this without a new deposit.",
+      "remedy_description": "Drop the session_date column from data/wave1_sessions.csv, or coarsen it to study week, and request a direct file modification through the repository -- OSF supports this without a new deposit.",
       "remedy_verified": true,
-      "package_locus": [],
+      "package_locus": [
+        "data/wave1_sessions.csv column session_date"
+      ],
       "verification_script": "work/f2_quasi_identifier_scan.R",
       "changes_conclusion": false,
       "changes_conclusion_which": null,

@@ -6,23 +6,26 @@
 <style>
   @page { size: letter; margin: 13mm 13mm 15mm 13mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font: 9.6pt/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1e2430; }
+  body { font: 9.1pt/1.38 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1e2430; }
   .band { background: #14304f; color: #fff; border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; }
   .band h1 { font-size: 17pt; font-weight: 700; letter-spacing: -0.3px; }
   .band p { color: #b8cbe0; font-size: 8.8pt; margin-top: 3px; }
   .band code { color: #ffd479; background: rgba(255,255,255,.14); font-family: "SF Mono", Menlo, monospace; font-size: 8.4pt; }
-  h2 { font-size: 11.5pt; color: #14304f; margin: 13px 0 6px; padding-bottom: 2px;
+  .band .ver { float: right; font: 700 8.4pt "SF Mono", Menlo, monospace; color: #ffd479;
+               background: rgba(255,255,255,.14); border-radius: 4px; padding: 3px 8px; }
+  h2 { font-size: 11pt; color: #14304f; margin: 10px 0 5px; padding-bottom: 2px;
        border-bottom: 2px solid #14304f; break-after: avoid; }
   h2 .n { display: inline-block; background: #14304f; color: #fff; border-radius: 4px;
           width: 17px; height: 17px; text-align: center; font-size: 9.5pt; line-height: 17px;
           margin-right: 6px; vertical-align: 1px; }
-  p { margin: 4px 0; }
+  p { margin: 3px 0; }
   code { font-family: "SF Mono", Menlo, monospace; font-size: 8.6pt; background: #eef1f6;
          border-radius: 3px; padding: 0 3px; }
   /* prerequisites table */
-  table.prereq { width: 100%; border-collapse: collapse; font-size: 8.8pt; }
+  table.prereq { width: 100%; border-collapse: collapse; font-size: 8.4pt; }
   table.prereq th { background: #14304f; color: #fff; text-align: left; padding: 4px 8px; font-size: 8.4pt; }
-  table.prereq td { border-bottom: 1px solid #dde3ec; padding: 5px 8px; vertical-align: top; }
+  table.prereq tr { break-inside: avoid; }
+  table.prereq td { border-bottom: 1px solid #dde3ec; padding: 3px 7px; vertical-align: top; }
   table.prereq tr:nth-child(even) td { background: #f5f7fa; }
   table.prereq td:first-child { width: 30%; font-weight: 600; }
   table.prereq td:nth-child(2) { width: 38%; }
@@ -34,7 +37,7 @@
   .dot { width: 9px; height: 9px; border-radius: 50%; }
   .r { background: #ff5f57; } .y { background: #febc2e; } .g { background: #28c840; }
   .tbar .ttl { color: #8a93a3; font: 7.6pt Menlo, monospace; margin-left: 8px; }
-  .term pre { padding: 8px 12px; font: 8.2pt/1.5 "SF Mono", Menlo, monospace;
+  .term pre { padding: 7px 11px; font: 7.9pt/1.42 "SF Mono", Menlo, monospace;
               color: #d6dde8; white-space: pre-wrap; word-break: break-word; }
   .term .p  { color: #56d364; }       /* prompt */
   .term .ok { color: #7ce38b; }
@@ -43,16 +46,28 @@
   .term .cm { color: #7d8590; }
   /* callout */
   .rules { border: 2px solid #b42318; background: #fef3f2; border-radius: 8px;
-           padding: 9px 13px; margin: 8px 0; break-inside: avoid; }
+           padding: 7px 12px; margin: 7px 0; break-inside: avoid; }
   .rules h3 { color: #b42318; font-size: 10pt; margin-bottom: 4px; }
-  .rules li { margin: 3px 0 3px 16px; font-size: 9.2pt; }
+  .rules li { margin: 2px 0 2px 16px; font-size: 8.8pt; }
   .rules b { color: #b42318; }
+  /* amber warning */
+  .warn { border: 2px solid #b26a00; background: #fffaf0; border-radius: 8px;
+          padding: 7px 12px; margin: 7px 0; break-inside: avoid; }
+  .warn h3 { color: #b26a00; font-size: 10pt; margin-bottom: 4px; }
+  .warn b { color: #b26a00; }
+  .warn li { margin: 3px 0 3px 16px; font-size: 9.2pt; }
   /* prompt card */
   .card { border: 1.5px solid #14304f; border-left: 6px solid #14304f; background: #f2f6fb;
           border-radius: 6px; padding: 8px 12px; margin: 7px 0;
           font: 8.4pt/1.55 "SF Mono", Menlo, monospace; break-inside: avoid; }
   .card .lbl { font: 700 8pt "Helvetica Neue", sans-serif; color: #14304f;
                text-transform: uppercase; letter-spacing: .6px; }
+  /* ordered pipeline chain */
+  .chain { background: #f5f7fa; border: 1.5px solid #14304f; border-radius: 6px;
+           padding: 9px 12px; margin: 7px 0; break-inside: avoid;
+           font: 8.4pt/1.7 "SF Mono", Menlo, monospace; }
+  .chain b { color: #b42318; }
+  .chain .ar { color: #8a93a3; }
   /* timeline */
   .tl { display: flex; margin: 9px 0 2px; break-inside: avoid; }
   .seg { text-align: center; padding: 6px 2px 5px; border: 1.5px solid #14304f;
@@ -68,221 +83,401 @@
           font: 8.4pt/1.55 "SF Mono", Menlo, monospace; break-inside: avoid; }
   .tree .d { color: #14304f; font-weight: 700; } .tree .c { color: #5a6a80; }
   /* troubleshooting */
-  table.trb { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  table.trb { width: 100%; border-collapse: collapse; font-size: 8.1pt; }
   table.trb th { background: #14304f; color: #fff; text-align: left; padding: 4px 8px; font-size: 8.2pt; }
   table.trb tr { break-inside: avoid; }
-  table.trb td { border-bottom: 1px solid #dde3ec; padding: 4px 8px; vertical-align: top; }
+  table.trb td { border-bottom: 1px solid #dde3ec; padding: 3px 7px; vertical-align: top; }
   table.trb tr:nth-child(even) td { background: #f5f7fa; }
   table.trb td:first-child { width: 34%; font-family: "SF Mono", Menlo, monospace; font-size: 7.9pt; }
   .cost { background: #f0f6ef; border: 1.5px solid #2d7a39; border-radius: 8px;
-          padding: 8px 13px; margin-top: 9px; font-size: 9.2pt; break-inside: avoid; }
+          padding: 7px 12px; margin-top: 8px; font-size: 8.8pt; break-inside: avoid; }
   .cost b { color: #2d7a39; }
+  .cost table { width: 100%; border-collapse: collapse; font-size: 8.6pt; margin-top: 5px; }
+  .cost td { padding: 2px 6px 2px 0; vertical-align: top; }
+  .cost td:first-child { font-weight: 600; width: 34%; }
   .twocol { display: flex; gap: 12px; } .twocol > div { flex: 1; }
   .pagebreak { break-before: page; }
+  .foot { margin-top: 12px; padding-top: 6px; border-top: 1px solid #dde3ec;
+          color: #5a6a80; font-size: 7.8pt; }
 </style>
 </head>
 <body>
 
 <div class="band">
+  <span class="ver">v2.6.2</span>
   <h1>i4r-audit &mdash; team cheat sheet</h1>
-  <p>Set up once, then: reserve a paper &rarr; run the audit &rarr; file the result. Every dark window below is a
-  <b style="color:#fff">verbatim capture from a real run</b>, not an illustration. Your audit's exact gate set is stamped
-  into its <code>run.json</code> as <code>gates-&lt;hash&gt;</code>.</p>
+  <p>Set up once, then: reserve a paper &rarr; run the audit &rarr; file the result. Every dark window below was
+  <b style="color:#fff">captured from this tree on 2026-09-08</b>, not illustrated &mdash; so the counts are real and will drift.
+  Check <code>cat VERSION</code>: this sheet describes <b style="color:#fff">2.6.2</b>, and much of it changed in 2.3.0&ndash;2.4.x.</p>
+</div>
+
+<div class="warn">
+  <h3>Read this first &mdash; the PATH trap that silently breaks the build</h3>
+  <p style="font-size:9.2pt"><code>pandoc</code>, <code>pdfinfo</code> and <code>pdftotext</code> live in the
+  <code>i4rdoc</code> conda environment, not on your login PATH. In a plain shell here today <code>pandoc</code> is <b>missing</b> and
+  <code>pdfinfo</code> resolves to miniconda's <b>21.03.0</b> &mdash; below the 21.06 floor, and it exits&nbsp;99 on the
+  <code>-custom</code> call the privacy gate makes. Nothing warns you: the build fails later, or R silently reports
+  <code>pandoc_available() = FALSE</code>. <b>Put this at the top of every shell:</b></p>
+  <div class="card" style="margin:6px 0 4px"><span class="lbl">Every terminal, before anything else</span><br>
+export PATH="$HOME/miniconda3/envs/i4rdoc/bin:$HOME/.local/bin:$PATH"</div>
+  <p style="font-size:8.8pt"><code>pdfinfo -v</code> must print <b>21.06 or newer</b>. If it prints 21.03, your PATH is wrong.</p>
 </div>
 
 <h2><span class="n">1</span>What you need (one-time, ~30 minutes)</h2>
 <table class="prereq">
-  <tr><th style="width:30%">Thing</th><th style="width:38%">Where / how</th><th>Why</th></tr>
-  <tr><td>Claude Code, on an account that can run Opus&nbsp;5</td>
+  <tr><th style="width:30%">Thing</th><th style="width:38%">Where / how</th><th>Why &mdash; and what happens without it</th></tr>
+  <tr><td>Claude Code, on an account that can run Sonnet&nbsp;5.5 (and Sonnet&nbsp;5 for audits started before 2.7.0)</td>
       <td><code>npm install -g @anthropic-ai/claude-code</code>, then run <code>claude</code> and log in</td>
-      <td>The coordinator and the five auditors run here</td></tr>
-  <tr><td>ChatGPT desktop app, logged in, workspace <b>with credits</b></td>
-      <td>chatgpt.com/download &mdash; the Codex CLI ships inside the app; nothing extra to install</td>
-      <td>The four adversarial critics run on GPT&nbsp;5.6 Terra through it. <b>No credits = no critique rounds</b> &mdash; the skill detects this and stops before wasting one</td></tr>
-  <tr><td>R &ge; 4.4 with the notebook packages</td>
-      <td><code>install.packages(c("haven", "lavaan", "psych", "rmarkdown", "knitr", "readxl", "jsonlite"))</code></td>
-      <td>The verification notebook re-derives every number in the comment</td></tr>
-  <tr><td>Python 3 with the readers</td>
-      <td><code>pip3 install pyreadstat pandas scipy numpy statsmodels jsonschema openpyxl</code></td>
-      <td>Auditors cross-read every data format two ways</td></tr>
-  <tr><td>pandoc + LibreOffice</td>
-      <td><code>brew install pandoc</code> &middot; libreoffice.org</td>
-      <td>Builds the .docx and measures the real page count against the 10-page cap</td></tr>
+      <td>Coordinator and the five auditors. Each audit keeps the model frozen in its snapshot: a new one spawns <code>claude-sonnet-5-5</code></td></tr>
+  <tr><td>ChatGPT desktop app, <b>updated</b> (its Codex CLI 0.159.0 or newer), logged in, workspace <b>with credits</b> and GPT&#8209;6.1&nbsp;Sol</td>
+      <td>chatgpt.com/download &mdash; the Codex CLI ships inside the app; nothing extra to install. The skill finds the newest working copy itself, wherever the app puts it (<code>python3 scripts/codex_cli.py --explain</code> shows its version)</td>
+      <td>Critics on GPT&#8209;6.1&nbsp;Sol/high, adjudication on Sol/max (an audit started before 2.7.0 keeps the critic route it froze: GPT&nbsp;5.6&nbsp;Terra, or GPT&#8209;6&nbsp;Sol for the one 2.6.0 audit). <b>No credits = no critique</b>; the critique model probe catches it, or a CLI or account without Sol, before spending. The probe runs on an audit's first round and after a CLI update, not per account: run every round of a Sol audit from an account that has Sol</td></tr>
+  <tr><td><b>jq</b></td><td>ships with macOS at <code>/usr/bin/jq</code></td>
+      <td><b>Hard.</b> Every journal append and all of finalize shell out to it. Never mentioned on the old sheet</td></tr>
+  <tr><td><b>Poppler &ge; 21.06</b> (<code>pdfinfo</code>, <code>pdftotext</code>)</td>
+      <td>in the <code>i4rdoc</code> env &mdash; see the PATH box above</td>
+      <td><b>Hard.</b> Exact page count; the privacy gate calls <code>-custom</code> and <code>-meta</code></td></tr>
+  <tr><td><b>pandoc</b></td><td><code>i4rdoc</code> env; or set <code>PANDOC=&lt;path&gt;</code></td>
+      <td><b>Hard.</b> <code>build_docx.sh</code> searches three fallbacks; <code>run_verification.sh</code> does <b>not</b> &mdash; R must see pandoc itself</td></tr>
+  <tr><td><b>LibreOffice</b></td><td>libreoffice.org &mdash; a normal drag-to-Applications install is enough</td>
+      <td><b>Hard, no degraded path:</b> <code>FATAL: LibreOffice/soffice is required</code>. Need not be on PATH &mdash; the app bundle is a fallback</td></tr>
+  <tr><td>R &ge; 4.4 with <code>knitr</code> + <code>rmarkdown</code></td>
+      <td><code>install.packages(c("knitr","rmarkdown"))</code>; add <code>readxl</code>&nbsp;/&nbsp;<code>haven</code>&nbsp;/&nbsp;<code>jmvReadWrite</code> as deposits need them</td>
+      <td>Only these two are unconditional; the rest follow the deposit's file types. <code>lavaan</code>, <code>psych</code>, <code>jsonlite</code> are <b>not used</b> &mdash; environment fingerprint only</td></tr>
+  <tr><td>Python 3</td><td><code>pip3 install openpyxl</code></td>
+      <td>The only third-party import in the skill, and it degrades rather than aborts. <code>jsonschema</code> is <b>not</b> required &mdash; the skill ships its own validator</td></tr>
   <tr><td>The shared Dropbox discipline folder, synced locally</td>
       <td>Ask the coordinator for the invite</td>
-      <td>Papers, packages, reservations, and completed reports live in one tree</td></tr>
-  <tr><td>The skill itself</td><td>Next section</td><td></td></tr>
+      <td>Papers, packages, reservations, registry, completed reports</td></tr>
 </table>
 
 <h2><span class="n">2</span>Install and prove it works</h2>
 <div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — install + self-tests</span></div>
-<pre><span class="p">$</span> unzip i4r-audit.zip && cp -R i4r-audit ~/.claude/skills/
-<span class="p">$</span> chmod +x ~/.claude/skills/i4r-audit/scripts/*.sh
-<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/make_claims_script.sh --selftest
+<pre><span class="p">$</span> mkdir -p ~/.claude/skills && cd "$(mktemp -d)"
+<span class="p">$</span> unzip -q "&lt;discipline-root&gt;/skill/i4r-audit-unified/i4r-audit.zip"
+<span class="p">$</span> [ ! -e ~/.claude/skills/i4r-audit ] || mv ~/.claude/skills/i4r-audit ~/i4r-audit-old-$(date +%Y%m%d%H%M)
+<span class="p">$</span> cp -R i4r-audit ~/.claude/skills/ && cd ~/.claude/skills/i4r-audit && chmod +x scripts/*.sh
+<span class="p">$</span> cat VERSION   <span class="cm"># the shared zip's version; then restart Claude Code</span>
+2.7.7
+<span class="p">$</span> bash scripts/make_claims_script.sh --selftest
 <span class="ok">SELFTEST OK: 12 checks — R fallback, Stata-primary naming, author-inline, R-embedded, severity, tail</span>
-<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/reserve_paper.sh --selftest
-<span class="ok">SELFTEST OK: 8 checks — claim, contention, idempotence, foreign release, conflict copy, completed guard, stale flag</span></pre></div>
-<p>If either prints <code>FAIL</code>, stop and ask in the team channel before running anything.</p>
+<span class="p">$</span> bash scripts/reserve_paper.sh --selftest
+<span class="ok">SELFTEST OK: 8 checks — claim, contention, idempotence, foreign release, conflict copy, completed guard, stale flag</span>
+<span class="p">$</span> bash scripts/finalize_run.sh --self-test   <span class="cm"># note the hyphen — see below</span>
+<span class="ok">SELF-TEST PASSED</span></pre></div>
+<p style="font-size:9pt">The same lines update an install. Every Mac holds its own copy, so a new shared zip
+reaches nobody until they run them again. <code>mkdir -p</code> matters on a first install: without
+<code>~/.claude/skills</code>, <code>cp -R</code> creates that folder from the skill's contents and Claude Code
+finds no skill. An old copy goes to your home folder, never beside the new one inside <code>skills/</code>,
+where Claude Code could load both.</p>
+
+<div class="warn" style="padding:7px 13px">
+  <h3>The flag spelling is inconsistent, and one spelling lies to you</h3>
+  <p style="font-size:9pt"><code>make_claims_script.sh</code> and <code>reserve_paper.sh</code> take
+  <b><code>--selftest</code></b> (no hyphen). Everything else &mdash; <code>finalize_run.sh</code>,
+  <code>init_run.sh</code>, <code>log_event.sh</code>, <code>make_settled.sh</code>,
+  <code>run_verification.sh</code> &mdash; takes <b><code>--self-test</code></b>. Get it wrong on
+  <code>reserve_paper.sh</code> and you get a harmless usage line. Get it wrong on
+  <code>make_claims_script.sh</code> and you get
+  <code style="color:#b42318">FATAL: --self-test/comment.json not found &mdash; finalize the audit first</code>,
+  which reads like a broken audit and is not.</p>
+</div>
+
+<p>The three <code>python3 -m unittest</code> suites must be run from the skill root (they use package-relative
+imports); every shell self-test works from anywhere by absolute path. Full battery, ~5&nbsp;min:</p>
+<div class="card"><span class="lbl">From the skill root</span><br>
+python3 -m unittest discover -s tests -p 'test_*.py'   <span style="color:#5a6a80"># 493 tests</span><br>
+python3 -m unittest schemas.tests.test_v2_interfaces &nbsp;&nbsp;<span style="color:#5a6a80"># 36 tests</span><br>
+python3 config/check_policy_drift.py &nbsp;&middot;&nbsp; bash tests/test_run_critique.sh <span style="color:#5a6a80"># ~12 min</span></div>
 
 <div class="rules">
-  <h3>The three iron rules</h3>
+  <h3>The four iron rules</h3>
   <ul>
-    <li><b>Never contact the paper's authors or the journal.</b> All correspondence goes through I4R &mdash; no exceptions, not even a &ldquo;quick clarifying question.&rdquo;</li>
+    <li><b>Never contact the paper's authors or the journal.</b> All correspondence goes through I4R &mdash; no exceptions, not even a &ldquo;quick clarifying question.&rdquo; The comment, filed with I4R, is the disclosure route. Personal data in a deposit never pauses or skips an audit: report it in the comment (identifier kind, file and column, counts, anonymisation claim, verified remedy) and never reproduce a value.</li>
+    <li><b>Never put a participant identifier beside a name, date, timestamp or clock time</b> in any audit artefact. Two separate gates exist to catch this; do not make them earn their keep.</li>
     <li><b>Cannot verify a RETRACTION- or CORRIGENDUM-level claim after honest study? Return the paper</b> and take another. Never skip it; never let the AI decide for you.</li>
     <li><b>Never name the discipline</b> in anything a replicator will see &mdash; every document is reused verbatim for the next cohort.</li>
   </ul>
 </div>
 
-<h2><span class="n">3</span>Reservations — automatic, but know what they look like</h2>
-<p>Six people work this tree at once. <b>The skill claims the paper for you the moment an audit starts</b> and
-aborts cleanly if someone else holds it — you never reserve by hand before running. The commands below are for
-checking the board, claiming a paper ahead of time, or giving one back.</p>
-<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — claim a paper</span></div>
-<pre><span class="p">$</span> export I4R_OWNER=yourname@yourmachine   <span class="cm"># once per shell; defaults to user@host</span>
+<h2><span class="n">3</span>Reservations &mdash; automatic, but know what the board looks like</h2>
+<p>Six people work this tree at once. <b>The skill claims the paper for you the moment intake starts</b> and aborts
+cleanly if someone else holds it. All four intake refusals now run <b>before</b> the claim, so a rejected deposit
+leaves no reservation to unwind. Subcommands: <code>claim</code> &middot; <code>release</code> &middot;
+<code>status</code> &middot; <code>list</code> &middot; <code>reap</code> &middot; <code>--selftest</code>.
+Always pass an <b>absolute</b> paper path &mdash; a relative one writes the claim inside the paper folder where the
+shared board cannot see it.</p>
+<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — the board, 2026-09-08 (real output, operator names replaced)</span></div>
+<pre><span class="p">$</span> bash scripts/reserve_paper.sh list "$TREE"
+<span class="wl">  STALE  you@your-mac                 11d  Frontiers_..._A_3-day_step_taper</span>
+         you@your-mac                  5d  International_..._Can_automatic_r
+<span class="cm">  ... 3 more, all STALE, all on other machines</span>
 
-<span class="cm"># what the AUTOMATIC claim looks like when the audit starts (you do nothing):</span>
-  [reserve] claim written; waiting 15s for sync conflicts ...
-  <span class="ok">[reserve] RESERVED: Example Paper Title (2024)  ->  .../reservations/Journal_of_Example_Studies_Example_Paper_Title_2024_.json</span>
-
-<span class="cm"># and when someone else already holds the paper — the audit stops before doing any work:</span>
-  <span class="no">[reserve] REFUSED: reserved by ana@macbook since 2026-08-24T20:06:32Z</span>
-  <span class="no">FATAL: could not reserve this paper — someone else holds it or a conflict is unresolved.</span>
-
-<span class="p">$</span> bash ~/.claude/skills/i4r-audit/scripts/reserve_paper.sh list "&lt;discipline-root&gt;"
-         ana@macbook                   0d  Journal_of_Example_Studies_Example_Paper_Title_2024_
-<span class="wl">  STALE  carol@lab-imac               9d  Another_Journal_Old_Claim_</span></pre></div>
-<p>The 15-second wait lets Dropbox surface a same-moment competing claim as a &ldquo;conflicted copy&rdquo; &mdash; the
-<b>earlier timestamp wins automatically</b>. A 7-day-old claim with no completed report shows
-<code>STALE</code>; release it with <code>release &lt;paper-dir&gt; --force</code> only after checking with its owner.
-Your reservation is claimed at start and released at filing — both automatic.</p>
+<span class="p">$</span> bash scripts/reserve_paper.sh reap "$TREE"      <span class="cm"># dry run — read-only</span>
+  <span class="wl">WOULD REAP  11d claim (journal idle 11d): A 3-day step taper enhances explosive</span>
+  OTHER     12d claim by ana@lab-imac: Designing a small-sided game
+<span class="ok">1 reapable, 4 held  (re-run with --force to release)</span></pre></div>
+<p><b>The printed lines never sum to the held count.</b> Above, three <code>OTHER</code> lines are printed but
+<b>four</b> are held &mdash; the fourth is the 5-day claim, held silently because it is younger than the 7-day stale
+window. <code>reap</code> holds for six reasons and only five of them print: <code>CONFLICT COPY</code>,
+<code>UNREADABLE</code>, <code>OTHER</code> (someone else's), <code>UNKNOWN</code> (no audit findable),
+<code>ACTIVE</code> (journal still moving) &mdash; and silently, anything under the stale window. Cross-check against
+the summary line, never against the printed lines.</p>
+<p><b>STALE is a pure age test</b>, not &ldquo;old and unfinished&rdquo;: a healthy audit on day&nbsp;8 shows STALE.
+<code>reap</code> is owner-scoped &mdash; it never touches another machine's claim unless you set
+<code>I4R_REAP_ANY_OWNER=1</code>, and it deletes nothing without <code>--force</code>. Your claim is written at
+intake and released at publish, both automatic.</p>
 
 <h2><span class="n">4</span>Run the audit</h2>
-<p>Open a terminal <b>in the paper's folder</b> and start Claude Code. Two settings before you paste anything:
-type <code>/model</code>, pick <b>Opus&nbsp;5</b>, and set the reasoning effort to <b>max</b> &mdash; the audit's
-sub-agents carry their own settings, but the coordinator's ceiling is whatever you select here, and a missed
-finding costs more than the extra thinking. Then prompt through <b><code>/goal</code></b> rather than a plain
-message: a goal keeps Claude working until its stated condition is met, restarting after every pause instead of
-stopping to report progress. Phrase the goal on the <b>deliverable</b>, not the input path &mdash; long sessions
-compact their history, and &ldquo;the audit is filed&rdquo; stays checkable when a path reference no longer is.</p>
-<div class="card"><span class="lbl">Paste into Claude Code &mdash; after /model &rarr; Opus 5, effort max</span><br>
-/goal Audit the paper in this folder end to end. The article PDF is ./paper.pdf and the
-replication package is ./package.zip. Run the whole pipeline without stopping for approval:
-workspace, five auditors, ledger and synthesis, critique rounds to the production default,
-verification notebook, deliverable, claims script. Done means: finalize_run.sh reports the
-registry pair filed, and publish_completed.sh has copied the four files into Completed reports.</div>
-
-<div class="tl">
-  <div class="seg" style="flex:0.9"><b>setup</b>~5 min<br><i>environment recorded</i></div>
-  <div class="seg hot" style="flex:2.4"><b>five auditors</b>40&ndash;60 min<br><i>parallel, one question each</i></div>
-  <div class="seg" style="flex:2.0"><b>ledger + synthesis</b>1&ndash;2 h<br><i>every finding dispositioned</i></div>
-  <div class="seg hot" style="flex:1.8"><b>critique rd 1</b>45&ndash;60 min<br><i>4 critics attack the audit</i></div>
-  <div class="seg" style="flex:1.6"><b>critique rd 2</b>~40 min<br><i>2 critics, scoped</i></div>
-  <div class="seg" style="flex:1.5"><b>build + file</b>20&ndash;40 min<br><i>notebook, gates, publish</i></div>
+<div class="warn" style="padding:7px 13px">
+  <h3>Unattended is the default since 2.3.0</h3>
+  <p style="font-size:9pt">A run goes intake&nbsp;&rarr;&nbsp;publish with <b>no authorization pause</b>. Set
+  <code>I4R_AUTO_AUTHORIZE=0</code> to restore the attended stop. The grant is journaled and bound to the exact
+  round plan either way; only the pause differs. INSTALL.md, SKILL.md and <code>run_critique.sh</code>'s header
+  all say the same.</p>
 </div>
-<p class="tlnote">total 4&ndash;6 hours wall-clock, almost all unattended &mdash; start one before lunch and one overnight</p>
+<p>Open a terminal <b>at the tree root</b> (the folder holding <code>data/</code> and <code>runs/</code>, never the paper's own
+folder: Claude Code writes a <code>.claude/</code> folder where it starts, and nothing may be written into <code>data/</code>), export
+the PATH from the box on page&nbsp;1, and start Claude Code. Type <code>/model</code>, pick <b>Sonnet&nbsp;5.5</b>, effort <b>xhigh</b>. That choice governs <i>the coordinator you are
+talking to</i> only &mdash; the auditor, critic and adjudicator models are <b>policy-pinned</b>
+(<code>config/pipeline-policy-v2.json</code>, frozen into each audit's snapshot at init) and any other value is a hard <code>fail_early</code>. Then prompt through
+<b><code>/goal</code></b> rather than a plain message, phrased on the <b>deliverable</b> rather than the input path:
+long sessions compact their history, and &ldquo;the audit is filed&rdquo; stays checkable when a path reference no
+longer is.</p>
+<div class="card"><span class="lbl">Paste into Claude Code &mdash; after /model &rarr; Sonnet 5.5, effort xhigh</span><br>
+/goal Audit the paper in data/&lt;Journal&gt;/&lt;Paper&gt; end to end, starting with
+bash scripts/new_audit.sh "data/&lt;Journal&gt;/&lt;Paper&gt;". Run the whole pipeline: workspace, five auditors,
+findings-registry projection and adjudication, critique rounds to the policy target,
+verification notebook, deliverable, claims script. Done means: finalize_run.sh reports
+the registry pair filed to the DISCIPLINE-ROOT registry, and publish_completed.sh has
+filed the PDF + DOCX into comments/&lt;Journal&gt;/&lt;Paper&gt;/ and the six record files into metadata/&lt;Journal&gt;/&lt;Paper&gt;/.</div>
 
-<p>You mostly watch. Two moments need a human: the coordinator may surface an <b>adjudication it re-ran</b>
-(read it &mdash; that is the audit's core), and any <b>gate FAIL</b> stops the pipeline with an explanation.</p>
+<p><b>Write the four context files immediately after Phase&nbsp;1</b>, at the audit root:
+<code>PAPER.txt</code>, <code>ENV.txt</code>, <code>SLOW.txt</code>, <code>WRAPUP.txt</code>.
+<code>PAPER.txt</code> is checked in three places and <code>WRAPUP.txt</code> in one &mdash; so a missing
+<code>WRAPUP.txt</code> fails one step later than a missing <code>PAPER.txt</code>, and both fail
+<i>after</i> Phase&nbsp;1 has already been paid for.</p>
 
-<h2><span class="n">5</span>While it runs: how to check on it</h2>
+<p><b>Two attempt knobs, easy to confuse:</b> <code>MAX_TRIES</code> governs critique (and is
+<i>exported as</i> <code>I4R_MAX_ATTEMPTS</code>, overwriting it); <code>I4R_MAX_ATTEMPTS</code> governs Phase&nbsp;1,
+the coordinator and the recovery scripts. Raising the wrong one does nothing.</p>
+
+<h2><span class="n">5</span>The ordering trap before finalize</h2>
+<p>A registry/report edit or <code>invocation_correction</code> stales <code>SETTLED.json</code>, which the packet and
+receipt bind. Make those edits and gate-code edits <b>first</b>, then:</p>
+<div class="chain">
+<b>log_event.sh</b> &times;9 <span class="cm">(8 phase_start/phase_end + 1 delivery)</span> <span class="ar">&rarr;</span>
+<b>approve</b> <span class="ar">&rarr;</span> <b>project</b> <span class="cm">(&times;2 if changed)</span> <span class="ar">&rarr;</span> <b>make_settled.sh</b> <span class="ar">&rarr;</span>
+<code>log_event.sh settled used=true generated_after_round=1 entries=&lt;n&gt;</code><br>
+<span class="ar">&rarr;</span> <b>make_diff_packet.py --round N</b> <span class="ar">&rarr;</span>
+<b>run_post_delta_gates.py --round N</b> <span class="ar">&rarr;</span> <b>finalize_run.sh</b>
+</div>
+<p><code>approve_settled.py</code> is the step people miss (SKILL.md names it, in the round-1 block): it binds the
+promotion approval to the current report hash, which <code>make_settled.sh</code> requires and never infers. Skip it
+and the settled cache promotes <b>zero</b> facts, silently. Skip the nine journal events and finalize still files,
+with <code>compliance_pass: false</code> and a NOTE &mdash; a green-looking finish on a permanently non-compliant
+record. Commit the nine in one transaction with <code>log_event.sh --batch &lt;events.jsonl&gt;</code>.</p>
+
+<h2><span class="n">6</span>How long it actually takes</h2>
+<div class="tl">
+  <div class="seg" style="flex:0.8"><b>setup</b>~5 min<br><i>environment recorded</i></div>
+  <div class="seg hot" style="flex:1.6"><b>five auditors</b>7&ndash;35 min<br><i>parallel, one question each</i></div>
+  <div class="seg" style="flex:2.6"><b>registry + adjudication</b>1.8&ndash;13 h<br><i>every finding dispositioned</i></div>
+  <div class="seg hot" style="flex:2.2"><b>critique, all rounds</b>0.5&ndash;4.0 h<br><i>4 critics, then scoped</i></div>
+  <div class="seg" style="flex:1.4"><b>build + file</b>20&ndash;40 min<br><i>notebook, gates, publish</i></div>
+</div>
+<p class="tlnote">measured spreads across the three modern audits (n=3), from <code>run.json</code> phase records &mdash; not a target</p>
+<p>A clean critique round is 10&ndash;20&nbsp;minutes (critics run ~9&ndash;10&nbsp;min in parallel; the rest is
+adjudication and integration). <b>A retry-heavy round&nbsp;1 was observed at ~3.0 hours</b> &mdash; 16 critic
+invocations across four attempt waves. The policy target is <b>2 rounds, cap 7</b> (2.6.9; an audit
+initialised earlier keeps its frozen cap until <code>amend_round_cap.py</code> raises it with a journaled reason).
+The driver refuses a round above the audit's own cap, and any round on a finalized audit that was not
+reopened, before it touches the audit directory. Nothing loops the rounds for you &mdash; you or the session
+invoke each one. Of the audits finished on 2.6.x, most converged in 3&ndash;5 rounds; two stopped at the old
+cap with <code>cap_with_unresolved</code>.</p>
+<p>Prefer invocation timestamps to phase stamps when you are timing anything: phase&nbsp;<code>start</code> has been
+logged as much as 15&nbsp;minutes late.</p>
+
+<h2><span class="n">7</span>Working the batch, and rescuing a killed run</h2>
+<p>Roughly 200 papers remain. Nothing else in the skill takes a tree root, so this is the only view of the whole board.</p>
+<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — read-only sweep, 2026-09-08</span></div>
+<pre><span class="p">$</span> python3 scripts/status.py "$TREE" --stuck
+21 audit(s); 8 need attention
+
+<span class="wl">aborted    idle  21.8d  r4  Measurement of Motivation States for Physical Activity and Seden</span>
+           phase1=None findings=None rounds_run=3 audit_id=20260814-<author>-a206609e
+           ! unfinished and idle 21.8d (status=aborted)
+           ! aborted
+
+<span class="wl">running    idle  12.6d  r1  The priming Effect and its impact on sport performance and diffi</span>
+           phase1=None findings=None rounds_run=None audit_id=20260826-<author>-b39fbcf9
+           ! unfinished and idle 12.6d (status=running)</pre></div>
+<p><code>status.py</code> exits <b>1</b> when anything needs attention, in both text and <code>--json</code> mode, so a
+batch driver can branch on it. It finds audits by marker, so it sees the relocated workspaces under
+<code>.work/audits/</code> too. <b>One thing it does not tell you:</b> a held lock is only flagged on an unfinished,
+non-archived audit past <code>--idle-days</code> &mdash; 7 of 21 audits here hold a lock file and only 3 are flagged.
+A clean row does not mean no lock. It <i>does</i> now match each audit to its reservation and flags one that a
+finished audit never released (before 2.4.2 it matched none, because claims record an absolute path on the
+<i>claiming</i> machine).</p>
+
 <div class="twocol">
 <div>
-<p><b>Watch without interrupting.</b> Everything narrates into files as it happens; a second terminal shows where the run is:</p>
-<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal &mdash; second window, read-only</span></div>
-<pre><span class="p">$</span> ls audit/report/            <span class="cm"># auditor reports appear one by one</span>
-<span class="p">$</span> tail -f audit/critique_round1.log
-  [run ] critic_stats attempt 1/3 14:43:53
-  [ok  ] critic_data:  76 lines (exit 0)</pre></div>
+<p><b>A killed Phase&nbsp;1 no longer bricks the audit.</b> Sleep, OOM, reboot or a mistimed Ctrl-C strands an attempt
+and the guard then refuses to dispatch, correctly, to avoid a duplicate paid call:</p>
+<div class="card" style="font-size:8.2pt">python3 scripts/run_phase1.py "$AUDIT_DIR" --recover-stranded</div>
+<p style="font-size:8.8pt">A metadata-2.1 strand sits at state <code>provider_requested</code>, <b>not</b>
+<code>inference_started</code>. Recovery of a 2.1 strand records <code>attempt: null</code> and
+<b>charges nothing</b>, so your retry budget is untouched (INSTALL.md says the same). A pre-2.1 workspace cannot be
+recovered and says so.</p>
 </div>
 <div>
-<p><b>Overnight:</b> run <code>caffeinate -i</code> in another tab &mdash; a sleeping Mac pauses everything
-mid-round (harmless; it resumes on wake). If you must take the machine, close the terminal: re-running the
-same round later <b>resumes</b> &mdash; completed critics are skipped, nothing repeats.</p>
-<p><b>Interject freely.</b> A <code>/goal</code> session answers questions mid-run (&ldquo;what did auditor&nbsp;2
-find?&rdquo;) without derailing the pipeline.</p>
-<p><b>Read the adjudications.</b> When the coordinator re-runs a disputed computation it says so &mdash; that
-is the audit's core, and it deserves your eyes more than any other output.</p>
+<p><b>Prevention beats recovery:</b> run <code>caffeinate -i</code> in another tab for any overnight run. A sleeping
+Mac is the documented cause of every stranded attempt in this tree.</p>
+<p><b><code>renumber_findings.py</code></b> converts role-scoped ids (<code>REP-f1_d421…</code>, <code>TXT-TVD-F2</code>,
+<code>P1</code>/<code>TN1</code>) to the contiguous <code>F1..FN</code> the projection requires. It <i>reorders</i> as
+well as renames &mdash; numbering follows marker order in the report. Run it <b>once, right after
+<code>run_coordinator.py</code> and before round 1</b>: critic verdicts join by id, so renumbering after a round
+orphans that round's verdicts.</p>
+<div class="card" style="font-size:7.9pt">python3 scripts/renumber_findings.py "$AUDIT_DIR" --dry-run<br>
+python3 scripts/renumber_findings.py "$AUDIT_DIR" --apply --also report/ADJUDICATION.md</div>
+<p style="font-size:8.2pt">Renumbered late anyway? Integrate that round under its old ids first, then rerun with
+<code>--also</code> on each <code>critique/round_N/*_BEFORE_INTEGRATION.*</code> snapshot (INSTALL.md).</p>
 </div>
 </div>
 
-<h2><span class="n">6</span>What lands where</h2>
+<div class="rules" style="padding:8px 13px">
+  <h3>Do not run these four &mdash; they are pinned to an audit the driver has moved past</h3>
+  <p style="font-size:9pt"><code>recover_critique_probe.py</code> &middot; <code>recover_round1_projection.py</code>
+  &middot; <code>retry_completeness_once.py</code> &middot; <code>retry_targeted_adjudication_once.py</code>.
+  A stranded operator grepping <code>scripts/</code> for &ldquo;retry&rdquo; will find them. They
+  <b>fail in ways that read like a corrupt audit rather than a stale script.</b> Ask in the channel instead.</p>
+</div>
+
+<h2><span class="n">8</span>What lands where, and how you know it is done</h2>
 <div class="twocol">
 <div>
 <div class="tree">
-<span class="d">&lt;Paper folder&gt;/</span><br>
-&nbsp;&nbsp;audit/ <span class="c">&mdash; full working record: reports, ledger,</span><br>
-&nbsp;&nbsp;<span class="c">adjudication, critique rounds, notebook, run.json</span><br>
-&nbsp;&nbsp;I4R_comment_&lt;Author&gt;_&lt;Year&gt;.pdf<br>
 <span class="d">&lt;discipline-root&gt;/</span><br>
-&nbsp;&nbsp;<span class="d">Completed reports/&lt;Journal&gt;/&lt;Paper&gt;/</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">exactly 4 files: PDF &middot; claims script &middot;</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">comment.json &middot; run.json</span><br>
-&nbsp;&nbsp;reservations/ <span class="c">&mdash; your claim vanishes on filing</span>
+&nbsp;&nbsp;<span class="d">data/&lt;Journal&gt;/&lt;Paper&gt;/</span> <span class="c">&mdash; article PDF + package. Read-only.</span><br>
+&nbsp;&nbsp;<span class="d">runs/&lt;Journal&gt;/&lt;Paper&gt;/audit/</span> <span class="c">&mdash; full working record: reports,</span><br>
+&nbsp;&nbsp;<span class="c">ledger, adjudication, critique rounds, notebook, run.json</span><br>
+&nbsp;&nbsp;<span class="d">comments/&lt;Journal&gt;/&lt;Paper&gt;/</span> <span class="c">&mdash; the comment: .pdf + .docx</span><br>
+&nbsp;&nbsp;<span class="d">metadata/&lt;Journal&gt;/&lt;Paper&gt;/</span> <span class="c">&mdash; 6 files: claims_script.R &middot;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">comment.json &middot; run.json &middot; finalization_receipt.json &middot;</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c">document_build_manifest.json &middot; release-manifest.json</span><br>
+&nbsp;&nbsp;<span class="d">registry/</span> <span class="c">&mdash; index.jsonl + one dir per audit</span><br>
+&nbsp;&nbsp;reservations/ <span class="c">&mdash; your claim vanishes on publish</span><br>
+&nbsp;&nbsp;old_runs/ <span class="c">&mdash; everything from before 2026-09-22, and superseded publications</span>
 </div>
+<p style="font-size:8.6pt;margin-top:5px">Eight files per publication, split since 2.6.2: two in comments/, six in
+metadata/. Start an audit with <code>bash scripts/new_audit.sh "data/&lt;Journal&gt;/&lt;Paper&gt;"</code>.</p>
 </div>
 <div>
-<div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — a clean finalize</span></div>
-<pre><span class="ok">ok:</span> run.json validates against run.schema.json
-<span class="ok">ok:</span> comment.json validates against comment.schema.json
-<span class="ok">ok:</span> the notebook knitted with every claim reproducing
-<span class="ok">ok:</span> filed into .../registry/&lt;audit-id&gt;
-     (index now holds N audits)</pre></div>
+<p style="font-size:9pt"><b>Three signs, all required.</b> Publish prints the reservation release on the line
+<i>above</i> <code>published:</code> &mdash; that line is sign&nbsp;3, and <code>REFUSED</code> or
+<code>note: no reservation to release</code> means it did not happen.</p>
+<div class="term" style="margin-top:6px"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — verify a finished audit</span></div>
+<pre><span class="p">$</span> python3 scripts/finalization_receipt.py check "$AUDIT_DIR"
+<span class="p">$</span> python3 -c "import json;print(json.load(
+    open('$AUDIT_DIR/finalization_receipt.json'))['registry']['root'])"
+<span class="ok">../../../../registry</span>       <span class="cm"># correct (runs/&lt;J&gt;/&lt;P&gt;/audit)</span>
+<span class="ok">../../../registry</span>          <span class="cm"># correct (legacy &lt;J&gt;/&lt;P&gt;/audit)</span>
+<span class="no">../../../skill/i4r-audit-unified/registry</span>   <span class="cm"># WRONG</span>
+<span class="no">../../../../../../../.claude/skills/registry</span> <span class="cm"># WRONG</span></pre></div>
 </div>
 </div>
 
-<h2><span class="n">7</span>When something goes wrong</h2>
+<div class="warn" style="padding:8px 13px">
+  <h3>Check the registry path on every audit &mdash; two of three were mis-filed before 2.4.2</h3>
+  <p style="font-size:9pt">Finalize announces which registry it chose, but <b>read the path, not the label</b>: it
+  must end in <code>&lt;discipline-root&gt;/registry</code>. If <code>REGISTRY_DIR</code> or
+  <code>I4R_REGISTRY_DIR</code> is set in your shell, <b>unset it</b> &mdash; finalize refuses one that is not the
+  tree's own registry (set <code>I4R_REGISTRY_OVERRIDE=1</code> only if filing elsewhere is intended). <code>publish_completed.sh</code> and
+  <code>finalization_receipt.py</code> do <b>not</b> read those variables and take no <code>--registry</code>: they read
+  the registry from <code>finalization_receipt.json</code>. Choose it once, with <code>finalize_run.sh --registry</code>.
+  The <code>ok: filed into &hellip;/registry/&hellip;</code> line older docs told you to wait for was dead code and
+  never printed; it was removed in 2.4.2. Verify with the command above instead.</p>
+</div>
+
+<h2><span class="n">9</span>When something goes wrong</h2>
 <table class="trb">
   <tr><th style="width:34%">You see</th><th>It means / do this</th></tr>
-  <tr><td>FATAL: the Codex workspace is OUT OF CREDITS</td>
-      <td>The probe caught an empty balance <b>before</b> burning a round. Workspace owner refills; re-run the same round command.</td></tr>
-  <tr><td>FATAL: the critic model '&hellip;' is rejected</td>
-      <td>The ChatGPT app updated and changed its default model (three versions in ten days). Nothing to fix locally &mdash; the skill pins the model. Report it in the channel.</td></tr>
-  <tr><td>[fail] critic_x attempt N: exit 1, no output file</td>
-      <td>The real error is at the bottom of <code>critique/round_N/log_*_try*.txt</code> &mdash; usually credits or network.</td></tr>
+  <tr><td>FATAL: audit dir contains a character that disarms the filesystem sandbox</td>
+      <td>The title holds <code>? * [ ] { } \</code> &mdash; roughly one paper folder in fourteen here. Those compile as globs and silently deny every sandboxed read while preflight still reports success. Put the audit dir somewhere clean and name the real folder with <code>I4R_PAPER_DIR</code>; the reservation is still claimed under the true name.</td></tr>
+  <tr><td>FATAL: package archive is corrupt or truncated &hellip; zipinfo -t exits 3</td>
+      <td>Structurally broken deposit, refused before the claim. Re-download. A <b>NOTE</b> about members that &ldquo;do not inflate cleanly&rdquo; is <i>not</i> this &mdash; the archive is fine and the audit proceeds.</td></tr>
+  <tr><td>FATAL: the audit directory or the deposit holds Dropbox conflicted copies</td>
+      <td>Delete them &mdash; they are never the canonical file. The scan now covers the deposit as well as the audit dir.</td></tr>
+  <tr><td>unresolved Phase-1 invocation &hellip; (state provider_requested)</td>
+      <td>A killed run. <code>run_phase1.py &lt;dir&gt; --recover-stranded</code>. If it instead says <b>still in flight (provider pid N is alive)</b>, another process holds the audit &mdash; wait, do not recover.</td></tr>
+  <tr><td>[wait&nbsp;] critic_x &lt;class&gt; failure; retrying in Ns</td>
+      <td>Normal. <code>&lt;class&gt;</code> is only ever <code>transport</code>, <code>throttling</code>, <code>provider_5xx</code>, <code>timeout</code> (our own 45-min wall-clock kill) or <code>schema</code>. Anything permanent exits instead, with <code>[fail&nbsp;] &hellip; permanent failure on attempt N</code>.</td></tr>
+  <tr><td>Round never returns at all</td>
+      <td>A pre-2.4.1 checkout: a timed-out call consumed no budget and the retry loop re-dispatched forever. <code>cat VERSION</code> &mdash; you need 2.4.1.</td></tr>
+  <tr><td>[fail&nbsp;] critic_x attempt N</td>
+      <td>Read <code>critique/round_N/invocations/&lt;id&gt;/attempts/&lt;role&gt;/&lt;attempt&gt;/failure.log</code>; <code>stderr.txt</code>, <code>events.jsonl</code> and <code>validation.txt</code> sit beside it. Usually credits or network.</td></tr>
+  <tr><td>[stop&nbsp;] critic_x: snapshot integrity check failed before dispatch; no provider call was made</td>
+      <td>The frozen snapshot's <i>content</i> changed, not just its mode. Nothing was spent. In the audit directory run the command the next line prints, <code>chmod -R u+w &lt;dir&gt; &amp;&amp; rm -rf &lt;dir&gt;</code> for <code>critique/round_N/snapshots/&lt;sha&gt;</code> or <code>critique/round_N/target_snapshots/&lt;sha&gt;</code> (a plain <code>rm -rf</code> cannot remove a frozen tree), and rerun: it is content-addressed and rebuilt identically. <code>[stop&nbsp;] &hellip; snapshot modes keep changing (content verified)</code> is different: nothing changed, but a write bit kept coming back after three re-freezes, so deleting cannot help. Stop the sync client or move the audit off the synced folder, then rerun. The same fault after a call reads <code>[fail&nbsp;] &hellip; snapshot changed after the provider call (environment, not the critic); not retried</code>. By contrast <code>[note&nbsp;] snapshot mode drift re-frozen</code> is harmless: Dropbox gave a frozen directory its write bit back and the driver re-froze it (2.6.8; before that it read <code>immutable path regained write permission</code> and every critic was re-sampled).</td></tr>
+  <tr><td>FATAL: no working Codex CLI found; searched: &hellip; <i>or</i> FATAL: Codex executable is not executable: &hellip;</td>
+      <td>The first: install or update the ChatGPT app, or <code>export CODEX=/path/to/codex</code>. The second names a path you set in <code>CODEX</code> or <code>I4R_CODEX_BIN</code> that does not work: unset both and the skill (2.6.10) picks the newest working CLI itself. Before 2.6.10 the second line was what every round printed after the ChatGPT app update of 2026-09-28 moved its CLI to <code>Contents/Resources/codex-cli/bin/codex</code>. No provider call was made.</td></tr>
+  <tr><td>FATAL: model probe failed (permanent, unsupported_model): The &lsquo;gpt-6.1-sol&rsquo; model is not supported when using Codex with a ChatGPT account &hellip; no critic calls were started</td>
+      <td>The model probe, before any critic: nothing was spent. The ChatGPT app's Codex CLI is older than 0.159.0 (CLI 0.158.0-alpha.2.1 got exactly this on 2026-09-29), or the account does not offer Sol. Update the ChatGPT app and re-run the same round; if it still fails, the account does not offer Sol: sign the CLI in with one that does (the user's decision; for example an OpenAI API key, <code>printenv OPENAI_API_KEY | codex login --with-api-key</code>), check it with <code>python3 scripts/check_critic_access.py --force</code>, and re-run. Since 2.7.5 no audit moves off the shipped critic route.</td></tr>
+  <tr><td>FATAL: this host cannot use the critic model gpt-6.1-sol &hellip; (from <code>new_audit.sh</code>, 2.7.5)</td>
+      <td>Nothing was reserved or copied. The host's Codex account refuses Sol. Changing the account is the user's decision: sign the CLI in with an account that offers it (for example an OpenAI API key: <code>printenv OPENAI_API_KEY | codex login --with-api-key</code>) or use a host whose account does, then <code>python3 scripts/check_critic_access.py --force</code> and run <code>new_audit.sh</code> again. On a CLI older than 0.159.0 the message says to update the ChatGPT app first. Exit 4 instead (network, rate limit, timeout): just run it again; exit 5 (the CLI rejected the call itself, with no answer from the provider): update the ChatGPT app or the CLI.</td></tr>
+  <tr><td>[fail&nbsp;] critic_x permanent failure on attempt N (unsupported_model): The &lsquo;gpt-6.1-sol&rsquo; model is not supported &hellip;</td>
+      <td>A later round, or a rerun, from an account without Sol: the probe passed earlier and is cached per audit and CLI version, not per account, so the refusal comes at a critic. Each refusal cost that role one attempt, nothing else. Re-run the same round from an account that offers Sol (add <code>MAX_TRIES=&lt;n&gt;</code> if a role's attempts are used up); completed roles replay from cache. Since 2.7.5 no audit moves off the shipped critic route: finish from an account with Sol &mdash; do not start a new audit.</td></tr>
+  <tr><td>Codex asks you to log in / quota exceeded</td>
+      <td>Open the ChatGPT app, log in, confirm the workspace has credits, re-run the same round. Login and quota failures are never retried. The model probe runs once per audit and Codex CLI version: when it runs, it stops the round before any critic call; with the probe already cached, the first critic call fails instead, and each role spent at most one attempt.</td></tr>
   <tr><td>REFUSED: reserved by &hellip;</td>
-      <td>Someone holds the paper. Pick another; check <code>reserve_paper.sh list</code>.</td></tr>
-  <tr><td>&hellip;conflicted copy&hellip; in a claim result</td>
-      <td>Two claims raced through Dropbox. The output already names the winner (earliest timestamp); the loser picks another paper.</td></tr>
-  <tr><td>FAIL: abstract is N words / findings table in body / table-vs-tags mismatch</td>
-      <td>The comment drifted from the format (a comment is a paper: Abstract &le;250 words on page&nbsp;1, findings table in Appendix&nbsp;A). The skill fixes and rebuilds; if you edited by hand, undo and let it.</td></tr>
-  <tr><td>WARNING: no PDF page count</td>
-      <td>LibreOffice is missing, so the 10-page body cap is unverified. Install it (item 5) and rebuild.</td></tr>
+      <td>Someone holds it. Pick another; check <code>reserve_paper.sh list</code>. Every refusal exits 1.</td></tr>
+  <tr><td>RELEASE BLOCKED &mdash; fix the failures above and re-run</td>
+      <td><code>stage_release.sh</code>. Its own FAIL lines name the cause: a missing or symlinked mandatory input, more than one claims script, divergent finding projections, surviving verbatim author files, data files in the release, a participant code paired with a timestamp, or (check 3c, <code>check_deposit_values.py</code>) a value copied from the deposit's name, e-mail, birth-date, IP, address or phone columns: reword the finding by kind, file, column and count, never the value. A one-word name match only warns; exit 2 means a document could not be inspected.</td></tr>
+  <tr><td>FATAL: document release: &hellip; N body page(s), cap 10</td>
+      <td>The line lists <i>every</i> failed check, semicolon-separated. A comment is a paper: abstract &le;250 words on page&nbsp;1, findings table in Appendix&nbsp;A. Let the pipeline fix and rebuild.</td></tr>
+  <tr><td>FATAL: document release: document manifest builder code identity differs from the release verifier</td>
+      <td>The document was built by an older skill: after the 2.6.9 upgrade every manifest from 2.6.8 or earlier is stale. Rebuild with <code>build_docx.sh &lt;audit&gt; &lt;output-name&gt;</code>, as the line says, then finalize, and move an old <code>release/</code> aside before restaging. The other one-time costs are in INSTALL.md, <i>Upgrading in-flight audits to 2.6.9</i>.</td></tr>
+  <tr><td>FAIL: appendix finding IDs must occur exactly once &hellip; / rows never tagged in the body</td>
+      <td><code>check_consistency.sh</code> emits seven distinct join failures. Mid-round, with draft P-rows still in the registry, the fix is <code>project_draft_claim_tags.py</code>.</td></tr>
+  <tr><td>FINALIZE FAILED &mdash; critique routes/results are not bound to immutable runtime projections</td>
+      <td><code>validate_round_projections.py</code>, which finalize runs first. A round's recorded inputs no longer match its snapshot.</td></tr>
+  <tr><td>NOTE: compliance_pass is false</td>
+      <td>The audit filed anyway. Usually a phase never closed or no <code>delivery</code> event &mdash; see section&nbsp;5. It must be stated in the release notes.</td></tr>
   <tr><td>R notebook exits nonzero</td>
       <td><b>A claim genuinely failed to reproduce &mdash; that is a finding, not a bug.</b> Read <code>verification_summary.csv</code>. Never &ldquo;fix&rdquo; the check to pass.</td></tr>
+  <tr><td>An empty directory reappears after cleanup</td>
+      <td>Dropbox resurrecting a deleted directory. Documented in INSTALL.md; leftover <code>.finalize-tx.*</code> dirs are this, not a crash.</td></tr>
 </table>
 
-<div class="cost"><b>Costs, so nobody is surprised:</b> roughly 2&ndash;3M tokens per audit on the Claude side, 45&ndash;60-minute
-critique rounds on the GPT side, 4&ndash;6 hours wall-clock end to end. The machine is busy; you are not. <code>run.json</code>
-records your software versions and per-phase costs automatically &mdash; you never fill a form.</div>
+<h2><span class="n">10</span>What it costs, and what you are responsible for</h2>
+<div class="cost">
+  <table>
+    <tr><td>Pipeline, recorded</td><td><b>72.8M tokens</b> for the one audit with complete token accounting (98% of it cache reads; fresh input+output is ~3.2M). Two others record 149M and 6.4M but are missing 9% and 43% of their calls &mdash; treat those as floors.</td></tr>
+    <tr><td>Codex side</td><td>6.4M&ndash;27.8M tokens across four runs. The smaller half of the bill, and <b>not</b> stable.</td></tr>
+    <tr><td>The session you drive it from</td><td><b>5&ndash;9&times; the recorded figure</b>, and it appears in no artifact. End to end an attended audit has measured 450M&ndash;1.4B tokens. An unattended run avoids nearly all of it.</td></tr>
+    <tr><td>Where it goes</td><td>Round&nbsp;0 fan-out is 66&ndash;81% and you do not control it. Critique is ~20%; the rounds past the target of 2 are ~9%. Capping rounds saves ~9% and costs findings.</td></tr>
+    <tr><td>Human time</td><td>Recorded on two legacy audits at <b>145 person-minutes</b> each. The modern three record <code>null</code>. If nobody timed it, say so rather than leaving it blank: <code>log_event.sh human_effort notes='unattended; no human performed any phase'</code> &mdash; only <code>notes=</code> earns the softer finalize wording.</td></tr>
+  </table>
+</div>
 
-<h2><span class="n">8</span>FAQ</h2>
-<table class="trb">
-  <tr><th style="width:34%">Question</th><th>Answer</th></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">Which paper do I pick?</td>
-      <td>Any paper in the journal folders with a replication package that <code>reserve_paper.sh list</code> shows as free and that is not in Completed reports. The reservation claim at startup enforces both.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">Can I run two audits at once?</td>
-      <td>Yes &mdash; separate terminals, separate paper folders. The binding constraints are Codex credits and your machine's memory; two is comfortable, three is pushing it.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">My laptop slept / crashed mid-run. Is the audit ruined?</td>
-      <td>No. Everything on disk survives. Reopen Claude Code in the same folder and re-state the goal; completed auditors and critics are detected and skipped, and a half-finished critique round resumes when re-invoked with the same round number.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">I need to abandon a paper halfway. What do I do?</td>
-      <td>Easiest: just tell Claude &ldquo;release my reservation on this paper&rdquo; in the session. Or run <code>reserve_paper.sh release "&lt;paper-dir&gt;"</code> yourself. Either way a colleague can take it immediately; if you forget, the claim shows STALE after 7 days and can be force-released &mdash; but releasing beats being nagged.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">The package has no code at all. Still auditable?</td>
-      <td>Yes &mdash; that is itself a finding. The auditors work from the data and the printed statistics, the checks are written in R, and the claims script's no-code tail carries one manual check per claim.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">The paper used SPSS / Stata, which I don't own.</td>
-      <td>Fine for producing the audit: authors' code is carried verbatim into the claims file (in its own language) and the audit's own checks are R. Only the external verifier may need the original tool, and only for author-code blocks.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">How do I know it's actually done?</td>
-      <td>Three signs, all required: finalize prints its <span style="color:#2d7a39;font-weight:600">ok:</span> lines ending in &ldquo;filed into &hellip;/registry/&hellip;&rdquo;; the paper's folder appears in Completed reports with exactly four files; your reservation is gone from <code>reservations/</code>.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">Do I read the comment before it counts?</td>
-      <td>You can, and a skim of the retraction/corrigendum findings never hurts &mdash; but this is a pilot: every report will be assigned to a replicator who verifies each claim manually, and the coordinator reads every comment before anything is submitted. Your job is to produce the report cleanly, not to referee it.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">Can I edit the comment by hand?</td>
-      <td><b>No &mdash; do not edit the reports.</b> The pipeline's gates, records, and claim numbering all assume the text the machinery produced; a hand edit breaks the joins and skips the checks. If something looks wrong, tell Claude what you saw and let the pipeline regenerate, or flag it in the team channel.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">The critics found problems with the audit itself. Is that bad?</td>
-      <td>That is the design working. Across the calibration audits, most blocking criticisms were defects in our own draft, not the paper &mdash; caught before publication instead of after. An audit whose critique rounds find nothing is the suspicious one.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">Codex asks me to log in again / says quota exceeded.</td>
-      <td>Open the ChatGPT app, log in, confirm the workspace has credits, then re-run the round. The skill's probe stops before burning retries, so nothing was lost.</td></tr>
-  <tr><td style="font-family:inherit;font-size:8.5pt">Who pays for the tokens?</td>
-      <td>The institute's accounts on both sides. Costs are metered per phase into <code>run.json</code> automatically &mdash; which is also how we will report cost per audit in the paper, so don't disable it.</td></tr>
-</table>
+<div class="twocol" style="margin-top:9px">
+<div>
+<p><b>Interject freely.</b> A <code>/goal</code> session answers questions mid-run without derailing the pipeline.
+<b>Read the adjudications</b> &mdash; when the coordinator re-runs a disputed computation it says so, and that is the
+audit's core.</p>
+<p><b>Critics finding problems with the audit itself is the design working.</b> Across the calibration audits most
+blocking criticisms were defects in our own draft. An audit whose critique rounds find nothing is the suspicious one.</p>
+</div>
+<div>
+<p><b>Do not edit the comment by hand.</b> The gates, records and claim numbering assume machine-produced text; a hand
+edit breaks the joins and skips the checks. Tell the session what looks wrong and let it regenerate.</p>
+<p><b>You are not the referee.</b> Every report goes to a replicator who verifies each claim manually, and the
+coordinator reads every comment before submission. Your job is to produce it cleanly.</p>
+</div>
+</div>
+
+<p class="foot">Skill version <b>2.6.2</b>. Counts, board state and cost figures were measured against this tree on
+2026-09-08 and will drift &mdash; re-derive before quoting. Where this sheet and INSTALL.md disagree, INSTALL.md
+is the maintained reference and this sheet is the one that is stale.</p>
 
 </body>
 </html>

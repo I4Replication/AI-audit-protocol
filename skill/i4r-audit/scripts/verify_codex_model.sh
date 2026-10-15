@@ -1,6 +1,8 @@
 #!/bin/bash
-# verify_codex_model.sh <audit-dir> [role|all] [exact-observed-model] [exact-effort]
-# Verify canonical, invocation-scoped model identity rather than sweeping global session files.
+# verify_codex_model.sh <audit-dir> [role|all] [exact-requested-route] [exact-effort]
+# Verify canonical invocation-scoped routing and honestly reported served identity. The Codex
+# adapter may expose only the requested Terra alias; requested_only is valid and is never promoted
+# to an observed served model.
 set -uo pipefail
 AUDIT="${1:?usage: verify_codex_model.sh <audit-dir> [role|all] [exact-observed-model] [exact-effort]}"
 ROLE="${2:-all}"
@@ -26,20 +28,29 @@ if not rows: raise SystemExit(f"FAIL: no completed provider calls match role={ro
 bad=[]
 for row in rows:
     problems=[]
-    if row["model_source"]!="observed": problems.append("model_source is not observed")
-    if not row["observed_model"]: problems.append("observed model ID missing")
-    if expected and row["observed_model"]!=expected:
-        problems.append(f"observed {row['observed_model']!r}, expected exact {expected!r}")
+    assurance=row.get("identity_assurance")
+    served=row.get("served_model",row.get("observed_model"))
+    if assurance is None:  # Immutable metadata-v2 history.
+        assurance="observed" if row.get("model_source")=="observed" and served else "requested_only"
+    if assurance not in {"observed","requested_only"}:
+        problems.append(f"identity assurance is {assurance!r}")
+    if assurance=="observed" and not served:
+        problems.append("observed assurance lacks a served model ID")
+    if assurance=="requested_only" and served is not None:
+        problems.append("requested-only assurance improperly records a served model")
+    if expected and row["requested_model"]!=expected:
+        problems.append(f"requested {row['requested_model']!r}, expected exact route {expected!r}")
     if expected_effort and row["reasoning_effort"]!=expected_effort:
         problems.append(
             f"effort {row['reasoning_effort']!r}, expected exact {expected_effort!r}"
         )
     if problems: bad.append((row["invocation_id"],problems))
     print(f"{row['invocation_id']}  role={row['role']}  requested={row['requested_model']}  "
-          f"served={row['observed_model']}  effort={row['reasoning_effort']}  session={row['session_id'] or '-'}")
+          f"served={served or '-'}  assurance={assurance}  "
+          f"effort={row['reasoning_effort']}  session={row['session_id'] or '-'}")
 if bad:
     for invocation,problems in bad:
         print(f"FAIL: {invocation}: {'; '.join(problems)}",file=sys.stderr)
     raise SystemExit(1)
-print(f"OK: {len(rows)} completed call(s) have exact observed model telemetry")
+print(f"OK: {len(rows)} completed call(s) have exact requested routing and honest identity telemetry")
 PY

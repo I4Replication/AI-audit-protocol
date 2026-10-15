@@ -5,79 +5,253 @@
   "description": "One canonical line in work/findings.jsonl. It is directly consumable by make_settled.sh and retains policy classification, rerunnable evidence, independent verification, dependency fingerprinting, and report-hash scope.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "claim", "domain", "source_location", "status", "ledger_disposition", "coordinator_approved", "impact", "impact_rank", "verification_tier", "paper_only", "confidence", "evidence", "unverifiable_basis", "verifications", "dependencies", "settled", "disclosure_flag", "remedy", "changes_conclusion", "changes_conclusion_which", "provenance"],
+  "required": [
+    "id",
+    "claim",
+    "domain",
+    "source_location",
+    "status",
+    "ledger_disposition",
+    "coordinator_approved",
+    "impact",
+    "impact_rank",
+    "verification_tier",
+    "paper_only",
+    "confidence",
+    "evidence",
+    "unverifiable_basis",
+    "verifications",
+    "dependencies",
+    "settled",
+    "disclosure_flag",
+    "remedy",
+    "changes_conclusion",
+    "changes_conclusion_which",
+    "provenance"
+  ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
-    "id": {"type": "string", "minLength": 1},
-    "claim": {"type": "string", "minLength": 1},
-    "domain": {"type": "string", "enum": ["statistics", "data", "text", "code_methods", "privacy_archive", "framing", "other"]},
+    "schema_version": {
+      "const": "2.0.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1
+    },
+    "domain": {
+      "type": "string",
+      "enum": [
+        "statistics",
+        "data",
+        "text",
+        "code_methods",
+        "privacy_archive",
+        "framing",
+        "other"
+      ]
+    },
     "source_location": {
       "description": "Scientific source locus, not the destination section in the generated report.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "locator"],
+      "required": [
+        "path",
+        "locator"
+      ],
       "properties": {
-        "path": {"type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"},
-        "locator": {"type": "string", "minLength": 1}
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
-    "claim_ref": {"type": ["string", "null"]},
-    "status": {"type": "string", "enum": ["draft", "confirmed", "verified", "accepted", "rejected", "superseded"]},
+    "claim_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "confirmed",
+        "verified",
+        "accepted",
+        "rejected",
+        "superseded"
+      ]
+    },
     "ledger_disposition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "target", "reason"],
+      "required": [
+        "status",
+        "target",
+        "reason"
+      ],
       "properties": {
-        "status": {"type": "string", "enum": ["INCLUDED", "MERGED", "EXCLUDED"]},
-        "target": {"type": ["string", "null"]},
-        "reason": {"type": ["string", "null"]}
+        "status": {
+          "type": "string",
+          "enum": [
+            "INCLUDED",
+            "MERGED",
+            "EXCLUDED"
+          ]
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "allOf": [
         {
-          "if": {"properties": {"status": {"const": "MERGED"}}, "required": ["status"]},
-          "then": {"properties": {"target": {"type": "string", "minLength": 1}}}
+          "if": {
+            "properties": {
+              "status": {
+                "const": "MERGED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         },
         {
-          "if": {"properties": {"status": {"const": "EXCLUDED"}}, "required": ["status"]},
-          "then": {"properties": {"reason": {"type": "string", "minLength": 1}}}
+          "if": {
+            "properties": {
+              "status": {
+                "const": "EXCLUDED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       ]
     },
-    "coordinator_approved": {"type": "boolean"},
+    "coordinator_approved": {
+      "type": "boolean"
+    },
     "impact": {
       "type": "string",
-      "enum": ["none", "unverifiable", "value_wrong", "conclusion_narrowed", "conclusion_unsupported", "conclusion_contradicted", "artefact_of_construction"]
+      "enum": [
+        "none",
+        "unverifiable",
+        "value_wrong",
+        "conclusion_narrowed",
+        "conclusion_unsupported",
+        "conclusion_contradicted",
+        "artefact_of_construction"
+      ]
     },
-    "impact_rank": {"type": "integer", "minimum": 0, "maximum": 6},
-    "verification_tier": {"type": "integer", "minimum": 1, "maximum": 5},
-    "paper_only": {"type": "boolean"},
-    "confidence": {"type": "string", "enum": ["CONFIRMED", "LIKELY", "SPECULATIVE"]},
+    "impact_rank": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "verification_tier": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "paper_only": {
+      "type": "boolean"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "CONFIRMED",
+        "LIKELY",
+        "SPECULATIVE"
+      ]
+    },
     "evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source_hashes", "rerun_command", "expected", "observed", "tolerance_basis"],
+      "required": [
+        "source_hashes",
+        "rerun_command",
+        "expected",
+        "observed",
+        "tolerance_basis"
+      ],
       "properties": {
         "source_hashes": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "sha256"],
+            "required": [
+              "path",
+              "sha256"
+            ],
             "properties": {
-              "path": {"type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"},
-              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
             }
           }
         },
         "unhashed_source_paths": {
           "description": "Legacy-only source labels retained during v1 normalization. They are not admissible evidence for promotion; canonical live rows use source_hashes.",
           "type": "array",
-          "items": {"type": "string", "minLength": 1}
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "rerun_command": {"type": "string", "minLength": 1},
+        "rerun_command": {
+          "type": "string",
+          "minLength": 1
+        },
         "expected": {},
         "observed": {},
-        "tolerance_basis": {"type": ["string", "null"]}
+        "tolerance_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "unverifiable_basis": {
@@ -85,18 +259,45 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["reason", "blocked_tier", "attempted_check", "basis"],
+          "required": [
+            "reason",
+            "blocked_tier",
+            "attempted_check",
+            "basis"
+          ],
           "properties": {
             "reason": {
               "type": "string",
-              "enum": ["data_missing", "data_not_available", "code_missing", "code_not_functional", "discrepancy_in_output", "software_not_available", "insufficient_compute", "missing_readme", "insufficient_documentation"]
+              "enum": [
+                "data_missing",
+                "data_not_available",
+                "code_missing",
+                "code_not_functional",
+                "discrepancy_in_output",
+                "software_not_available",
+                "insufficient_compute",
+                "missing_readme",
+                "insufficient_documentation"
+              ]
             },
-            "blocked_tier": {"type": "integer", "minimum": 1, "maximum": 5},
-            "attempted_check": {"type": "string", "minLength": 1},
-            "basis": {"type": "string", "minLength": 1}
+            "blocked_tier": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "attempted_check": {
+              "type": "string",
+              "minLength": 1
+            },
+            "basis": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
-        {"type": "null"}
+        {
+          "type": "null"
+        }
       ]
     },
     "verifications": {
@@ -104,118 +305,359 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reviewer_id", "invocation_id", "evidence_record", "model_family", "outcome"],
+        "required": [
+          "reviewer_id",
+          "invocation_id",
+          "evidence_record",
+          "model_family",
+          "outcome"
+        ],
         "properties": {
-          "reviewer_id": {"type": "string", "minLength": 1},
-          "invocation_id": {"type": "string", "minLength": 1},
+          "reviewer_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "invocation_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "evidence_record": {
             "description": "The immutable reviewer output that this verification cites. make_settled.sh joins it to invocations.jsonl and verifies both the path and bytes.",
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "sha256"],
+            "required": [
+              "path",
+              "sha256"
+            ],
             "properties": {
-              "path": {"type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"},
-              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
             }
           },
-          "model_family": {"type": "string", "minLength": 1},
-          "outcome": {"type": "string", "enum": ["confirmed", "pass", "verified", "refuted", "inconclusive"]}
+          "model_family": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "pass",
+              "verified",
+              "refuted",
+              "inconclusive"
+            ]
+          }
         }
       }
     },
     "dependencies": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["environment_fingerprint", "finding_ids", "artifact_paths"],
+      "required": [
+        "environment_fingerprint",
+        "finding_ids",
+        "artifact_paths"
+      ],
       "properties": {
-        "environment_fingerprint": {"type": ["string", "null"], "minLength": 1},
-        "finding_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "environment_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "finding_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "artifact_paths": {
           "type": "array",
           "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"}
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+          }
         }
       }
     },
     "settled": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["approved", "valid_for_report_hash"],
+      "required": [
+        "approved",
+        "valid_for_report_hash"
+      ],
       "properties": {
-        "approved": {"type": "boolean"},
-        "valid_for_report_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+        "approved": {
+          "type": "boolean"
+        },
+        "valid_for_report_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "benign_explanations_ruled_out": {
       "type": "array",
-      "items": {"type": "string", "minLength": 1}
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "report_section": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^Section [0-9]+(?:\\.[0-9]+)?$"
     },
     "verification_snippet": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["kind", "path", "basis"],
+      "required": [
+        "kind",
+        "path",
+        "basis"
+      ],
       "properties": {
-        "kind": {"type": "string", "enum": ["code", "judgement", "unverifiable"]},
-        "path": {"type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"},
-        "basis": {"type": "string", "minLength": 1}
+        "kind": {
+          "type": "string",
+          "enum": [
+            "code",
+            "judgement",
+            "unverifiable"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
-    "disclosure_flag": {"type": "boolean"},
+    "disclosure_flag": {
+      "type": "boolean"
+    },
     "remedy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["class", "description", "verified"],
+      "required": [
+        "class",
+        "description",
+        "verified"
+      ],
       "properties": {
-        "class": {"type": "string", "enum": ["one_line_code", "one_number", "reanalysis", "not_fixable"]},
-        "description": {"type": ["string", "null"]},
-        "verified": {"type": ["boolean", "null"]}
+        "class": {
+          "type": "string",
+          "enum": [
+            "one_line_code",
+            "one_number",
+            "reanalysis",
+            "not_fixable",
+            "disclose_in_paper"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verified": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
       }
     },
-    "changes_conclusion": {"type": "boolean"},
-    "changes_conclusion_which": {"type": ["string", "null"]},
+    "changes_conclusion": {
+      "type": "boolean"
+    },
+    "changes_conclusion_which": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["origin_role", "independently_found_by", "agreed_after_seeing", "round_introduced", "source_records"],
+      "required": [
+        "origin_role",
+        "independently_found_by",
+        "agreed_after_seeing",
+        "round_introduced",
+        "source_records"
+      ],
       "properties": {
-        "origin_role": {"type": "string", "minLength": 1},
-        "independently_found_by": {"type": "array", "items": {"type": "string", "minLength": 1}},
-        "agreed_after_seeing": {"type": "array", "items": {"type": "string", "minLength": 1}},
-        "round_introduced": {"type": ["integer", "null"], "minimum": 0},
-        "source_records": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        "origin_role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "independently_found_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "agreed_after_seeing": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "round_introduced": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source_records": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     }
   },
   "allOf": [
     {
-      "if": {"properties": {"impact": {"const": "unverifiable"}}, "required": ["impact"]},
-      "then": {"properties": {"unverifiable_basis": {"type": "object"}}},
-      "else": {"properties": {"unverifiable_basis": {"type": "null"}}}
-    },
-    {
-      "if": {"properties": {"status": {"enum": ["confirmed", "verified", "accepted"]}, "coordinator_approved": {"const": true}}, "required": ["status", "coordinator_approved"]},
-      "then": {
-        "required": ["benign_explanations_ruled_out", "report_section", "verification_snippet"],
+      "if": {
         "properties": {
-          "verifications": {"minItems": 2},
-          "evidence": {"properties": {"source_hashes": {"minItems": 1}}},
-          "dependencies": {"properties": {"environment_fingerprint": {"type": "string", "minLength": 1}}}
+          "impact": {
+            "const": "unverifiable"
+          }
+        },
+        "required": [
+          "impact"
+        ]
+      },
+      "then": {
+        "properties": {
+          "unverifiable_basis": {
+            "type": "object"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "unverifiable_basis": {
+            "type": "null"
+          }
         }
       }
     },
     {
-      "if": {"properties": {"changes_conclusion": {"const": true}}, "required": ["changes_conclusion"]},
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "confirmed",
+              "verified",
+              "accepted"
+            ]
+          },
+          "coordinator_approved": {
+            "const": true
+          }
+        },
+        "required": [
+          "status",
+          "coordinator_approved"
+        ]
+      },
+      "then": {
+        "required": [
+          "benign_explanations_ruled_out",
+          "report_section",
+          "verification_snippet"
+        ],
+        "properties": {
+          "verifications": {
+            "minItems": 2
+          },
+          "evidence": {
+            "properties": {
+              "source_hashes": {
+                "minItems": 1
+              }
+            }
+          },
+          "dependencies": {
+            "properties": {
+              "environment_fingerprint": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "changes_conclusion": {
+            "const": true
+          }
+        },
+        "required": [
+          "changes_conclusion"
+        ]
+      },
       "then": {
         "properties": {
-          "changes_conclusion_which": {"type": "string", "minLength": 1},
-          "verifications": {"minItems": 2}
+          "changes_conclusion_which": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verifications": {
+            "minItems": 2
+          }
         }
       },
-      "else": {"properties": {"changes_conclusion_which": {"type": ["string", "null"]}}}
+      "else": {
+        "properties": {
+          "changes_conclusion_which": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
     }
   ]
 }

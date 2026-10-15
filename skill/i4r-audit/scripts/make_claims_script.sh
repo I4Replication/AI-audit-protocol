@@ -87,9 +87,12 @@ c = json.loads((D/"comment.json").read_text())
 finds = c.get("findings", [])
 if not finds: print("FATAL: comment.json has no findings"); sys.exit(1)
 ids = [str(f.get("id") or "") for f in finds]
-expected = [f"F{i}" for i in range(1, len(finds)+1)]
-if ids != expected:
-    print(f"FATAL: comment findings must be unique and ordered {expected}; observed {ids}"); sys.exit(1)
+import re
+nums = [int(i[1:]) if re.fullmatch(r"F[1-9][0-9]*", i) else None for i in ids]
+# strictly increasing final ids: a finding whose approval is deferred to a later round leaves a hole here
+# (finalize refuses target_complete/converged until it is approved or withdrawn)
+if None in nums or nums != sorted(set(nums)):
+    print(f"FATAL: comment findings must be unique F<n> ids in increasing order; observed {ids}"); sys.exit(1)
 
 def severity(f):  # mechanical; SKILL.md Phase 3b prose must agree — edit both or neither
     imp, conf = f.get("impact"), f.get("confidence")
@@ -119,7 +122,7 @@ if report.is_file():
     import re, collections
     tags = re.findall(r"\[claim\s+(\d+)\]", report.read_text(), re.I)
     dup = [x for x,n in collections.Counter(tags).items() if n != 1]
-    if dup or tags != [str(i) for i in range(1, len(finds)+1)]:
+    if dup or tags != [str(n) for n in nums]:   # the comment's own ids, in order
         print(f"FATAL: report claim tags must occur exactly once in order; observed {tags}"); sys.exit(1)
 
 # ---- language: majority extension of author: entries; R fallback when none (2026-08-21) ----
@@ -145,7 +148,7 @@ def wrap(t, w=96):
     return out
 
 body, tail, n_ret, n_cor = [], [], 0, 0
-for i, f in enumerate(finds, 1):
+for f, i in zip(finds, nums):   # i is the finding's own number, as the report's [claim n] tags use
     sev = severity(f)
     if sev.startswith("RETRACTION"): n_ret += 1
     if sev.startswith("CORRIGENDUM"): n_cor += 1
@@ -195,7 +198,62 @@ hdr_lines = [
   f"{MK} {len(finds)} claims: {n_ret} retraction material, {n_cor} corrigendum material, "
   f"{len(finds)-n_ret-n_cor} comment material. File language: .{EXT} (the deposit's own).",
   MK + " " + "="*92, ""]
-out = "\n".join(hdr_lines) + "\n" + "\n".join(body)
+# Audit-written R checks call the verification notebook's contract (expect() before check(),
+# read_deposit(), the audit's _prelude.R helpers). A replicator runs this file on its own, so an
+# R claims file that inlines any snippet carries a standalone copy of that contract. (The first
+# production audit shipped a claims_script.R whose every helper was undefined.)
+uses_snippet = any(v.startswith("snippet:") for v in cmap.values()) or any(f.get("verification_script") for f in finds)
+harness = []
+if EXT == "R" and uses_snippet:
+    prelude = D/"verification_snippets/_prelude.R"
+    harness = [
+        MK + " ---- standalone check harness (same contract as verification.Rmd) ----------------------------",
+        'PKG_DIR <- local({',
+        '  e <- Sys.getenv("I4R_PKG_DIR", "")',
+        '  if (nzchar(e) && dir.exists(e)) return(normalizePath(e))',
+        '  for (cand in c(file.path(getwd(), "pkg"), file.path(dirname(getwd()), "audit", "pkg"), "pkg"))',
+        '    if (dir.exists(cand)) return(normalizePath(cand))',
+        '  stop("cannot locate the deposit: set I4R_PKG_DIR to the extracted package directory (the pkg/ folder)")',
+        '})',
+        'AUDIT_DIR <- Sys.getenv("I4R_AUDIT_DIR", dirname(PKG_DIR))',
+        'read_deposit <- function(file, ...) {',
+        '  path <- if (file.exists(file)) file else file.path(PKG_DIR, file)',
+        '  if (!file.exists(path)) stop("not in the deposit: ", file)',
+        '  ext <- tolower(tools::file_ext(path))',
+        '  switch(ext, csv = utils::read.csv(path, ...), tsv = utils::read.delim(path, ...), txt = utils::read.delim(path, ...),',
+        '         rds = readRDS(path), stop("no loader for .", ext, " in this claims script; open the file with the matching R package"))',
+        '}',
+        '.V <- new.env(); .V$exp <- list(); .V$res <- list()',
+        'expect <- function(id, ..., tol = 0, note = NULL) {',
+        '  vals <- list(...); if (is.null(names(vals)) || any(names(vals) == "")) stop("expect(): every value needs a name")',
+        '  for (k in names(vals)) { .V$exp[[paste(id, k, sep = "|")]] <- list(id = id, key = k, expected = vals[[k]], tol = tol, note = note)',
+        '    cat(sprintf("[%-6s %-34s] EXPECTED  %s\n", id, k, format(vals[[k]]))) }',
+        '  invisible(TRUE)',
+        '}',
+        'check <- function(id, ...) {',
+        '  vals <- list(...); if (is.null(names(vals)) || any(names(vals) == "")) stop("check(): every value needs a name")',
+        '  for (k in names(vals)) { key <- paste(id, k, sep = "|"); e <- .V$exp[[key]]; ob <- vals[[k]]',
+        '    if (is.null(e)) { .V$res[[key]] <- "FAIL (never declared with expect())"; cat(sprintf("[%-6s %-34s] FAIL  undeclared\n", id, k)); next }',
+        '    ok <- if (is.numeric(e$expected)) isTRUE(length(ob) == 1 && !is.na(ob) && abs(e$expected - ob) <= e$tol + 1e-12) else identical(e$expected, ob)',
+        '    .V$res[[key]] <- if (ok) "PASS" else "FAIL"',
+        '    cat(sprintf("[%-6s %-34s] OBSERVED  %s  %s\n", id, k, format(ob), if (ok) "PASS" else "FAIL")) }',
+        '  invisible(TRUE)',
+        '}',
+        'claims_summary <- function() {',
+        '  declared <- names(.V$exp); checked <- names(.V$res)',
+        '  for (k in setdiff(declared, checked)) .V$res[[k]] <- "FAIL (declared but never checked)"',
+        '  fails <- sum(!vapply(.V$res, function(x) identical(x, "PASS"), logical(1)))',
+        '  cat(sprintf("\n%d checks, %d PASS, %d FAIL\n", length(.V$res), length(.V$res) - fails, fails))',
+        '  invisible(fails)',
+        '}',
+    ]
+    if prelude.is_file():
+        harness += [MK + " ---- audit-specific helpers (verification_snippets/_prelude.R) ----"]
+        harness += prelude.read_text().rstrip("\n").split("\n")
+    harness += [MK + " " + "="*92, ""]
+out = "\n".join(hdr_lines) + "\n" + "\n".join(harness) + "\n".join(body)
+if EXT == "R" and uses_snippet:
+    out += "\n" + MK + " ---- summary of every audit-written check above ----\nclaims_summary()\n"
 if tail:
     out += "\n".join([MK + " " + "="*92,
         f"{MK} CLAIMS WITH NO CODE — verified by inspection or arithmetic, not by running anything.",

@@ -22,7 +22,7 @@ class FindingProjectionIntegrationTest(unittest.TestCase):
             (self.audit / relative).mkdir(parents=True, exist_ok=True)
         source = self.audit / "work/check_primary.txt"
         source.write_text("observed=9\n")
-        script = self.audit / "work/check_primary.py"
+        script = self.audit / "work/check_primary.R"
         script.write_text("observed <- 9\nexpect('C-1', value=9)\ncheck('C-1', value=observed)\n")
         self.row = json.loads(FIXTURE.read_text())
         self.row["evidence"]["source_hashes"] = [{
@@ -44,6 +44,24 @@ class FindingProjectionIntegrationTest(unittest.TestCase):
             ["python3", str(GENERATOR), str(self.audit), *args],
             text=True, capture_output=True, timeout=30,
         )
+
+    def test_apply_refuses_when_no_row_is_approved(self) -> None:
+        # Before critique every row is unapproved. Applying would have replaced the drafted Appendix A
+        # with an empty table and stripped every claim tag (first production audit, round 1).
+        unapproved = copy.deepcopy(self.row)
+        unapproved["coordinator_approved"] = False
+        unapproved["status"] = "draft"
+        unapproved["settled"] = None
+        (self.audit / "work/findings.jsonl").write_text(json.dumps(unapproved) + "\n")
+        before = (self.audit / "report/REPORT_final.md").read_text()
+        applied = self.run_generator("--apply")
+        self.assertNotEqual(applied.returncode, 0)
+        self.assertIn("refused", applied.stdout + applied.stderr)
+        self.assertEqual((self.audit / "report/REPORT_final.md").read_text(), before)
+        self.assertFalse((self.audit / "report/APPENDIX_A.md").exists())
+        preview = self.run_generator()
+        self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+        self.assertIn("generated 0 findings", preview.stdout)
 
     def test_atomic_apply_and_exact_check(self) -> None:
         applied = self.run_generator("--apply")
@@ -108,6 +126,19 @@ class FindingProjectionIntegrationTest(unittest.TestCase):
         escaped = self.run_generator("--apply")
         self.assertNotEqual(escaped.returncode, 0)
         self.assertEqual(before, {path: path.read_bytes() for path in protected})
+
+    def test_non_r_code_snippet_fails_before_projection(self) -> None:
+        python_source = self.audit / "work/check_primary.py"
+        python_source.write_text("print(9)\n")
+        row = copy.deepcopy(self.row)
+        row["verification_snippet"]["path"] = "work/check_primary.py"
+        (self.audit / "work/findings.jsonl").write_text(json.dumps(row) + "\n")
+
+        failed = self.run_generator("--apply")
+
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("must be R source", failed.stdout + failed.stderr)
+        self.assertFalse((self.audit / "work/finding_projections.manifest.json").exists())
 
 
 if __name__ == "__main__":
