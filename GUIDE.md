@@ -29,7 +29,6 @@ cheat sheet (which itself says `INSTALL.md` wins).
 
 | Path | What it is |
 |---|---|
-| `paper/` | *A Protocol for AI-Assisted Reproducibility Auditing: Specification and Empirical Agenda*: the Markdown source and the built PDF |
 | `skill/i4r-audit/` | The audit skill. Five parallel auditors feed an adjudication with a dispositioned ledger. A second model family then runs adversarial critique rounds. The audit ends in a gated release with a verification notebook and a numbered claims script |
 | `skill/baseline/` | The baseline. One Claude call per paper audits it and writes the whole comment, from the same inputs the pipeline's auditors received. It has no critics and no rounds ([§9](#9-the-baseline-skill)) |
 | `CHEATSHEET.html`, `CHEATSHEET.pdf` | The operator's cheat sheet, byte-identical to the copies in `skill/i4r-audit/`. Its header still reads 2.6.2, but its install step and models are 2.7.x |
@@ -797,17 +796,7 @@ and lower round cap have all been replaced.
 
 ### Status
 
-**Private by design for now.** Do not make this repository public before the authors of the
-audited papers have been notified (protocol §3, Disclosure).
-
-A scrub has to cover `CHANGELOG.md`, `reference/failure_history.md`, passages and headings in `INSTALL.md`,
-some reference files (the baseline's copies included), the cheat sheet's terminal captures and
-`skill/MERGE_NOTES.md`. It also has to cover comments and docstrings in many `scripts/` and `tests/` modules,
-the retained-history script and the names `scripts/README.md` gives it, test-fixture names, and the audit id
-in `skill/baseline/config/baseline.json` (the baseline's tests use synthetic ids). New documentation
-should describe failure modes generically.
-
-<sub>Sources: a search of the repository for audit-id patterns and audited-paper names (matches deliberately not reproduced); `skill/i4r-audit/scripts/README.md` "Retained history".</sub>
+**Private for now.** The files in this repository do not name the papers that were audited or their authors. Earlier commits in its history do, so rewrite the history (or start a new repository from the current files) before making it public.
 
 ### How to cite
 
