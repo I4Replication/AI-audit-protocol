@@ -9,13 +9,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pathlib
 import os
+# only the fixtures' subprocesses get these (publish into a scratch root, file into a fresh registry)
+FIXTURE_ENV = {"I4R_PUBLISH_ANY_ROOT": "1", "I4R_CREATE_REGISTRY": "1",
+               "I4R_REGISTRY_OVERRIDE": "1"}  # the scratch registry sits outside the fixture tree
+import time
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
+import zipfile
+from typing import Callable
+
+from tests.test_document_release import multi_page_pdf
 
 
 SKILL = Path(__file__).resolve().parents[1]
@@ -30,8 +40,13 @@ MAKE_DIFF = SKILL / "scripts" / "make_diff_packet.py"
 SUMMARIZE = SKILL / "scripts" / "summarize_invocations.py"
 POST_DELTA = SKILL / "scripts" / "run_post_delta_gates.py"
 VALIDATE_ROUNDS = SKILL / "scripts" / "validate_round_projections.py"
+DOCUMENT_RELEASE = SKILL / "scripts" / "document_release.py"
 sys.path.insert(0, str(SKILL / "scripts"))
 import test_run_critique_runtime as critique_runtime
+import claude_routes
+import document_release
+import record_invocation
+from tests import verifier_fixtures
 
 
 def digest(path: Path) -> str:
@@ -77,7 +92,8 @@ def tiny_pdf(text: str = "Sanitized independent audit comment") -> bytes:
 
 
 def checked(command: list[str], *, environment: dict[str, str] | None = None) -> None:
-    result = subprocess.run(command, text=True, capture_output=True, env=environment)
+    result = subprocess.run(command, text=True, capture_output=True,
+                            env={**(environment or os.environ), **FIXTURE_ENV})
     if result.returncode:
         raise AssertionError(
             f"command failed ({result.returncode}): {' '.join(command)}\n{result.stdout}\n{result.stderr}"
@@ -159,12 +175,14 @@ def seed_round_projection(
     if diff_manifest is not None:
         diff_path = source / "context/DIFF_MANIFEST.json"
         write(diff_path, diff_manifest.read_bytes())
-    assignments = {role: ([] if round_number == 1 else ["F2"]) for role in roles}
+    registry_ids = [json.loads(line)["id"] for line in
+                    (audit / "work/findings.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    assignments = {role: (list(registry_ids) if round_number == 1 else ["F2"]) for role in roles}
     routing = {
-        "routing_version": "i4r-round-routing-1", "round": round_number, "roles": roles,
+        "routing_version": "i4r-round-routing-2", "round": round_number, "roles": roles,
         "reason": "integration fixture route", "diff_manifest_present": diff_path is not None,
         "diff_manifest_sha256": digest(diff_path) if diff_path else None,
-        "claim_assignment_mode": "unscoped_round_1" if round_number == 1 else "exact_changed_claims",
+        "claim_assignment_mode": "domain_routed_round_1" if round_number == 1 else "domain_routed_delta",
         "claim_assignments": assignments,
     }
     json_file(source / "ROUTING.json", routing)
@@ -172,9 +190,10 @@ def seed_round_projection(
         path.relative_to(snapshot).as_posix(): digest(path)
         for path in sorted(snapshot.rglob("*")) if path.is_file()
     }
+    critic_model = record_invocation.load_policy_snapshot(audit)["models"]["critics"]["requested_model"]
     json_file(snapshot / "MANIFEST.json", {
-        "snapshot_version": "i4r-runtime-snapshot-3", "input_sha256": input_hash,
-        "report_sha256": report_hash, "round": round_number, "model": "gpt-5.6-terra",
+        "snapshot_version": "i4r-runtime-snapshot-5", "input_sha256": input_hash,
+        "report_sha256": report_hash, "round": round_number, "model": critic_model,
         "effort": "high", "roles": roles, "audit_id": audit_id,
         "files_sha256": snapshot_files,
     })
@@ -217,10 +236,10 @@ def seed_round_projection(
     merge_path = projection / "CLAIM_MERGE.json"
     json_file(merge_path, merge)
     json_file(projection / "adjudication_packet.json", {
-        "packet_version": "i4r-targeted-adjudication-packet-2", "audit_id": audit_id,
+        "packet_version": "i4r-targeted-adjudication-packet-3", "audit_id": audit_id,
         "round": round_number, "input_sha256": input_hash, "report_sha256": report_hash,
         "policy": "auto", "triggers": [], "claim_merge_sha256": digest(merge_path),
-        "unresolved_rows": [], "critic_outputs": critic_outputs,
+        "unresolved_rows": [], "deferred_rows": [], "critic_outputs": critic_outputs,
     })
     projection_files = {
         path.relative_to(projection).as_posix(): digest(path)
@@ -245,9 +264,29 @@ def seed_round_projection(
     })
 
 
-def make_audit(base: Path, paper: str = "Paper-Sanitized") -> Path:
-    """Create the smallest release-capable audit tree accepted by both scripts."""
-    audit = base / "Discipline" / "Journal-Sanitized" / paper / "audit"
+def make_audit(
+    base: Path, paper: str = "Paper-Sanitized", *, terra_requested_only: bool = False,
+    layout: str = "legacy",
+    before_registry: Callable[[Path, dict[str, object]], None] | None = None,
+) -> Path:
+    """Create the smallest release-capable audit tree accepted by both scripts.
+
+    ``layout="new"`` builds the 2.5.0 tree (runs/<J>/<P>/audit beside data/<J>/<P>); the default
+    keeps the legacy <J>/<P>/audit form, which the scripts must still accept.
+
+    ``before_registry`` (opt-in; None leaves the fixture byte-identical) is called once, after
+    the Phase-1, coordinator, probe and round-1 critic invocations are journaled and F1's
+    verifications are set, and before F1 is written to either registry file. It receives the
+    audit directory and the F1 row, which it may change in place (not its claim, which the
+    round-1 critics have already reviewed) and it may journal further invocations; the rest of
+    the pipeline (projections, settled cache, diff packet, post-delta gates, finalize) then runs
+    on that state.
+    """
+    if layout == "new":
+        audit = base / "Discipline" / "runs" / "Journal-Sanitized" / paper / "audit"
+        (base / "Discipline" / "data" / "Journal-Sanitized" / paper).mkdir(parents=True, exist_ok=True)
+    else:
+        audit = base / "Discipline" / "Journal-Sanitized" / paper / "audit"
     (audit / "pkg").mkdir(parents=True, exist_ok=True)
     write(audit / "package_manifest.json", json.dumps({
         "schema_version": "2.0.0", "algorithm": "sha256",
@@ -257,10 +296,13 @@ def make_audit(base: Path, paper: str = "Paper-Sanitized") -> Path:
     os.chmod(audit / "pkg", 0o555)
     checked([
         "/bin/bash", str(INIT), str(audit), "--audit-id", "audit-integration-001",
-        "--doi", "10.5555/integration", "--auditor-model", "sonnet-5",
-        "--auditor-family", "claude", "--auditor-provider", "anthropic",
+        "--doi", "10.5555/integration", "--auditor-model", claude_routes.SHIPPED["requested_model"],
+        "--auditor-family", "claude", "--auditor-provider", claude_routes.SHIPPED["provider"],
         "--protocol-version", "2.0.0", "--gate-set-version", "integration",
     ])
+    # 2.7.0: the Claude and critic rows below are journaled on the routes this audit's snapshot froze.
+    frozen_models = record_invocation.load_policy_snapshot(audit)["models"]
+    critic_model = frozen_models["critics"]["requested_model"]
     before_report = audit / "report/REPORT_v1.md"
     final_report = audit / "report/REPORT_final.md"
     write(before_report, "# Independent audit\n\n## 1. Finding\n\nDraft wording before adversarial review [claim 1].\n")
@@ -286,6 +328,7 @@ The fixture supports the narrow implementation claim tested here.
 
 AI-Games protocol. AI-vertical audit guidance.
 """)
+    write(audit / "report/front_matter.md", "Independent audit\n\nCorrespondence: A. Auditor, a.auditor@univ-fixture.edu\n")
     write(audit / "report/ADJUDICATION.md", "# Adjudication\n\nF1 accepted.\n")
     for name in (
         "01_reproduction.md",
@@ -303,13 +346,17 @@ AI-Games protocol. AI-vertical audit guidance.
         "journal": "Journal-Sanitized", "field": "test fixture",
     })
     comment["findings"] = [{"id": "F1", "claim": "Sanitized fixture finding"}]
+    # The fixture's one finding is not a disclosure finding, so the example's personal-data record
+    # does not apply: since 2.6.8 pii_present true or disclosure flags require a flagged finding.
+    comment["governance"].update({"pii_present": False, "pii_description": None})
+    comment["disclosure"] = {"flags": [], "urgency": "none", "statement": None, "consistent_with": None}
     write(audit / "comment.json", json.dumps(comment, indent=2) + "\n")
     write(audit / "work/analysis.py", "print('sanitized fixture')\n")
     evidence = audit / "work/check_primary.txt"
     snippet = audit / "work/check_primary.R"
     draft_evidence = audit / "work/draft_review.txt"
     write(evidence, "expected=2 observed=2\n")
-    write(snippet, "stopifnot(1 + 1 == 2)\n")
+    write(snippet, "expect(\"C-1\", two = 2, tol = 0, note = \"fixture\")\ncheck(\"C-1\", two = 1 + 1)\n")
     write(draft_evidence, "The pre-integration wording was reviewed and superseded.\n")
     evidence_inventory = {
         path.relative_to(audit).as_posix(): {"sha256": digest(path), "size": path.stat().st_size}
@@ -355,7 +402,7 @@ AI-Games protocol. AI-vertical audit guidance.
     before_excluded = json.loads(json.dumps(excluded))
     before_excluded["claim"] = "Draft wording remained under review before round-one integration."
 
-    event_environment = os.environ.copy()
+    event_environment = {**os.environ, **FIXTURE_ENV}
     event_environment["RUN_JSON"] = str(audit / "run.json")
     round_one_events = [
         ["phase_end", "phase=intake"],
@@ -461,11 +508,11 @@ AI-Games protocol. AI-vertical audit guidance.
         "auditor_privacy_archive": "report/05_privacy_archive.md",
     }
     initial_roles = [
-        ("coordinator", "coordinator", 0, "sonnet-5", "anthropic", "claude",
-         "report/REPORT_final.md"),
-        *[(role, "auditor", 0, "sonnet-5",
+        ("coordinator", "coordinator", 0, frozen_models["coordinator"]["requested_model"],
+         "anthropic", "claude", "report/REPORT_final.md"),
+        *[(role, "auditor", 0, frozen_models["phase_1_auditors"][role]["requested_model"],
            "anthropic", "claude", output) for role, output in output_by_auditor.items()],
-        ("model_probe", "other", 0, "gpt-5.6-terra", "openai", "gpt", "critique/model_probe.json"),
+        ("model_probe", "other", 0, critic_model, "openai", "gpt", "critique/model_probe.json"),
     ]
     ledger: list[dict[str, object]] = []
 
@@ -480,18 +527,28 @@ AI-Games protocol. AI-vertical audit guidance.
         output = audit / relative
         if role == "model_probe":
             write(output, json.dumps({"status": "ok"}) + "\n")
-        observed = ("claude-sonnet-5-20260801" if requested == "sonnet-5" else
+        requested_only = terra_requested_only and provider == "openai"
+        observed = (None if requested_only else
+                    verifier_fixtures.SERVED_BY_REQUESTED[requested]
+                    if requested in verifier_fixtures.SERVED_BY_REQUESTED else
                     "claude-opus-5-20260801" if provider == "anthropic" else
-                    "gpt-5.6-terra-2026-08-01")
+                    verifier_fixtures.served_critic_model(requested))
         ledger.append({
             "invocation_id": invocation_id, "role": role, "role_class": role_class,
             "round": round_number, "attempt": 1, "status": "completed", "provider": provider,
             "provider_call": True, "cache_usage": cache_usage,
             "session_id": f"session-{len(ledger) + 1}",
-            "requested_model": requested, "observed_model": observed, "model_family": family,
-            "model_source": "observed",
-            "reasoning_effort": ("max" if role_class in {"coordinator", "auditor", "adjudicator"}
-                                  or role == "critic_synth" else "high"),
+            "requested_model": requested, "observed_model": observed,
+            "served_model": observed, "model_family": family,
+            "model_source": "declared" if requested_only else "observed",
+            "identity_assurance": "requested_only" if requested_only else "observed",
+            # the efforts of the snapshot finalize judges against (2.7.3: a new audit's Claude roles run at xhigh)
+            "reasoning_effort": (frozen_models["coordinator"]["reasoning_effort"] if role_class == "coordinator"
+                                 else frozen_models["phase_1_auditors"][role]["reasoning_effort"]
+                                 if role_class == "auditor"
+                                 else frozen_models["targeted_adjudicator"]["reasoning_effort"]
+                                 if role_class == "adjudicator" or role == "critic_synth"
+                                 else frozen_models["critics"]["reasoning_effort"]),
             "started_at": started_at, "ended_at": ended_at,
             "elapsed_seconds": 60, "input_artifact_sha256": input_hash,
             "prompt_sha256": prompt_hash, "output_artifact": relative,
@@ -520,11 +577,13 @@ AI-Games protocol. AI-vertical audit guidance.
         output, result = write_critic(1, short_role)
         append_invocation(
             result["invocation_id"], f"critic_{short_role}", "critic", 1,
-            "gpt-5.6-terra", "openai", "gpt", output.relative_to(audit).as_posix(),
+            critic_model, "openai", "gpt", output.relative_to(audit).as_posix(),
             input_hash=result["input_hashes"]["snapshot_sha256"],
             prompt_hash=result["input_hashes"]["prompt_sha256"],
         )
-    write(audit / "invocations.jsonl", "".join(json.dumps(row, sort_keys=True) + "\n" for row in ledger))
+    for row in ledger:
+        record_invocation.record_terminal(audit, row)
+    journaled_invocations = len(ledger)
 
     finding["verifications"] = [
         {
@@ -547,6 +606,8 @@ AI-Games protocol. AI-vertical audit guidance.
             "model_family": "gpt", "outcome": "confirmed",
         },
     ]
+    if before_registry is not None:
+        before_registry(audit, finding)
     write(audit / "work/findings_round_1.jsonl",
           "".join(json.dumps(row, sort_keys=True) + "\n" for row in (finding, before_excluded)))
     write(audit / "work/findings.jsonl",
@@ -572,16 +633,45 @@ AI-Games protocol. AI-vertical audit guidance.
           "claim_id,key,verdict,detail\nC-1,fixture,PASS,sanitized fixture\n")
     write(audit / "verification_manifest.json",
           json.dumps(verification_manifest(audit), indent=2) + "\n")
+    table_count = document_release.markdown_table_count(final_report.read_text(encoding="utf-8"))
+    table_captions = [f"Synthetic findings table {index}" for index in range(1, table_count + 1)]
+    write(audit / "report/captions.txt", "".join(value + "\n" for value in table_captions))
+    docx = audit / "report/comment.docx"
+    document_xml = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body><w:p><w:r><w:t>Correspondence: A. Auditor, a.auditor@univ-fixture.edu</w:t></w:r></w:p>'
+        + ''.join('<w:tbl><w:tr><w:tc/></w:tr></w:tbl>' for _ in range(table_count)) +
+        '</w:body></w:document>'
+    )
+    with zipfile.ZipFile(docx, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", document_xml)
     pdf = audit / "report/comment.pdf"
-    write(pdf, tiny_pdf())
-    document_manifest = {
-        "schema_version": "2.0.0", "created_at": "2026-08-27T12:00:00Z",
-        "report": {"path": "report/REPORT_final.md", "sha256": digest(final_report),
-                   "bytes": final_report.stat().st_size},
-        "docx": None,
-        "pdf": {"path": "report/comment.pdf", "sha256": digest(pdf), "bytes": pdf.stat().st_size},
-    }
-    write(audit / "document_build_manifest.json", json.dumps(document_manifest, indent=2) + "\n")
+    abstract_text = (
+        "This sanitized fixture verifies that the audit's generated evidence and structured "
+        "findings agree."
+    )
+    write(pdf, multi_page_pdf([
+        ["Independent audit", "Correspondence: A. Auditor, a.auditor@univ-fixture.edu",
+         "Abstract", *textwrap.wrap(abstract_text, width=65),
+         "Section 1. Introduction"],
+        ["References", "AI-Games protocol.",
+         *[f"Table {index}. {value}" for index, value in enumerate(table_captions, 1)]],
+    ]))
+    checked([
+        sys.executable, str(DOCUMENT_RELEASE), "create-manifest",
+        "--audit", str(audit), "--report", str(final_report),
+        "--front-matter", str(audit / "report/front_matter.md"),
+        "--captions", str(audit / "report/captions.txt"),
+        "--docx", str(docx), "--pdf", str(pdf),
+        "--docx-relative", "report/comment.docx", "--pdf-relative", "report/comment.pdf",
+        "--builder", str(SKILL / "scripts/build_docx.sh"),
+        "--cache-helper", str(SKILL / "scripts/document_build_cache.py"),
+        "--pandoc-identity", "integration-pandoc", "--renderer-identity", "integration-libreoffice",
+        "--pdfinfo-identity", "integration-pdfinfo", "--pdftotext-identity", "integration-pdftotext",
+        "--build-kind", "canonical", "--cap", "10",
+        "--manifest-out", str(audit / "document_build_manifest.json"),
+    ])
 
     seed_round_projection(
         audit, "audit-integration-001", 1,
@@ -608,6 +698,10 @@ AI-Games protocol. AI-vertical audit guidance.
         raise AssertionError("round-2 diff did not carry the validated F1 settled dependency")
 
     round_two_events = [
+        # the documented flow gates round 2 BEFORE it runs (finalize refuses a round gated only afterwards); the
+        # receipt is regenerated below once the fixture's settled cache and packet are final
+        ["gate", "gate=post_delta", "round=2", "exit_status=0", "log_path=critique/round_2/POST_DELTA_GATES.json",
+         "at=2026-08-27T10:30:00Z"],
         ["round_start", "round=2", "at=2026-08-27T10:35:00Z",
          "critics_run=critic_fairness,critic_completeness"],
         ["round_end", "round=2", "at=2026-08-27T10:45:00Z"],
@@ -628,16 +722,30 @@ AI-Games protocol. AI-vertical audit guidance.
         output, result = write_critic(2, short_role)
         append_invocation(
             result["invocation_id"], f"critic_{short_role}", "critic", 2,
-            "gpt-5.6-terra", "openai", "gpt", output.relative_to(audit).as_posix(),
+            critic_model, "openai", "gpt", output.relative_to(audit).as_posix(),
             input_hash=result["input_hashes"]["snapshot_sha256"],
             prompt_hash=result["input_hashes"]["prompt_sha256"],
         )
+    for row in ledger[journaled_invocations:]:
+        record_invocation.record_terminal(audit, row)
     # Canonical projections can update a previously registered output (notably the
     # coordinator's REPORT_final.md).  Bind the final ledger to the bytes that will
     # actually be released, while retaining the original invocation identities.
+    projected = {
+        row["invocation_id"]: row
+        for row in (
+            json.loads(line) for line in (audit / "invocations.jsonl").read_text().splitlines()
+            if line.strip()
+        )
+    }
     for row in ledger:
-        row["output_sha256"] = digest(audit / str(row["output_artifact"]))
-    write(audit / "invocations.jsonl", "".join(json.dumps(row, sort_keys=True) + "\n" for row in ledger))
+        final_hash = digest(audit / str(row["output_artifact"]))
+        if projected[row["invocation_id"]].get("output_sha256") != final_hash:
+            record_invocation.correct_invocation(
+                audit, str(row["invocation_id"]), {"output_sha256": final_hash},
+                reason="final deterministic report projection changed the bound bytes",
+            )
+        row["output_sha256"] = final_hash
 
     # Refresh the content bindings after the append-only round-two events/invocations, then regenerate
     # the deterministic packet so its settled-cache hash remains exact at finalization.
@@ -649,6 +757,10 @@ AI-Games protocol. AI-vertical audit guidance.
     )
     checked([sys.executable, str(POST_DELTA), str(audit), "--round", "2",
              "--report", str(final_report)])
+    checked(["/bin/bash", str(LOG_EVENT), "gate", "gate=post_delta", "round=2",
+             "exit_status=0"], environment=event_environment)
+    # the scratch registry sits outside the fixture tree, where finalize creates only <tree>/registry
+    (base / "_registry").mkdir(exist_ok=True)
     checked(["/bin/bash", str(FINALIZE), str(audit), "--stopping-reason", "target_complete",
              "--registry", str(base / "_registry")])
     return audit
@@ -660,7 +772,7 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="i4r-release-integration-")
         self.root = Path(self.temporary.name)
-        self.environment = os.environ.copy()
+        self.environment = {**os.environ, **FIXTURE_ENV}
         self.environment.update({"LC_ALL": "C", "I4R_RESERVE_GRACE": "0"})
 
     def tearDown(self) -> None:
@@ -693,6 +805,7 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
         audit = make_audit(self.root)
         phase_one = json.loads((audit / "run_metrics.json").read_text())["phase_one"]
         self.assertTrue(phase_one["exact_quorum"])
+        self.assertTrue(phase_one["initial_fanout_exact"])
         self.assertTrue(phase_one["canonical_outputs"])
         self.assertEqual(phase_one["common_overlap"]["seconds"], 56)
         release = self.root / "stage-success"
@@ -703,6 +816,150 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
         self.assertTrue((release / "verification_summary.csv").is_file())
         self.assertTrue((release / "verification_manifest.json").is_file())
         self.assertFalse((release / "RELEASE_REJECTED").exists())
+
+    def test_metadata_2_1_requested_only_served_identity_can_publish(self) -> None:
+        audit = make_audit(
+            self.root, paper="Paper-Requested-Only", terra_requested_only=True,
+        )
+        run = json.loads((audit / "run.json").read_text())
+        terra = [
+            row for row in run["invocations"]
+            if row.get("provider") == "openai" and row.get("provider_call") is True
+        ]
+        self.assertTrue(terra)
+        self.assertTrue(all(row.get("served_model") is None for row in terra))
+        self.assertTrue(all(row.get("observed_model") is None for row in terra))
+        self.assertTrue(all(row.get("identity_assurance") == "requested_only" for row in terra))
+        self.assertTrue(run["compliance"]["compliance_pass"], run["compliance"]["violations"])
+
+        publish = self.run_script(PUBLISH, audit, self.root / "completed")
+        self.assertEqual(publish.returncode, 0, publish.stdout + publish.stderr)
+
+    def test_metadata_2_1_retry_budget_excludes_rejected_schema_admissions(self) -> None:
+        audit = make_audit(self.root)
+        rows = [
+            json.loads(line) for line in (audit / "invocations.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        template = next(row for row in rows if row["role"] == "critic_stats")
+        schema_digest = "d" * 64
+
+        def unavailable_usage() -> dict[str, object]:
+            reason = "provider rejected the schema before inference"
+            return {
+                "obtainable": False,
+                "input_tokens": None,
+                "output_tokens": None,
+                "cached_input_tokens": None,
+                "cache_creation_input_tokens": None,
+                "reasoning_tokens": None,
+                "total_tokens": None,
+                "source": "unavailable",
+                "unavailable_reasons": {
+                    field: reason for field in (
+                        "input_tokens", "output_tokens", "cached_input_tokens",
+                        "cache_creation_input_tokens", "reasoning_tokens",
+                    )
+                },
+                "total_tokens_kind": "unavailable",
+                "total_tokens_components": [],
+                "total_tokens_unavailable_reason": reason,
+            }
+
+        def failed_invocation(
+            invocation_id: str, *, attempt_kind: str, attempt: int | None,
+            rejected_schema: bool = False,
+        ) -> dict[str, object]:
+            row = json.loads(json.dumps(template))
+            row.update({
+                "invocation_id": invocation_id,
+                "attempt": attempt,
+                "attempt_kind": attempt_kind,
+                "schema_digest": schema_digest if rejected_schema else None,
+                "status": "failed",
+                "provider_request_status": "rejected" if rejected_schema else "accepted",
+                "inference_start_status": "not_started" if rejected_schema else "started",
+                "started_at": "2026-08-27T11:01:00Z",
+                "ended_at": "2026-08-27T11:01:01Z",
+                "elapsed_seconds": 1,
+                "provider_duration_seconds": 0 if rejected_schema else 1,
+                "turn_count": 0 if rejected_schema else 1,
+                "output_artifact": None,
+                "output_sha256": None,
+                "error": ("synthetic schema-admission rejection" if rejected_schema
+                          else "synthetic post-start transport failure"),
+                "error_class": "deterministic_schema" if rejected_schema else "transport",
+            })
+            if rejected_schema:
+                usage = unavailable_usage()
+                row.update({
+                    "session_id": None,
+                    "observed_model": None,
+                    "served_model": None,
+                    "identity_assurance": "requested_only",
+                    "model_identity_evidence": None,
+                    "model_source": "unavailable",
+                    "usage": usage,
+                    "usage_by_model": [],
+                    "unattributed_usage": json.loads(json.dumps(usage)),
+                })
+                row.pop("observed_model_ids", None)
+            return row
+
+        # Two rejected admissions consume no inference attempts.  Attempts 2 and 3 remain
+        # available after the fixture's accepted attempt 1, and all five provider requests
+        # are therefore compliant under metadata 2.1.
+        for number, admission_kind in enumerate(("capability_probe", "output_repair"), 1):
+            record_invocation.record_terminal(
+                audit,
+                failed_invocation(
+                    f"schema-admission-{number}", attempt_kind=admission_kind,
+                    attempt=None, rejected_schema=True,
+                ),
+            )
+        for number in (2, 3):
+            record_invocation.record_terminal(
+                audit,
+                failed_invocation(
+                    f"role-inference-{number}", attempt_kind="role_inference",
+                    attempt=number,
+                ),
+            )
+
+        result = self.run_script(
+            FINALIZE, audit, "--stopping-reason", "target_complete",
+            "--registry", self.root / "_registry",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        run = json.loads((audit / "run.json").read_text())
+        self.assertTrue(run["compliance"]["compliance_pass"], run["compliance"]["violations"])
+
+        # A third request with the same role/schema digest is outside the independent
+        # admission budget.  Finalization must project that breach and publication must
+        # reject the audit even though no fourth inference attempt exists.
+        record_invocation.record_terminal(
+            audit,
+            failed_invocation(
+                "schema-admission-3", attempt_kind="schema_admission",
+                attempt=None, rejected_schema=True,
+            ),
+        )
+        result = self.run_script(
+            FINALIZE, audit, "--stopping-reason", "target_complete",
+            "--registry", self.root / "_registry",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        run = json.loads((audit / "run.json").read_text())
+        self.assertFalse(run["compliance"]["compliance_pass"])
+        self.assertTrue(any(
+            "schema-admission requests for critic_stats" in violation and
+            "exceed the two-request cap" in violation
+            for violation in run["compliance"]["violations"]
+        ), run["compliance"]["violations"])
+
+        publish = self.run_script(PUBLISH, audit, self.root / "completed")
+        self.assertNotEqual(publish.returncode, 0, publish.stdout + publish.stderr)
+        self.assertIn("not publication-compliant", publish.stdout + publish.stderr)
 
     def test_phase_one_sequential_auditors_are_rejected(self) -> None:
         audit = make_audit(self.root)
@@ -720,6 +977,42 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Phase-1 five-way concurrency has no positive common overlap",
                       result.stdout + result.stderr)
+
+    def test_phase_one_serial_recovery_preserves_initial_fan_out(self) -> None:
+        audit = make_audit(self.root)
+        ledger_path = audit / "invocations.jsonl"
+        rows = [json.loads(line) for line in ledger_path.read_text().splitlines() if line.strip()]
+        recovery_rows = []
+        recovery_index = 0
+        for row in rows:
+            if row["role_class"] != "auditor":
+                continue
+            completed = dict(row)
+            completed["invocation_id"] = f"{row['invocation_id']}-serial-recovery"
+            completed["attempt"] = 2
+            completed["started_at"] = f"2026-08-27T12:{recovery_index * 2:02d}:00Z"
+            completed["ended_at"] = f"2026-08-27T12:{recovery_index * 2 + 1:02d}:00Z"
+            completed["elapsed_seconds"] = 60
+            recovery_rows.append(completed)
+            recovery_index += 1
+
+            row["status"] = "failed"
+            row["output_artifact"] = None
+            row["output_sha256"] = None
+            row["error"] = "initial fan-out attempt failed before report acceptance"
+            row["error_class"] = "schema"
+        self.assertEqual(len(recovery_rows), 5)
+        rows.extend(recovery_rows)
+        write(ledger_path, "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+
+        result = self.summarize_check(audit, "serial-recovery-phase-one")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = json.loads((audit / "work/serial-recovery-phase-one.json").read_text())
+        phase_one = summary["phase_one"]
+        self.assertTrue(phase_one["initial_fanout_exact"])
+        self.assertTrue(phase_one["common_overlap"]["positive"])
+        self.assertTrue(phase_one["exact_quorum"])
+        self.assertTrue(phase_one["canonical_outputs"])
 
     def test_phase_one_wrong_or_shared_output_path_is_rejected(self) -> None:
         audit = make_audit(self.root)
@@ -749,6 +1042,7 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
                 row = next(item for item in rows if item["role"] == role)
                 row["requested_model"] = "opus-5"
                 row["observed_model"] = "claude-opus-5-20260801"
+                row["served_model"] = "claude-opus-5-20260801"
                 write(ledger_path, "".join(json.dumps(item, sort_keys=True) + "\n" for item in rows))
                 result = self.summarize_check(audit, f"opus-baseline-{index}")
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -840,15 +1134,20 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
 
     def test_stage_marks_privacy_rejection_and_never_reports_success(self) -> None:
         audit = make_audit(self.root)
-        # Assemble the positive control so this test source itself contains no private path.
-        private_path = "/Us" + "ers/realperson/private/input.csv"
+        # Assemble the positive control so this test source itself contains no private path. 2.7.6: check 3d masks a
+        # literal home path in a staged record, so the control is URL-encoded, which only check 4's decoding sees.
+        private_path = "%2FUs" + "ers%2Frealperson%2Fprivate%2Finput.csv"
         write(audit / "work/leak.R", f"source({private_path!r})\n")
         release = self.root / "stage-rejected"
         result = self.run_script(STAGE, audit, release)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("absolute path(s) naming a real account", result.stdout)
         self.assertNotIn("release staged clean", result.stdout)
-        self.assertEqual((release / "RELEASE_REJECTED").read_text().strip(), "REJECTED_OR_INCOMPLETE")
+        marker = (release / "RELEASE_REJECTED").read_text().splitlines()
+        self.assertEqual(marker[0], "REJECTED_OR_INCOMPLETE")
+        # 2.4.11: the marker names the step that was open when staging stopped.
+        self.assertTrue(marker[1].startswith("failed during: "), marker)
+        self.assertNotEqual(marker[1], "failed during: before the first step", marker)
 
     def test_stage_verification_csv_exception_does_not_admit_other_csv(self) -> None:
         audit = make_audit(self.root)
@@ -863,40 +1162,119 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
     def test_publish_success_is_exact_and_second_attempt_preserves_it(self) -> None:
         audit = make_audit(self.root)
         completed_root = self.root / "completed"
-        destination = completed_root / "Journal-Sanitized/Paper-Sanitized"
+        destination = completed_root / "metadata" / "Journal-Sanitized/Paper-Sanitized"
         result = self.run_script(PUBLISH, audit, completed_root)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-        expected = {
-            "comment.pdf",
+        # 2.5.0: the comment lands in comments/, the record in metadata/ (eight files in all).
+        comments = completed_root / "comments" / "Journal-Sanitized" / "Paper-Sanitized"
+        expected_comment = {"comment.pdf", "comment.docx"}
+        expected_record = {
             "claims_script.R",
             "run.json",
             "comment.json",
             "finalization_receipt.json",
+            "document_build_manifest.json",
             "release-manifest.json",
         }
-        self.assertEqual({path.name for path in destination.iterdir()}, expected)
+        self.assertEqual({path.name for path in comments.iterdir()}, expected_comment)
+        self.assertEqual({path.name for path in destination.iterdir()}, expected_record)
         manifest = json.loads((destination / "release-manifest.json").read_text())
         self.assertEqual(manifest["audit_id"], "audit-integration-001")
-        self.assertEqual({row["file"] for row in manifest["files"]}, expected - {"release-manifest.json"})
+        self.assertEqual({row["file"] for row in manifest["files"]},
+                         (expected_comment | expected_record) - {"release-manifest.json"})
         for row in manifest["files"]:
-            artifact = destination / row["file"]
+            artifact = (comments if row["file"] in expected_comment else destination) / row["file"]
             self.assertEqual(row["sha256"], digest(artifact))
             self.assertEqual(row["bytes"], artifact.stat().st_size)
         receipt = json.loads((destination / "finalization_receipt.json").read_text())
         self.assertFalse(Path(receipt["registry"]["root"]).is_absolute())
 
-        before = {path.name: digest(path) for path in destination.iterdir()}
+        before = {path.name: digest(path) for folder in (comments, destination) for path in folder.iterdir()}
         again = self.run_script(PUBLISH, audit, completed_root)
         self.assertNotEqual(again.returncode, 0, again.stdout + again.stderr)
-        self.assertEqual({path.name: digest(path) for path in destination.iterdir()}, before)
+        self.assertEqual({path.name: digest(path) for folder in (comments, destination) for path in folder.iterdir()}, before)
+
+    def test_publish_leaves_no_lock_behind(self) -> None:
+        audit = make_audit(self.root, paper="Paper-Lock-Clean")
+        completed_root = self.root / "completed"
+        result = self.run_script(PUBLISH, audit, completed_root)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([], list((completed_root / "metadata" / "Journal-Sanitized").glob("*.publish.lock")))
+
+    def test_publish_breaks_a_dead_owner_lock_in_either_form(self) -> None:
+        """A dead-owner lock file, and the legacy dead-owner lock DIRECTORY the synced folder
+        kept resurrecting, are both broken with a warning; publication proceeds."""
+        for paper, legacy_dir in (("Paper-Lock-File", False), ("Paper-Lock-Dir", True)):
+            with self.subTest(form="directory" if legacy_dir else "file"):
+                audit = make_audit(self.root, paper=paper)
+                completed_root = self.root / "completed"
+                dest = completed_root / "metadata" / "Journal-Sanitized" / paper
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                lock = Path(str(dest) + ".publish.lock")
+                if legacy_dir:
+                    lock.mkdir()
+                    (lock / "pid").write_text("999999\n")
+                else:
+                    lock.write_text("999999\n")
+                result = self.run_script(PUBLISH, audit, completed_root)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("breaking a publish lock held by dead pid 999999", result.stderr)
+                self.assertTrue(dest.is_dir())
+                self.assertFalse(lock.exists())
+
+    def test_publish_breaks_the_empty_lock_directory_a_synced_folder_resurrects(self) -> None:
+        """The production case: an EMPTY `<paper>.publish.lock/` (no pid file), a minute or more
+        old, left by the synced folder after a previous publication's cleanup. It must be broken
+        with the orphan warning, not wedge the script -- and not abort it silently under set -e."""
+        audit = make_audit(self.root, paper="Paper-Lock-Empty")
+        completed_root = self.root / "completed"
+        dest = completed_root / "metadata" / "Journal-Sanitized" / "Paper-Lock-Empty"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        lock = Path(str(dest) + ".publish.lock")
+        lock.mkdir()
+        old = time.time() - 600
+        os.utime(lock, (old, old))
+        result = self.run_script(PUBLISH, audit, completed_root)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("breaking an orphaned publish lock with no owner", result.stderr)
+        self.assertTrue(dest.is_dir())
+        self.assertFalse(lock.exists())
+
+    def test_publish_refuses_a_lock_created_seconds_ago_with_no_owner(self) -> None:
+        """Negative control for the orphan rule: fresh and ownerless means another process is
+        mid-acquisition, so it is refused, with the remedy named."""
+        audit = make_audit(self.root, paper="Paper-Lock-Fresh")
+        completed_root = self.root / "completed"
+        dest = completed_root / "metadata" / "Journal-Sanitized" / "Paper-Lock-Fresh"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        lock = Path(str(dest) + ".publish.lock")
+        lock.write_text("")
+        result = self.run_script(PUBLISH, audit, completed_root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("publish lock was just created", result.stderr)
+        self.assertFalse(dest.exists())
+        self.assertTrue(lock.exists())
+
+    def test_publish_refuses_a_lock_held_by_a_live_process(self) -> None:
+        """Negative control: the lock still locks."""
+        audit = make_audit(self.root, paper="Paper-Lock-Live")
+        completed_root = self.root / "completed"
+        dest = completed_root / "metadata" / "Journal-Sanitized" / "Paper-Lock-Live"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        lock = Path(str(dest) + ".publish.lock")
+        lock.write_text(f"{os.getpid()}\n")   # this test process is alive
+        result = self.run_script(PUBLISH, audit, completed_root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("another publication is running", result.stderr)
+        self.assertFalse(dest.exists())
 
     def test_publish_rejects_stale_verification_before_creating_destination(self) -> None:
         audit = make_audit(self.root, paper="Paper-Stale")
         write(audit / "verification_summary.csv",
               "claim_id,key,verdict,detail\nC-1,fixture,PASS,post-verification edit\n")
         completed_root = self.root / "completed"
-        destination = completed_root / "Journal-Sanitized/Paper-Stale"
+        destination = completed_root / "metadata" / "Journal-Sanitized/Paper-Stale"
         result = self.run_script(PUBLISH, audit, completed_root)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("does not match verification_manifest.json", result.stdout + result.stderr)
@@ -911,7 +1289,7 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
         result = self.run_script(PUBLISH, audit, completed_root)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("finalization_receipt.json", result.stdout + result.stderr)
-        self.assertFalse((completed_root / "Journal-Sanitized/Paper-No-Receipt").exists())
+        self.assertFalse((completed_root / "metadata" / "Journal-Sanitized/Paper-No-Receipt").exists())
 
     def test_publish_rejects_tampered_immutable_round_projection(self) -> None:
         audit = make_audit(self.root, paper="Paper-Round-Tamper")
@@ -922,7 +1300,7 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
         result = self.run_script(PUBLISH, audit, completed_root)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("immutable", (result.stdout + result.stderr).lower())
-        self.assertFalse((completed_root / "Journal-Sanitized/Paper-Round-Tamper").exists())
+        self.assertFalse((completed_root / "metadata" / "Journal-Sanitized/Paper-Round-Tamper").exists())
 
     def test_concurrent_publication_exposes_one_exact_destination(self) -> None:
         audit = make_audit(self.root, paper="Paper-Concurrent")
@@ -932,15 +1310,18 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
                                       stderr=subprocess.PIPE, env=self.environment) for command in commands]
         outcomes = [process.communicate(timeout=30) + (process.returncode,) for process in processes]
         self.assertEqual(sorted(item[2] for item in outcomes).count(0), 1, outcomes)
-        destination = completed_root / "Journal-Sanitized/Paper-Concurrent"
+        destination = completed_root / "metadata" / "Journal-Sanitized/Paper-Concurrent"
         self.assertEqual(len([path for path in destination.iterdir() if path.is_file()]), 6)
+        comments = completed_root / "comments" / "Journal-Sanitized/Paper-Concurrent"
+        self.assertEqual(len([path for path in comments.iterdir() if path.is_file()]), 2)
+        self.assertFalse(list(comments.parent.glob(".Paper-Concurrent.publish.*")))
         self.assertFalse((destination.parent / "Paper-Concurrent.publish.lock").exists())
         self.assertFalse(list(destination.parent.glob(".Paper-Concurrent.publish.*")))
 
     def test_publish_mid_copy_failure_removes_transaction_and_destination(self) -> None:
         audit = make_audit(self.root, paper="Paper-Copy-Failure")
         completed_root = self.root / "completed"
-        destination = completed_root / "Journal-Sanitized/Paper-Copy-Failure"
+        destination = completed_root / "metadata" / "Journal-Sanitized/Paper-Copy-Failure"
 
         fake_bin = self.root / "fake-bin"
         state = self.root / "copy-state"
@@ -964,8 +1345,58 @@ class ReleasePipelineIntegrationTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(state.exists(), "fault injector did not reach the publication copy transaction")
         self.assertFalse(destination.exists(), "failed publication exposed a destination tree")
+        self.assertFalse((completed_root / "comments" / "Journal-Sanitized/Paper-Copy-Failure").exists())
         parent = destination.parent
         self.assertFalse(parent.exists() and list(parent.glob(".Paper-Copy-Failure.publish.*")))
+
+    def test_publish_post_rename_recount_failure_quarantines_destination(self) -> None:
+        audit = make_audit(self.root, paper="Paper-Post-Rename-Failure")
+        completed_root = self.root / "completed"
+        destination = completed_root / "metadata" / "Journal-Sanitized/Paper-Post-Rename-Failure"
+
+        fake_bin = self.root / "fake-post-rename-bin"
+        fake_bin.mkdir(parents=True)
+        real_pdfinfo = shutil.which("pdfinfo")
+        self.assertIsNotNone(real_pdfinfo)
+        wrapper = fake_bin / "pdfinfo"
+        write(
+            wrapper,
+            "#!/bin/sh\n"
+            "if [ \"${1:-}\" = \"$I4R_TEST_PUBLISHED_PDF\" ]; then exit 93; fi\n"
+            "exec \"$I4R_TEST_REAL_PDFINFO\" \"$@\"\n",
+        )
+        wrapper.chmod(0o755)
+        environment = dict(self.environment)
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment.get("PATH", "")
+        comments = completed_root / "comments" / "Journal-Sanitized/Paper-Post-Rename-Failure"
+        environment["I4R_TEST_PUBLISHED_PDF"] = str(comments / "comment.pdf")
+        environment["I4R_TEST_REAL_PDFINFO"] = str(real_pdfinfo)
+
+        result = self.run_script(PUBLISH, audit, completed_root, environment=environment)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("post-rename exact recount", result.stdout + result.stderr)
+        self.assertFalse(destination.exists(), "failed post-rename validation left a visible publication")
+        self.assertFalse(comments.exists(), "failed post-rename validation left a visible comment")
+        for parent in (destination.parent, comments.parent):
+            self.assertFalse(parent.exists() and list(parent.glob(".Paper-Post-Rename-Failure.publish.*")))
+            self.assertFalse(parent.exists() and list(parent.glob(".Paper-Post-Rename-Failure.rollback.*")))
+        self.assertFalse((destination.parent / "Paper-Post-Rename-Failure.publish.lock").exists())
+
+    def test_publish_new_layout_derives_both_folders_from_the_tree(self) -> None:
+        """2.5.0: an audit at <root>/runs/<J>/<P>/audit publishes into <root>/comments and
+        <root>/metadata with no second argument; the root is derived by tree_layout.sh."""
+        audit = make_audit(self.root, paper="Paper-New-Layout", layout="new")
+        result = self.run_script(PUBLISH, audit)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        root = self.root / "Discipline"
+        comments = root / "comments" / "Journal-Sanitized" / "Paper-New-Layout"
+        record = root / "metadata" / "Journal-Sanitized" / "Paper-New-Layout"
+        self.assertEqual({p.name for p in comments.iterdir()}, {"comment.pdf", "comment.docx"})
+        self.assertEqual(len([p for p in record.iterdir() if p.is_file()]), 6)
+        printed = {line.split("published: ", 1)[1] for line in result.stdout.splitlines() if line.startswith("published: ")}
+        self.assertEqual({pathlib.Path(p).resolve() for p in printed}, {comments.resolve(), record.resolve()})
+        self.assertFalse((root / "Completed reports").exists())
+        self.assertFalse((root / "runs" / "comments").exists())
 
 
 if __name__ == "__main__":

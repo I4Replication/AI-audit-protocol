@@ -133,6 +133,11 @@ def snapshot_inventory(root: pathlib.Path) -> list[dict[str, Any]]:
 
 
 def projection_paths(root: pathlib.Path) -> list[str]:
+    if not (root / "work/finding_projections.manifest.json").is_file():
+        raise GateError(
+            "work/finding_projections.manifest.json is missing: no coordinator-approved finding has been projected "
+            "yet (generate_finding_artifacts.py --apply refuses until one is), so there is nothing to gate. Approve "
+            "and project at least one finding first; a round 2+ run before that has no receipt, and finalize refuses it")
     manifest = strict_json(safe_file(root, "work/finding_projections.manifest.json"))
     artifacts = manifest.get("artifacts") if isinstance(manifest, dict) else None
     if not isinstance(artifacts, list) or not artifacts:
@@ -165,6 +170,19 @@ def diff_inputs(root: pathlib.Path, round_number: int) -> tuple[str, dict[str, A
     return relative, value
 
 
+def symlink_escapes(path: pathlib.Path, base: pathlib.Path) -> bool:
+    """True when a symlink resolves outside base. A dangling link escapes nothing."""
+    try:
+        target = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    try:
+        target.relative_to(base)
+    except ValueError:
+        return True
+    return False
+
+
 def verify_archive(root: pathlib.Path) -> str:
     manifest_path = safe_file(root, "package_manifest.json")
     manifest = strict_json(manifest_path)
@@ -176,9 +194,19 @@ def verify_archive(root: pathlib.Path) -> str:
     package = root / "pkg"
     if package.is_symlink() or not package.is_dir():
         raise GateError("pkg must be a real audit-local directory")
+    package_root = package.resolve()
     for directory in [package] + sorted(path for path in package.rglob("*") if path.is_dir()):
         if directory.is_symlink():
-            raise GateError(f"archive package contains a symlink: {directory.relative_to(package)}")
+            # Same three-way rule phase1_runtime.source_files applies when it builds the manifest
+            # this gate is checking against. Rejecting every symlink here meant a deposit phase 1
+            # had already accepted failed the archive gate instead -- after the whole run's
+            # provider spend, rather than at preflight.
+            if symlink_escapes(directory, package_root):
+                raise GateError(
+                    f"archive package contains a symlink escaping pkg: "
+                    f"{directory.relative_to(package)}"
+                )
+            continue
         if stat.S_IMODE(directory.stat().st_mode) & 0o222:
             label = directory.relative_to(package).as_posix() or "."
             raise GateError(f"archive package directory is not read-only: pkg/{label}")
@@ -186,7 +214,15 @@ def verify_archive(root: pathlib.Path) -> str:
     types: Counter[str] = Counter()
     for path in sorted(package.rglob("*")):
         if path.is_symlink():
-            raise GateError(f"archive package contains a symlink: {path.relative_to(package)}")
+            if symlink_escapes(path, package_root):
+                raise GateError(
+                    f"archive package contains a symlink escaping pkg: "
+                    f"{path.relative_to(package)}"
+                )
+            try:
+                path.resolve(strict=True)
+            except (OSError, RuntimeError):
+                continue  # dangling: no bytes to hash, and the manifest skipped it too
         if path.is_dir():
             continue
         if not path.is_file():
@@ -233,9 +269,14 @@ def consistency_gate(snapshot: pathlib.Path) -> tuple[int, str]:
     return run_command(command)
 
 
-def privacy_gate(snapshot: pathlib.Path, scanned: list[str]) -> tuple[int, str]:
+def privacy_gate(snapshot: pathlib.Path, scanned: list[str],
+                 root: pathlib.Path | None = None) -> tuple[int, str]:
     sys.path.insert(0, str(HERE))
     import check_release_privacy
+    # The same allowlist stage_release.sh and publish use: the byline and the published article.
+    for base in {snapshot, root or snapshot}:
+        check_release_privacy.allow_emails_from(base / "report" / "front_matter.md")
+        check_release_privacy.allow_emails_from(base / "paper" / "paper.txt")
     issues = []
     try:
         for relative in scanned:
@@ -270,8 +311,13 @@ def checklist_snapshot_gate(snapshot: pathlib.Path) -> tuple[int, str]:
                  and row.get("coordinator_approved") is True
                  and (row.get("ledger_disposition") or {}).get("status") == "INCLUDED"]
         final.sort(key=generator.number)
-        if [generator.number(row) for row in final] != list(range(1, len(final) + 1)):
-            raise GateError("snapshot final finding IDs are not contiguous")
+        # the projection's own rule: contiguity is on the INCLUDED rows once all carry final ids (a deferred
+        # approval is not a gap), on the approved rows otherwise
+        try:
+            generator.ensure_final_invariants(rows, snapshot, quiet=True)   # a replay of an earlier state
+        except SystemExit as exc:
+            if "contiguous" in str(exc):
+                raise GateError(f"snapshot final finding IDs are not contiguous: {exc}") from exc
         rendered = generator.render(rows, final)
         expected = {
             "report/LEDGER.md": rendered["ledger"],
@@ -351,7 +397,12 @@ def compare_bindings(root: pathlib.Path, bindings: dict[str, Any]) -> None:
             raise GateError(f"malformed live binding: {label}")
         path = safe_file(root, item.get("path"))
         if sha256_file(path) != item.get("sha256") or path.stat().st_size != item.get("bytes"):
-            raise GateError(f"post-delta live binding is stale: {label}")
+            raise GateError(
+                f"post-delta live binding is stale: {label} changed after the gates ran. In INSTALL.md order: "
+                "approve and project (twice if the report changed), make_settled.sh and re-log the settled event, "
+                "then make_diff_packet.py --round N, then run_post_delta_gates.py --round N"
+                + ("; a release is already staged, so then stage again into a fresh directory (stage_release.sh) and "
+                   "re-log delivery (`bash scripts/log_event.sh delivery artifact_path=report/<output-name>.pdf recipient=...`) and then phase_end phase=release" if (root / "work/RELEASE_STAGED.json").is_file() else ""))
 
 
 def gate_result(name: str, result: tuple[int, str], log_path: pathlib.Path,
@@ -393,7 +444,25 @@ def make_receipt(root: pathlib.Path, round_number: int, report: pathlib.Path) ->
 
     round_dir = root / f"critique/round_{round_number}"
     if round_dir.is_symlink() or not round_dir.is_dir():
-        raise GateError(f"critique/round_{round_number} is missing or unsafe")
+        raise GateError(
+            f"critique/round_{round_number} is missing or unsafe. The gates run after the round is prepared: "
+            f"make_diff_packet.py --round {round_number}, then I4R_AUTO_AUTHORIZE=0 bash scripts/run_critique.sh "
+            f"{round_number} (exits 3, prepared), then these gates, then the round itself")
+    # A refused prepare (e.g. a routing error) leaves the folder, CURRENT_INVOCATION and a failed status, but no
+    # authorization template. Legacy rounds without a template count only with a status that did not fail.
+    def prepared() -> bool:
+        if (round_dir / "ROUND_AUTHORIZATION_TEMPLATE.json").is_file():
+            return True
+        try:
+            return json.loads((round_dir / "ROUND_STATUS.json").read_text(encoding="utf-8")).get("outcome") \
+                not in (None, "failed")
+        except (OSError, ValueError, AttributeError):
+            return False
+    if not prepared():
+        raise GateError(
+            f"critique/round_{round_number} exists but was never prepared (no ROUND_AUTHORIZATION_TEMPLATE.json): "
+            f"the prepare call failed. Fix its error, re-run I4R_AUTO_AUTHORIZE=0 bash scripts/run_critique.sh "
+            f"{round_number} until it exits 3 (prepared), then run these gates")
     parent = round_dir / "post_delta"
     parent.mkdir(parents=True, exist_ok=True)
     temporary = pathlib.Path(tempfile.mkdtemp(prefix=".gate-snapshot.", dir=parent))
@@ -402,7 +471,7 @@ def make_receipt(root: pathlib.Path, round_number: int, report: pathlib.Path) ->
         copy_snapshot(root, payload, sorted(snapshot_paths))
         functions: dict[str, Callable[[], tuple[int, str]]] = {
             "consistency": lambda: consistency_gate(payload),
-            "privacy": lambda: privacy_gate(payload, scanned),
+            "privacy": lambda: privacy_gate(payload, scanned, root),
             "checklist": lambda: checklist_gate(root),
             "archive": lambda: archive_gate(root),
         }
@@ -442,10 +511,20 @@ def make_receipt(root: pathlib.Path, round_number: int, report: pathlib.Path) ->
                 raise GateError("content-address collision in post-delta snapshot")
             shutil.rmtree(temporary)
         else:
-            os.replace(temporary, final_snapshot)
-            for path in sorted(final_snapshot.rglob("*"), key=lambda value: -len(value.parts)):
+            # Publish through the destination's own parent so the tree is never observable
+            # unfrozen: the chmod loop is bottom-up and sets the root last, so an abort between
+            # os.replace and the loop used to publish a writable "immutable" snapshot that
+            # nothing here re-checks. Renaming within one directory leaves `..` unchanged, which
+            # is what lets a fully frozen tree be moved at all.
+            final_snapshot.parent.mkdir(parents=True, exist_ok=True)
+            staged = final_snapshot.with_name(f".{final_snapshot.name}.{os.getpid()}.tmp")
+            if staged.exists():
+                shutil.rmtree(staged, ignore_errors=True)
+            os.replace(temporary, staged)
+            for path in sorted(staged.rglob("*"), key=lambda value: -len(value.parts)):
                 os.chmod(path, 0o555 if path.is_dir() else 0o444)
-            os.chmod(final_snapshot, 0o555)
+            os.chmod(staged, 0o555)
+            os.replace(staged, final_snapshot)
         snapshot_relative = final_snapshot.relative_to(root).as_posix()
         gates = []
         for name in REQUIRED_GATES:
@@ -474,9 +553,29 @@ def make_receipt(root: pathlib.Path, round_number: int, report: pathlib.Path) ->
             "gates": gates,
         }
         schema_check(receipt)
-        if any(item["status"] != "passed" for item in gates):
-            atomic_json(round_dir / "POST_DELTA_GATES.partial.json", receipt)
-            raise GateError("one or more post-delta gates failed; partial receipt is not accepted")
+        failed = [item for item in gates if item["status"] != "passed"]
+        if failed:
+            partial_path = round_dir / "POST_DELTA_GATES.partial.json"
+            atomic_json(partial_path, receipt)
+            lines = []
+            for item in failed:
+                log = final_snapshot / item["log"]["path"]
+                try:
+                    # the first real line: informational "note:" lines precede the failure in some logs
+                    text = log.read_text(encoding="utf-8", errors="replace").splitlines()
+                    # the failing check, when the log names one; else the first real line
+                    first = next((l for l in text if re.match(r"\s*(FAIL|FATAL|ERROR)\b", l)), "") or next(
+                        (l for l in text if l.strip() and not l.lstrip().startswith("note:")), "")
+                except OSError:
+                    first = ""
+                lines.append(f"  {item['name']} (exit {item['exit_status']}): {first[:200]}\n"
+                             f"    log: {log}")
+            raise GateError(
+                f"{len(failed)} post-delta gate(s) failed; the partial receipt is not accepted.\n"
+                + "\n".join(lines)
+                + f"\n  partial receipt: {partial_path}\n"
+                f"  snapshot: {final_snapshot}\n"
+                "  Fix the cause, then re-run this command; a passing run writes POST_DELTA_GATES.json.")
         accepted = round_dir / "POST_DELTA_GATES.json"
         atomic_json(accepted, receipt)
         partial = round_dir / "POST_DELTA_GATES.partial.json"
@@ -515,7 +614,7 @@ def rerun_current(root: pathlib.Path, receipt: dict[str, Any]) -> None:
         raise GateError("privacy scan quorum changed after the post-delta receipt")
     checks = {
         "consistency": consistency_gate(root),
-        "privacy": privacy_gate(root, scanned),
+        "privacy": privacy_gate(root, scanned, root),
         "checklist": checklist_gate(root),
         "archive": archive_gate(root),
     }
@@ -563,8 +662,14 @@ def verify_receipt(root: pathlib.Path, receipt_path: pathlib.Path,
         if item.get("log", {}).get("path") != f"logs/{item['name']}.log":
             raise GateError(f"post-delta gate has a noncanonical log path: {item['name']}")
         verify_log(expected_snapshot, item)
-    if receipt.get("gate_code") != code_bindings():
-        raise GateError("post-delta receipt was produced by stale gate code")
+    # The latest round must be gated by the code that releases it. An earlier round's receipt keeps
+    # the code it was produced with -- its snapshot is replayed below under the CURRENT gates -- so a
+    # skill upgrade mid-audit does not strand a 3+ round audit whose round-2 packet cannot be rebuilt.
+    if require_current and receipt.get("gate_code") != code_bindings():
+        raise GateError(
+            "post-delta receipt was produced by stale gate code (the skill was updated); regenerate it: "
+            f"python3 scripts/run_post_delta_gates.py \"$AUDIT_DIR\" --round {receipt.get('round')} "
+            "--report \"$AUDIT_DIR/report/REPORT_final.md\"")
     fingerprint_payload = {
         "round": receipt["round"],
         "bindings": receipt["live_bindings"],
@@ -587,7 +692,7 @@ def verify_receipt(root: pathlib.Path, receipt_path: pathlib.Path,
         raise GateError("post-delta privacy scan omitted or added release-bound artifacts")
     replay = {
         "consistency": consistency_gate(payload),
-        "privacy": privacy_gate(payload, expected_scanned),
+        "privacy": privacy_gate(payload, expected_scanned, root),
         "checklist": checklist_snapshot_gate(payload),
         "archive": archive_gate(root),
     }
@@ -603,6 +708,30 @@ def verify_receipt(root: pathlib.Path, receipt_path: pathlib.Path,
     if require_current:
         rerun_current(root, receipt)
     return receipt
+
+
+def journal_gate_result(root: pathlib.Path, round_number: int, receipt: pathlib.Path) -> None:
+    """Project the passing gate into run.json. Finalization derives `post_delta_gates_passed` from a
+    journaled `gate=post_delta` event with exit_status 0; one audit reached
+    finalization with a valid receipt and no such event, so the gate journals itself."""
+    run_json = root / "run.json"
+    if not run_json.is_file():
+        return
+    try:
+        relative = receipt.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        relative = receipt.name
+    completed = strict_json(receipt).get("completed_at")
+    command = ["bash", str(HERE / "log_event.sh"), "--run", str(run_json), "gate", "gate=post_delta",
+               f"round={round_number}", "exit_status=0", f"log_path={relative}"]
+    if isinstance(completed, str) and completed:
+        command.append(f"at={completed}")
+    result = subprocess.run(command, text=True, capture_output=True)
+    if result.returncode != 0:
+        print(f"warning: post-delta gate result was not journaled: {(result.stderr or result.stdout).strip()[:300]}",
+              file=sys.stderr)
+    else:
+        print(f"journaled gate=post_delta round={round_number} exit_status=0")
 
 
 def main() -> int:
@@ -623,6 +752,7 @@ def main() -> int:
             report = (args.report or root / "report/REPORT_final.md").resolve()
             receipt = make_receipt(root, args.round, report)
             print(f"post-delta gates passed; wrote {receipt}")
+            journal_gate_result(root, args.round, receipt)
     except (GateError, OSError, json.JSONDecodeError) as exc:
         print(f"FATAL: {exc}", file=sys.stderr)
         return 1

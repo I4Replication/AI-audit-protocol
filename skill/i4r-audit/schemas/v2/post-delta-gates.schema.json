@@ -11,7 +11,7 @@
   "properties": {
     "receipt_version": {"const": "i4r-post-delta-gates-1"},
     "audit_id": {"type": "string", "minLength": 3},
-    "round": {"type": "integer", "minimum": 2, "maximum": 5},
+    "round": {"type": "integer", "minimum": 2},
     "required_gates": {
       "const": ["consistency", "privacy", "checklist", "archive"]
     },
@@ -20,7 +20,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["path", "fingerprint", "files"],
       "properties": {
-        "path": {"type": "string", "pattern": "^critique/round_[2-5]/post_delta/[0-9a-f]{64}$"},
+        "path": {"type": "string", "pattern": "^critique/round_([2-9]|[1-9][0-9]+)/post_delta/[0-9a-f]{64}$"},
         "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "files": {"type": "array", "minItems": 5, "items": {"$ref": "#/$defs/file"}}
       }

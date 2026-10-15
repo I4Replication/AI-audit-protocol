@@ -1,0 +1,57 @@
+# Shared output contract. Rendered into BOTH the critic prompts and the targeted-adjudicator
+# prompt. {{INVENTORY}} is substituted with the evidence-inventory path for THAT role's
+# snapshot layout: critics get source/context/EVIDENCE_HASHES.json, the targeted adjudicator
+# gets source/EVIDENCE_HASHES.json. Round 2 of audit A38 died because this
+# block existed only in common.txt, which is never rendered into the adjudicator prompt --
+# so the adjudicator was graded by the full critic validator while being shown none of it.
+Return exactly one v2 JSON object as your final response: no Markdown fence, preamble, or file writes.
+You run read-only. The launcher captures JSON to a private partial path, validates it, renders the
+paired Markdown deterministically, and atomically publishes both only after all checks pass. Set `status`
+to `complete` and `completion_marker` to true ONLY when every assigned check is genuinely accounted
+for and every assessment genuinely evidenced; otherwise set `status` to `partial` or `failed`,
+declare the truth in `completeness_declaration`, and list what is unresolved in
+`unresolved_omissions`. A truthful partial is retained as a failed attempt and re-sampled -- that
+is a normal, expected outcome. It is never worth asserting a completeness you cannot stand behind
+to make a submission go through.
+
+The JSON sidecar must conform to schemas/v2/critic-result.schema.json. Required top-level fields:
+schema_version=`2.0.0`, audit_id, invocation_id, round, role, report_sha256, input_hashes, status,
+completion_marker, completeness_declaration, coverage, covered_claim_ids, conflicts,
+settled_spot_checks, items, new_issues, and overall. Echo the machine-bound identity and five input
+hashes exactly as constrained by the supplied schema. Coverage records assigned_checks and
+completed_checks; skipped_checks must be empty because a skip does not count as review. Return
+exactly one claim-level `items` assessment for every assigned covered_claim_id, with that exact
+finding_id; never claim coverage through an empty items array. Each item/new issue records item_id,
+finding_id (always `null` for a new issue, even one that concerns an existing row: name the related row inside `claim` instead), claim, verdict, priority, confidence, evidence
+{artifact_refs,operation,result,reproducible_script}, where each artifact reference and non-null
+script is an immutable `{path,sha256}` binding copied exactly from the frozen evidence inventory.
+Uninventoried or live-workspace paths are invalid, and the inventory file `{{INVENTORY}}` is a lookup table, not evidence: never list it in `artifact_refs`; cite only the paths it enumerates. Also record unverifiable_basis (object only for
+UNVERIFIABLE), and requested_correction. Overall records publishable, blocking_count, and summary:
+`overall.blocking_count` is the exact count of entries across BOTH `items` and `new_issues` whose
+`priority` is `BLOCKING`, and `overall.publishable` is `true` if and only if that count is zero --
+both are derived from your own entries, not judgements; `overall.summary` is at least one full
+sentence of 20 characters or more. Every array is a set: no duplicate artifact reference inside one
+`artifact_refs`, no repeated `fact_id` in `settled_spot_checks`, no repeated id in `covered_claim_ids`,
+`coverage`, or `conflicts[].claim_ids`, and no repeated item_id across `items` and `new_issues`.
+
+Four contract details reject an otherwise sound review, so satisfy them exactly:
+
+- Every sha256 is 64 characters and is compared byte-for-byte against the frozen inventory in
+  `{{INVENTORY}}`. Read each digest from that file and copy it verbatim into
+  the binding. Never retype one, never complete one from memory, and never reuse a digest from a
+  different path. One wrong character fails your whole role.
+- `requested_correction` is required on every item. When the verdict is REFUTED or OVERSTATED it
+  must be a non-empty string naming the exact change the draft needs; `null` is rejected and is the
+  single most common reason a review is thrown away. When the verdict is CONFIRMED or UNVERIFIABLE,
+  set it to `null` unless you are actually asking for a change.
+- Every `new_issues[].finding_id` is `null`. Always, with no exception: a new issue that concerns
+  an existing row still uses `null` and names that row inside its `claim` text instead. Putting a
+  real finding id there fails the whole role, and it is the second most common reason a review is
+  thrown away.
+- Every id in `conflicts[].claim_ids` must appear in your own `covered_claim_ids`. A conflict is a
+  disagreement you found inside your assigned slice; you may not raise one about a claim that was
+  not assigned to you. If the conflict genuinely spans a claim outside your slice, raise it as a
+  new issue instead and name the other claim in the `claim` text.
+
+Keep item evidence compact but sufficient for deterministic Markdown rendering: disputed/blocking
+items need the exact result and required change; confirmed items need only their reproducible basis.

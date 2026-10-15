@@ -54,18 +54,26 @@ found it and which adjudication entry settled it, the expected value, and the co
 The ordering inside the code is the part that matters:
 
 ```
----- C-2.5 : expected -------------------------------------------------
-[C-2.5      n_analytic            ] EXPECTED  677
-[C-2.5      n_girls               ] EXPECTED  328
+---- C-5 : expected -------------------------------------------------
+[C-5      n_analytic            ] EXPECTED  677
+[C-5      n_girls               ] EXPECTED  328
                         ... the computation runs here ...
-[C-2.5      n_analytic            ] OBSERVED  677
-[C-2.5      n_analytic            ] VERDICT   PASS   (|diff| 0, tol 0)
+[C-5      n_analytic            ] OBSERVED  677
+[C-5      n_analytic            ] VERDICT   PASS   (|diff| 0, tol 0)
 ```
 
 `expect()` runs and prints **before** the chunk computes anything. That is deliberate and it is the
 whole design: you are comparing a prediction against a result, never reading back whatever the code
 happened to produce. If you find a section where the expected value is derived from the observed one,
 that is a defect in the notebook — report it.
+
+A snippet declares and checks named values; every value needs a name, and `tol`/`note` are optional:
+
+```r
+expect("C-5", n_analytic = 677, n_girls = 328, tol = 0, note = "exact counts")
+d <- read_deposit("analysis.csv")
+check("C-5", n_analytic = nrow(d), n_girls = sum(d$girl == 1))
+```
 
 An expectation that is declared and then never checked is a **FAIL**, not a silence. So is an
 observation reported under a key that was never declared. Neither can be produced by forgetting.
@@ -100,9 +108,10 @@ the reason string distinguishes them:
   state the configuration that produced it (a seed, a sample definition, a control parameter). These
   are the ones to take seriously: they are a defect in the comment, and the notebook prints what the
   documented pipeline does produce so you can see the size of the gap.
-- *deliberately not attempted* — chiefly in the privacy sections, where confirming a claim would mean
-  republishing the identifiers the comment asks the authors to remove. Those checks are written as
-  counts and presence tests that never print a value.
+- *deliberately not attempted* — value-level confirmation only. Privacy claims are still verified:
+  their checks count rows or non-missing cells, or test that a column is present, and print only
+  the counts and PASS or FAIL, never a value. What is not attempted is confirming the values
+  themselves, which would mean republishing the identifiers the comment asks the authors to remove.
 
 ---
 
@@ -148,7 +157,8 @@ bash scripts/make_verification_notebook.sh <audit-dir> \
 ```
 
 The generator reads `report/REPORT_final.md` and `report/ADJUDICATION.md`, extracts one claim per
-bolded numbered lead plus one per abstract sentence carrying a numeral, matches each to the
+generated `[claim N]` tag (a v2 audit keeps exactly the finding ids in `work/verification_plan.json`),
+matches each to the
 adjudication entry that settled it and to the auditor who found it, and writes the frame.
 
 It cannot write the check body for every claim. Where it has no snippet it emits a **TODO stub** that
@@ -162,15 +172,24 @@ file by hand.
 
 Snippets live in `<snippets-dir>` (default `<audit-dir>/verification_snippets`), keyed by claim id:
 
+Claim ids are flat, `C-<n>`, matching the comment's `[claim n]` tags and finding `F<n>`;
+`run_verification.sh` binds only that form, so a dotted id such as `C-2.5` is refused.
+
 | File | Effect |
 |---|---|
 | `_prelude.R` | appended to the setup chunk — shared frame construction, helpers, transcribed figures |
-| `C-2.5.R` | inlined into that claim's chunk |
-| `C-7.8.judgement` | first line the assessment, the rest its basis |
-| `C-2.12.unverifiable` | first line the reason, the rest context |
+| `C-5.R` | inlined into that claim's chunk |
+| `C-8.judgement` | first line the assessment, the rest its basis |
+| `C-12.unverifiable` | first line the reason, the rest context |
 
-Abstract claims are emitted **last**, whatever their position in the comment, because they are
-cross-references: `observed_of("C-2.5", "gap_vs_paper")` reaches back into the body section's
-recorded observation and asks whether the public summary carries the number the body actually
-produced. In two calibration audits a correction reached the body and not the abstract; that is the
-failure these sections exist to catch.
+For numbered findings, `generate_finding_artifacts.py --apply` writes `C-<n>.R` (or `.judgement` /
+`.unverifiable`) from each approved row's `verification_snippet`, overwriting the file on every run.
+Edit the file the row's `verification_snippet.path` points to, never `verification_snippets/C-<n>.R`.
+That source file must itself call both `expect()` and `check()`, each with the claim's own id: the
+notebook records an outcome only through them, the projection refuses a code snippet missing either
+call, and a helper in `_prelude.R` that wraps them does not count (put the calls in the snippet and
+let the helper compute). A chunk that records an outcome under another claim's id fails.
+
+The notebook needs `work/verification_plan.json` (written by the projection) and binds exactly one
+section per finding; the older abstract cross-check sections (`C-ABS.<n>`) are no longer generated,
+so keep the abstract consistent with the body through `check_consistency.sh`.

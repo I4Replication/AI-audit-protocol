@@ -1,0 +1,115 @@
+{
+  "benign_explanations_ruled_out": [
+    "Synthetic fixture: not a typesetting error; the coefficient reproduces from the deposited script.",
+    "Synthetic fixture: not a later version of the script; the deposit holds one analysis script.",
+    "Synthetic fixture: not rounding; the difference is in what the coefficient estimates, not its digits."
+  ],
+  "changes_conclusion": true,
+  "changes_conclusion_which": "Synthetic fixture: the headline comparison stated in the abstract, which reads differently once the contrast actually estimated is taken into account.",
+  "claim": "Synthetic fixture: the article describes the main comparison with neutral wording, but the deposited analysis script estimates it under a different contrast scheme, so the printed coefficient answers a different question from the one the text poses.",
+  "claim_ref": null,
+  "confidence": "CONFIRMED",
+  "coordinator_approved": false,
+  "dependencies": {
+    "artifact_paths": [],
+    "environment_fingerprint": "fingerprint_sha256=f8f84fd1f732aa35998b7dce4df3aece355a7d8272a6c638aad1624eb45668da; platform_machine=arm64; platform_system=Darwin; python_implementation=CPython; python_version=3.12.12",
+    "finding_ids": [
+      "REP-F3_synthetic_reporting_check",
+      "TXT-F1_synthetic_text_check"
+    ]
+  },
+  "disclosure_flag": true,
+  "domain": "code_methods",
+  "evidence": {
+    "expected": "as reported in the paper",
+    "observed": "Synthetic fixture: the script sets a contrast scheme different from the one the Methods describe; the printed estimates reproduce under the script's scheme.",
+    "rerun_command": "see the auditor_reproduction, auditor_text_vs_data, and auditor_code_methods evidence manifests bound in phase1/quorum.json",
+    "source_hashes": [
+      {
+        "path": "paper/paper.txt",
+        "sha256": "d495f8eb9b62a99bec0a06234972c348949205e51a65b0674e209487c7e385ae"
+      },
+      {
+        "path": "pkg/analysis/analysis.rmd",
+        "sha256": "ee2c2d527eeb020431b25d2656ed609371b9512bac174688fe4af6e8f608f142"
+      },
+      {
+        "path": "pkg/data/study.csv",
+        "sha256": "e2cf416317f3e1d858b0d61cf39a0bd082fa32b1de71662d97e91dd84066c3d4"
+      }
+    ],
+    "tolerance_basis": null
+  },
+  "id": "COD-F2_synthetic_contrast_check",
+  "impact": "conclusion_narrowed",
+  "impact_rank": 3,
+  "ledger_disposition": {
+    "reason": null,
+    "status": "INCLUDED",
+    "target": null
+  },
+  "paper_only": false,
+  "provenance": {
+    "agreed_after_seeing": [],
+    "independently_found_by": [
+      "auditor_reproduction",
+      "auditor_text_vs_data",
+      "auditor_code_methods"
+    ],
+    "origin_role": "auditor_code_methods",
+    "round_introduced": 0,
+    "source_records": [
+      "phase1/quorum.json#inv-f4d9eaa8c1313b6f2d397888544f4c50",
+      "phase1/quorum.json#inv-b3db8f1be25a8eba917d20a8d5dd798b",
+      "phase1/quorum.json#inv-8a7de2b93e213284e54da57d732b625c"
+    ]
+  },
+  "remedy": {
+    "class": "reanalysis",
+    "description": "Synthetic fixture: state the contrast scheme the script uses, and report the estimate under the scheme the Methods describe.",
+    "verified": null
+  },
+  "report_section": "Section 3",
+  "schema_version": "2.0.0",
+  "settled": null,
+  "source_location": {
+    "locator": "Synthetic fixture: Methods, analysis paragraph; Results, main model.",
+    "path": "paper/paper.txt"
+  },
+  "status": "draft",
+  "unverifiable_basis": null,
+  "verification_snippet": null,
+  "verification_tier": 2,
+  "verifications": [
+    {
+      "reviewer_id": "auditor_reproduction",
+      "invocation_id": "inv-b3db8f1be25a8eba917d20a8d5dd798b",
+      "evidence_record": {
+        "path": "report/01_reproduction.md",
+        "sha256": "a2bea8e822cddb1128702dc9142b6a90cfbabda47f4b2db0d1f2bbe2e31d81df"
+      },
+      "model_family": "claude-sonnet-5",
+      "outcome": "confirmed"
+    },
+    {
+      "reviewer_id": "auditor_text_vs_data",
+      "invocation_id": "inv-8a7de2b93e213284e54da57d732b625c",
+      "evidence_record": {
+        "path": "report/03_text_vs_data.md",
+        "sha256": "3513aa2c6b222493a197b744c3d4094fcddf0474889e80a85c575d486a640c81"
+      },
+      "model_family": "claude-sonnet-5",
+      "outcome": "confirmed"
+    },
+    {
+      "reviewer_id": "auditor_code_methods",
+      "invocation_id": "inv-f4d9eaa8c1313b6f2d397888544f4c50",
+      "evidence_record": {
+        "path": "report/04_code_methods.md",
+        "sha256": "67486846bc6eb1e9cbd0ea5b151a596bd42f4ad7db3d394e05d68a5cba43c38f"
+      },
+      "model_family": "claude-sonnet-5",
+      "outcome": "confirmed"
+    }
+  ]
+}

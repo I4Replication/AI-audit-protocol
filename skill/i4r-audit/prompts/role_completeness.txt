@@ -5,8 +5,10 @@ components and map it to the checklist and existing auditor reports. Target unto
 areas: secondary entry points, supplements, ancillary measures, alternate toolchains, figures/tables,
 mechanical run paths, treatment fidelity, data integrity signatures, and privacy/archive hygiene.
 
-Run bounded checks on the highest-risk gaps. A missing check is not itself a paper defect: put it in
-coverage.skipped_checks unless you verify a substantive missed issue. Do not redo participant/value
+Run bounded checks on the highest-risk gaps. A missing check is not itself a paper defect: raise it
+as a new issue (with `finding_id` null) unless you verify a substantive missed issue.
+`coverage.skipped_checks` must stay empty -- the schema caps it at zero and the validator rejects a
+non-empty one, because a skip does not count as review. Do not redo participant/value
 checks assigned to data or estimator/inference checks assigned to statistics merely to claim broad
 coverage. If their evidence already answers a checklist item, record it as covered.
 
