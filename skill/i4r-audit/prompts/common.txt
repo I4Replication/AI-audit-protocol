@@ -35,26 +35,3 @@ Round guidance:
 
 Budget: cover the assigned checks first, then deepen at most the two or three most consequential
 uncertainties. Do not repeat checks owned by another role unless your verdict depends on their input.
-
-Return exactly one v2 JSON object as your final response: no Markdown fence, preamble, or file writes.
-You run read-only. The launcher captures JSON to a private partial path, validates it, renders the
-paired Markdown deterministically, and atomically publishes both only after all checks pass. Set
-`status` to `complete` and `completion_marker` to true only when every assigned check is accounted
-for; otherwise return a truthful partial/failed result that the launcher will retain as a failure.
-
-The JSON sidecar must conform to schemas/v2/critic-result.schema.json. Required top-level fields:
-schema_version=`2.0.0`, audit_id, invocation_id, round, role, report_sha256, input_hashes, status,
-completion_marker, completeness_declaration, coverage, covered_claim_ids, conflicts,
-settled_spot_checks, items, new_issues, and overall. Echo the machine-bound identity and five input
-hashes exactly as constrained by the supplied schema. Coverage records assigned_checks and
-completed_checks; skipped_checks must be empty because a skip does not count as review. Return
-exactly one claim-level `items` assessment for every assigned covered_claim_id, with that exact
-finding_id; never claim coverage through an empty items array. Each item/new issue records item_id,
-finding_id (null for a new issue), claim, verdict, priority, confidence, evidence
-{artifact_refs,operation,result,reproducible_script}, where each artifact reference and non-null
-script is an immutable `{path,sha256}` binding copied exactly from the frozen evidence inventory.
-Uninventoried or live-workspace paths are invalid. Also record unverifiable_basis (object only for
-UNVERIFIABLE), and requested_correction. Overall records publishable, blocking_count, and summary.
-
-Keep item evidence compact but sufficient for deterministic Markdown rendering: disputed/blocking
-items need the exact result and required change; confirmed items need only their reproducible basis.

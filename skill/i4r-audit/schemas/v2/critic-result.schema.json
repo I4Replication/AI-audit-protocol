@@ -5,45 +5,152 @@
   "description": "Atomic, machine-checkable output from one independent critic. A complete result is published only after every included assessment has evidence or an explicit unverifiable basis.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "audit_id", "invocation_id", "round", "role", "report_sha256", "input_hashes", "status", "completion_marker", "completeness_declaration", "coverage", "covered_claim_ids", "conflicts", "settled_spot_checks", "items", "new_issues", "overall"],
+  "required": [
+    "schema_version",
+    "audit_id",
+    "invocation_id",
+    "round",
+    "role",
+    "report_sha256",
+    "input_hashes",
+    "status",
+    "completion_marker",
+    "completeness_declaration",
+    "coverage",
+    "covered_claim_ids",
+    "conflicts",
+    "settled_spot_checks",
+    "items",
+    "new_issues",
+    "overall"
+  ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
-    "audit_id": {"type": "string", "minLength": 3},
-    "invocation_id": {"type": "string", "minLength": 8, "maxLength": 240, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
-    "round": {"type": "integer", "minimum": 1},
-    "role": {"type": "string", "enum": ["critic_stats", "critic_data", "critic_fairness", "critic_completeness", "critic_synth"]},
-    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema_version": {
+      "const": "2.0.0"
+    },
+    "audit_id": {
+      "type": "string",
+      "minLength": 3
+    },
+    "invocation_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 240,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "critic_stats",
+        "critic_data",
+        "critic_fairness",
+        "critic_completeness",
+        "critic_synth"
+      ]
+    },
+    "report_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "input_hashes": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["snapshot_sha256", "report_sha256", "prompt_sha256", "policy_sha256", "evidence_manifest_sha256"],
+      "required": [
+        "snapshot_sha256",
+        "report_sha256",
+        "prompt_sha256",
+        "policy_sha256",
+        "evidence_manifest_sha256"
+      ],
       "properties": {
-        "snapshot_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "evidence_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "report_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "prompt_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "policy_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evidence_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
-    "status": {"type": "string", "enum": ["partial", "complete", "failed"]},
-    "completion_marker": {"type": "boolean"},
+    "status": {
+      "type": "string",
+      "enum": [
+        "partial",
+        "complete",
+        "failed"
+      ]
+    },
+    "completion_marker": {
+      "type": "boolean"
+    },
     "completeness_declaration": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["all_assigned_checks_accounted_for", "all_assessments_evidenced", "unresolved_omissions"],
+      "required": [
+        "all_assigned_checks_accounted_for",
+        "all_assessments_evidenced",
+        "unresolved_omissions"
+      ],
       "properties": {
-        "all_assigned_checks_accounted_for": {"type": "boolean"},
-        "all_assessments_evidenced": {"type": "boolean"},
-        "unresolved_omissions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        "all_assigned_checks_accounted_for": {
+          "type": "boolean"
+        },
+        "all_assessments_evidenced": {
+          "type": "boolean"
+        },
+        "unresolved_omissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     },
     "coverage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["assigned_checks", "completed_checks", "skipped_checks"],
+      "required": [
+        "assigned_checks",
+        "completed_checks",
+        "skipped_checks"
+      ],
       "properties": {
-        "assigned_checks": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "completed_checks": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "assigned_checks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "completed_checks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "skipped_checks": {
           "type": "array",
           "maxItems": 0,
@@ -51,24 +158,62 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["check", "reason"],
-            "properties": {"check": {"type": "string", "minLength": 1}, "reason": {"type": "string", "minLength": 1}}
+            "required": [
+              "check",
+              "reason"
+            ],
+            "properties": {
+              "check": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           }
         }
       }
     },
-    "covered_claim_ids": {"description": "Machine-assigned claim IDs. A complete result has exactly one items assessment with the same finding_id for every entry.", "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "covered_claim_ids": {
+      "description": "Machine-assigned claim IDs. A complete result has exactly one items assessment with the same finding_id for every entry.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "conflicts": {
       "type": "array",
       "uniqueItems": true,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["conflict_id", "claim_ids", "description"],
+        "required": [
+          "conflict_id",
+          "claim_ids",
+          "description"
+        ],
         "properties": {
-          "conflict_id": {"type": "string", "minLength": 1},
-          "claim_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-          "description": {"type": "string", "minLength": 1}
+          "conflict_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
@@ -78,32 +223,114 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["fact_id", "status", "evidence"],
+        "required": [
+          "fact_id",
+          "status",
+          "evidence"
+        ],
         "properties": {
-          "fact_id": {"type": "string", "minLength": 1},
-          "status": {"type": "string", "enum": ["passed", "failed"]},
-          "evidence": {"type": "string", "minLength": 1}
+          "fact_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
-    "items": {"description": "Claim-level outcomes; semantic validation enforces an exact one-to-one join to covered_claim_ids.", "type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/assessment"}},
-    "new_issues": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/assessment"}},
+    "items": {
+      "description": "Claim-level outcomes; semantic validation enforces an exact one-to-one join to covered_claim_ids.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/assessment"
+      }
+    },
+    "new_issues": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/new_issue"
+      }
+    },
     "overall": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["publishable", "blocking_count", "summary"],
+      "required": [
+        "publishable",
+        "blocking_count",
+        "summary"
+      ],
       "properties": {
-        "publishable": {"type": "boolean"},
-        "blocking_count": {"type": "integer", "minimum": 0},
-        "summary": {"type": "string", "minLength": 1}
+        "publishable": {
+          "type": "boolean"
+        },
+        "blocking_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     }
   },
   "allOf": [
     {
-      "if": {"properties": {"status": {"const": "complete"}}, "required": ["status"]},
-      "then": {"properties": {"completion_marker": {"const": true}, "completeness_declaration": {"properties": {"all_assigned_checks_accounted_for": {"const": true}, "all_assessments_evidenced": {"const": true}, "unresolved_omissions": {"maxItems": 0}}}, "coverage": {"properties": {"completed_checks": {"minItems": 1}}}}},
-      "else": {"properties": {"completion_marker": {"const": false}}}
+      "if": {
+        "properties": {
+          "status": {
+            "const": "complete"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "completion_marker": {
+            "const": true
+          },
+          "completeness_declaration": {
+            "properties": {
+              "all_assigned_checks_accounted_for": {
+                "const": true
+              },
+              "all_assessments_evidenced": {
+                "const": true
+              },
+              "unresolved_omissions": {
+                "maxItems": 0
+              }
+            }
+          },
+          "coverage": {
+            "properties": {
+              "completed_checks": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "completion_marker": {
+            "const": false
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -111,59 +338,330 @@
       "description": "Immutable artifact identity copied from the allowed frozen snapshot evidence inventory.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256"],
+      "required": [
+        "path",
+        "sha256"
+      ],
       "properties": {
-        "path": {"type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["artifact_refs", "operation", "result", "reproducible_script"],
+      "required": [
+        "artifact_refs",
+        "operation",
+        "result",
+        "reproducible_script"
+      ],
       "properties": {
-        "artifact_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/artifact_binding"}},
-        "operation": {"type": "string", "minLength": 1},
-        "result": {"type": "string", "minLength": 1},
-        "reproducible_script": {"oneOf": [{"$ref": "#/$defs/artifact_binding"}, {"type": "null"}]}
+        "artifact_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact_binding"
+          }
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reproducible_script": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/artifact_binding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       }
     },
     "unverifiable_basis": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["missing_or_inaccessible", "attempted", "effect_on_verdict"],
+      "required": [
+        "missing_or_inaccessible",
+        "attempted",
+        "effect_on_verdict"
+      ],
       "properties": {
-        "missing_or_inaccessible": {"type": "string", "minLength": 1},
-        "attempted": {"type": "string", "minLength": 1},
-        "effect_on_verdict": {"type": "string", "minLength": 1}
+        "missing_or_inaccessible": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempted": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effect_on_verdict": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "assessment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["item_id", "finding_id", "claim", "verdict", "priority", "confidence", "evidence", "unverifiable_basis", "requested_correction"],
+      "required": [
+        "item_id",
+        "finding_id",
+        "claim",
+        "verdict",
+        "priority",
+        "confidence",
+        "evidence",
+        "unverifiable_basis",
+        "requested_correction"
+      ],
       "properties": {
-        "item_id": {"type": "string", "minLength": 1},
-        "finding_id": {"type": ["string", "null"]},
-        "claim": {"type": "string", "minLength": 1},
-        "verdict": {"type": "string", "enum": ["CONFIRMED", "REFUTED", "OVERSTATED", "UNVERIFIABLE"]},
-        "priority": {"type": "string", "enum": ["BLOCKING", "NON_BLOCKING"]},
-        "confidence": {"type": "string", "enum": ["CONFIRMED", "LIKELY", "SPECULATIVE"]},
-        "evidence": {"$ref": "#/$defs/evidence"},
-        "unverifiable_basis": {"oneOf": [{"$ref": "#/$defs/unverifiable_basis"}, {"type": "null"}]},
-        "requested_correction": {"type": ["string", "null"]}
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED",
+            "REFUTED",
+            "OVERSTATED",
+            "UNVERIFIABLE"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "BLOCKING",
+            "NON_BLOCKING"
+          ]
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED",
+            "LIKELY",
+            "SPECULATIVE"
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "unverifiable_basis": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unverifiable_basis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requested_correction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "allOf": [
         {
-          "if": {"properties": {"verdict": {"const": "UNVERIFIABLE"}}, "required": ["verdict"]},
-          "then": {"properties": {"unverifiable_basis": {"$ref": "#/$defs/unverifiable_basis"}}},
-          "else": {"properties": {"unverifiable_basis": {"type": "null"}}}
+          "if": {
+            "properties": {
+              "verdict": {
+                "const": "UNVERIFIABLE"
+              }
+            },
+            "required": [
+              "verdict"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unverifiable_basis": {
+                "$ref": "#/$defs/unverifiable_basis"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "unverifiable_basis": {
+                "type": "null"
+              }
+            }
+          }
         },
         {
-          "if": {"properties": {"verdict": {"enum": ["REFUTED", "OVERSTATED"]}}, "required": ["verdict"]},
-          "then": {"properties": {"requested_correction": {"type": "string", "minLength": 1}}}
+          "if": {
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "REFUTED",
+                  "OVERSTATED"
+                ]
+              }
+            },
+            "required": [
+              "verdict"
+            ]
+          },
+          "then": {
+            "properties": {
+              "requested_correction": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       ]
+    },
+    "new_issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "finding_id",
+        "claim",
+        "verdict",
+        "priority",
+        "confidence",
+        "evidence",
+        "unverifiable_basis",
+        "requested_correction"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_id": {
+          "type": "null"
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED",
+            "REFUTED",
+            "OVERSTATED",
+            "UNVERIFIABLE"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "BLOCKING",
+            "NON_BLOCKING"
+          ]
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED",
+            "LIKELY",
+            "SPECULATIVE"
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "unverifiable_basis": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unverifiable_basis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requested_correction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "const": "UNVERIFIABLE"
+              }
+            },
+            "required": [
+              "verdict"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unverifiable_basis": {
+                "$ref": "#/$defs/unverifiable_basis"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "unverifiable_basis": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "REFUTED",
+                  "OVERSTATED"
+                ]
+              }
+            },
+            "required": [
+              "verdict"
+            ]
+          },
+          "then": {
+            "properties": {
+              "requested_correction": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ],
+      "description": "A problem the critic found that is not one of its assigned claims. finding_id is null by construction: validate_v2 rejects any other value, and the runtime narrows the shared assessment definition's finding_id to the covered claim ids, which would otherwise force a real id here and make every new issue unrepresentable."
     }
   }
 }

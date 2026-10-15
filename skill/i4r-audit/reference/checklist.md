@@ -54,10 +54,19 @@ expected; implausible values; impossibly narrow ranges; absurd effect sizes. **B
 published reference datasets** with goodness-of-fit tests.
 
 ## 7. Privacy and archive hygiene
-PII in "anonymised" files; **but check whether an anonymisation claim was actually made** — the
-usual contradiction may not exist. Compute uniqueness **per person, not per identifier value**, when
-codes collide. Full DOB vs birth year is the difference between ~99% and ~5% singled out. Check
-filenames and embedded document metadata, not just cells.
+Personal data in the deposit is a finding **whether or not anonymisation was claimed**. The claim
+decides only whether there is also a text-versus-deposit contradiction, so check whether one was
+actually made. Look for names, dates of birth, e-mail addresses, IP addresses or geolocation, phone
+numbers, postal addresses, ID numbers, free text and file names. Compute uniqueness **per person,
+not per identifier value**, when codes collide. Full DOB vs birth year is the difference between
+~99% and ~5% singled out. Check filenames and embedded document metadata, not just cells.
+
+Report the identifier kind, the manifest-relative file and column (or the directory and a file
+count when file names are themselves participant codes), the rows or participants affected, the
+per-person uniqueness, whether anonymisation was claimed, and a verified remedy: drop or coarsen the
+column, then replace the file through the repository. Print and report counts only, never a value,
+and never describe how a person could be re-identified. Personal data never stops, pauses or skips
+the audit.
 
 ## 8. Estimator specification and library defaults (calibration addition)
 

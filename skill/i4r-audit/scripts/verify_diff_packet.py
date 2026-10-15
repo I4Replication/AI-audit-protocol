@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import os
 import pathlib
 import subprocess
@@ -70,14 +71,31 @@ def verify(root: pathlib.Path, manifest: pathlib.Path, round_number: int | None 
             "--before-findings", str(resolved["before_findings"]),
             "--after-findings", str(resolved["after_findings"]),
             "--output", str(temporary),
+            "--no-remedy-file",
         ]
         result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, check=False)
         if result.returncode:
             detail = (result.stderr or result.stdout).strip()
-            raise ValueError(f"could not recompute diff packet: {detail[:500]}")
+            raise ValueError(f"could not recompute diff packet: {detail[-4000:]}")
         if temporary.read_bytes() != manifest.read_bytes():
-            raise ValueError("diff packet is not the exact deterministic projection of its bound inputs")
+            # name what moved: the report, the registry, the settled cache, the before-files ...
+            try:
+                fresh, bound = json.loads(temporary.read_text(encoding="utf-8")), value
+                changed = sorted(key for key in set(fresh.get("inputs") or {}) | set(bound.get("inputs") or {})
+                                 if (fresh.get("inputs") or {}).get(key) != (bound.get("inputs") or {}).get(key))
+                changed += [key for key in ("settled_cache_sha256",) if fresh.get(key) != bound.get(key)]
+            except (OSError, ValueError, AttributeError):
+                changed = []
+            rebuild = (f"python3 {shlex.quote(str(HERE / 'make_diff_packet.py'))} {shlex.quote(str(root))} --round "
+                       f"{observed_round} --before-report {shlex.quote(str(resolved['before_report']))} --after-report "
+                       f"{shlex.quote(str(resolved['after_report']))} --before-findings "
+                       f"{shlex.quote(str(resolved['before_findings']))} --after-findings "
+                       f"{shlex.quote(str(resolved['after_findings']))} --output {shlex.quote(str(manifest))}")
+            raise ValueError(
+                "diff packet is not the exact deterministic projection of its bound inputs"
+                + (f"; changed since it was built: {', '.join(changed)}" if changed else "")
+                + f". Rebuild it: {rebuild} (then re-run its post-delta gates)")
     finally:
         temporary.unlink(missing_ok=True)
     return value

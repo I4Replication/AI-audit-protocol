@@ -1,395 +1,443 @@
 #!/bin/bash
-# build_docx.sh [--no-cache|--refresh-cache] <audit-dir> <output-basename> [final-report.md]
-# Renders an I4R-format .docx + PDF preview. Captions are inserted BEFORE each detected
-# table block — never by line number, which lands them inside tables.
+# build_docx.sh [--no-cache|--refresh-cache] [--preview-max-pages N]
+#               <audit-dir> <output-basename> [final-report.md]
 #
-# Default builds use an audit-local content-addressed cache. --no-cache bypasses both lookup and
-# storage. --refresh-cache forces a rebuild and atomically replaces the matching validated entry.
+# Canonical builds take their ten-body-page limit only from the audit's hash-bound policy
+# snapshot. Preview limits are explicit CLI input, live below report/previews/, never touch the
+# canonical manifest/cache, and are permanently non-release.
 set -uo pipefail
+
 SELF="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/$(basename "$0")"
-CACHE_HELPER="$(dirname "$SELF")/document_build_cache.py"
+SCRIPT_DIR=$(dirname "$SELF")
+CACHE_HELPER="$SCRIPT_DIR/document_build_cache.py"
+DOCUMENT_RELEASE="$SCRIPT_DIR/document_release.py"
 CACHE_MODE="${BUILD_DOCX_CACHE_MODE:-use}"
+PREVIEW_MAX=""
+
+usage () { sed -n '2,9p' "$0"; }
+fatal () { echo "FATAL: build_docx.sh: $*" >&2; exit 1; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-cache) CACHE_MODE="bypass"; shift ;;
     --refresh-cache) CACHE_MODE="refresh"; shift ;;
-    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
-    --*) echo "FATAL: unknown option $1" >&2; exit 2 ;;
+    --preview-max-pages)
+      [ $# -ge 2 ] || fatal "--preview-max-pages requires a positive integer"
+      PREVIEW_MAX="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --*) fatal "unknown option $1" ;;
     *) break ;;
   esac
 done
-case "$CACHE_MODE" in use|bypass|refresh) ;; *) echo "FATAL: BUILD_DOCX_CACHE_MODE must be use, bypass, or refresh" >&2; exit 2 ;; esac
+case "$CACHE_MODE" in use|bypass|refresh) ;; *) fatal "BUILD_DOCX_CACHE_MODE must be use, bypass, or refresh" ;; esac
 
-DIR="${1:?audit dir}"; DIR="$(cd "$DIR" && pwd)"
-OUT="${2:?output basename}"; SRC="${3:-$DIR/report/REPORT_final.md}"
-case "$SRC" in /*) ;; *) SRC="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")" ;; esac
-case "$OUT" in /*) OUT_BASE="$OUT" ;; *) OUT_BASE="$DIR/report/$OUT" ;; esac
-OUT_PARENT=$(dirname "$OUT_BASE")
-[ -d "$OUT_PARENT" ] || { echo "FATAL: output directory $OUT_PARENT does not exist"; exit 1; }
-OUT_BASE="$(cd "$OUT_PARENT" && pwd)/$(basename "$OUT_BASE")"
-case "$OUT_BASE" in "$DIR"/*) ;; *) echo "FATAL: output basename escapes audit root: $OUT_BASE" >&2; exit 1 ;; esac
+DIR="${1:?audit dir}"
+[ -d "$DIR" ] || fatal "audit directory does not exist: $DIR"
+DIR="$(cd "$DIR" && pwd -P)"
+OUT="${2:?output basename}"
+SRC="${3:-$DIR/report/REPORT_final.md}"
+case "$SRC" in /*) ;; *) SRC="$(cd "$(dirname "$SRC")" && pwd -P)/$(basename "$SRC")" ;; esac
+
+BUILD_KIND="canonical"
+if [ -n "$PREVIEW_MAX" ]; then
+  BUILD_KIND="preview"
+  case "$PREVIEW_MAX" in ''|*[!0-9]*) fatal "--preview-max-pages requires a positive integer" ;; esac
+  [ "$PREVIEW_MAX" -ge 1 ] || fatal "--preview-max-pages requires a positive integer"
+  CACHE_MODE="bypass"
+  PREVIEW_NAME=$(basename "$OUT")
+  case "$PREVIEW_NAME" in *.pdf|*.docx) PREVIEW_NAME=${PREVIEW_NAME%.*} ;; esac
+  [ -n "$PREVIEW_NAME" ] && [ "$PREVIEW_NAME" != "." ] && [ "$PREVIEW_NAME" != ".." ] ||
+    fatal "invalid preview basename"
+  mkdir -p "$DIR/report/previews" || fatal "cannot create report/previews"
+  OUT_BASE="$DIR/report/previews/$PREVIEW_NAME"
+  CAP="$PREVIEW_MAX"
+  MANIFEST_TARGET="$OUT_BASE.manifest.json"
+else
+  if [ "${MAX_PAGES+x}" = "x" ]; then
+    fatal "MAX_PAGES is forbidden for canonical builds; use --preview-max-pages for a non-release preview"
+  fi
+  [ -f "$DOCUMENT_RELEASE" ] || fatal "document verifier missing: $DOCUMENT_RELEASE"
+  CAP=$(python3 "$DOCUMENT_RELEASE" policy-cap "$DIR") || exit 1
+  case "$OUT" in /*) OUT_BASE="$OUT" ;; *) OUT_BASE="$DIR/report/$OUT" ;; esac
+  OUT_PARENT=$(dirname "$OUT_BASE")
+  [ -d "$OUT_PARENT" ] || fatal "output directory does not exist: $OUT_PARENT"
+  OUT_BASE="$(cd "$OUT_PARENT" && pwd -P)/$(basename "$OUT_BASE")"
+  [ "$(dirname "$OUT_BASE")" = "$DIR/report" ] ||
+    fatal "canonical output must be a direct child of $DIR/report"
+  MANIFEST_TARGET="$DIR/document_build_manifest.json"
+fi
+
 OUT_DOCX="$OUT_BASE.docx"
 OUT_PDF="$OUT_BASE.pdf"
-MAX_PAGES="${MAX_PAGES:-10}"
-CACHE_DESCRIPTOR=""
-CACHE_METADATA=""
-cleanup_cache_temps () {
-  [ -n "$CACHE_DESCRIPTOR" ] && rm -f "$CACHE_DESCRIPTOR"
-  [ -n "$CACHE_METADATA" ] && rm -f "$CACHE_METADATA"
-}
-trap cleanup_cache_temps EXIT INT TERM
+DIAGNOSTIC_DIR="$DIR/document_build_diagnostics"
+DIAGNOSTIC="$DIAGNOSTIC_DIR/last_failure.json"
+TX_PARENT="$DIR/.document-build-transactions"
+mkdir -p "$TX_PARENT" || fatal "cannot create private build transaction directory"
+# Stale build transactions (older than an hour) belong to builds that are not running; the synced
+# folder has been seen to restore removed ones with their contents. Sweep before starting.
+find "$TX_PARENT" -mindepth 1 -maxdepth 1 -type d -name 'build.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
+chmod 700 "$TX_PARENT" 2>/dev/null || true
+TX=$(mktemp -d "$TX_PARENT/build.XXXXXX") || fatal "cannot create private build transaction"
+chmod 700 "$TX" 2>/dev/null || true
+BUILD_STAGE="preflight"
+BUILD_OK=0
 
-write_document_manifest () {
-  python3 - "$DIR" "$SRC" "$OUT_DOCX" "$OUT_PDF" <<'PYBUILD'
-import datetime,hashlib,json,os,pathlib,sys,tempfile
-root,report,docx,pdf=map(pathlib.Path,sys.argv[1:]); root=root.resolve()
-def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
-def item(path):
-    path=path.resolve()
-    try: relative=path.relative_to(root).as_posix()
-    except ValueError: raise SystemExit(f"built document escapes audit root: {path}")
-    return {"path":relative,"sha256":digest(path),"bytes":path.stat().st_size}
-manifest={"schema_version":"2.0.0",
-          "created_at":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-          "report":item(report),"docx":item(docx),"pdf":item(pdf)}
-target=root/"document_build_manifest.json"
-fd,tmp=tempfile.mkstemp(prefix=target.name+".",dir=root)
-with os.fdopen(fd,"w",encoding="utf-8") as handle:
-    json.dump(manifest,handle,indent=2,sort_keys=True); handle.write("\n")
-    handle.flush(); os.fsync(handle.fileno())
-os.replace(tmp,target)
-print(f"document build manifest: {target}")
-PYBUILD
+cleanup_build () {
+  rc=$1
+  trap - EXIT HUP INT TERM
+  if [ "$BUILD_OK" -ne 1 ] && [ "$rc" -ne 0 ]; then
+    mkdir -p "$DIAGNOSTIC_DIR" 2>/dev/null || true
+    if [ -f "$TX/failure.json" ]; then
+      mv -f "$TX/failure.json" "$DIAGNOSTIC" 2>/dev/null || true
+    elif [ -f "$DOCUMENT_RELEASE" ]; then
+      python3 "$DOCUMENT_RELEASE" diagnostic --out "$DIAGNOSTIC" --build-kind "$BUILD_KIND" \
+        --stage "$BUILD_STAGE" --message "document build failed before promotion" >/dev/null 2>&1 || true
+    fi
+  fi
+  [ ! -d "$TX" ] || rm -rf "$TX"
+  exit "$rc"
 }
+trap 'cleanup_build $?' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-# pandoc is not always on PATH (this machine has it only in a dedicated conda env).
+[ -f "$SRC" ] || fatal "$SRC not found"
+[ -f "$DIR/report/front_matter.md" ] ||
+  fatal "write $DIR/report/front_matter.md first (see reference/report_structure.md)"
+# report_structure.md forbids a front matter ending in a line of only - or = characters: depending on the
+# pandoc extensions it can retitle the line above (setext heading), open a YAML block, or leave a stray
+# rule before the body. Refuse it here rather than let the byline's rendering depend on that.
+LAST_FM_LINE="$(awk 'NF{last=$0} END{sub(/^[ \t]+/, "", last); sub(/[ \t\r]+$/, "", last); print last}' "$DIR/report/front_matter.md")"
+if [[ "$LAST_FM_LINE" =~ ^-+$ ]] || [[ "$LAST_FM_LINE" =~ ^=+$ ]]; then
+  fatal "report/front_matter.md ends with a bare '$LAST_FM_LINE' line; remove it (reference/report_structure.md forbids it: depending on pandoc extensions it retitles the line above, opens a YAML block, or leaves a stray rule)"
+fi
+[ -f "$DIR/report/captions.txt" ] ||
+  fatal "write $DIR/report/captions.txt -- one caption per line, in document order"
+[ -f "$CACHE_HELPER" ] || fatal "cache helper missing: $CACHE_HELPER"
+[ -f "$DOCUMENT_RELEASE" ] || fatal "document verifier missing: $DOCUMENT_RELEASE"
+
+if [ "$BUILD_KIND" = "canonical" ]; then
+  python3 "$DOCUMENT_RELEASE" preflight-inventory "$DIR" \
+    --pdf-target "$OUT_PDF" --docx-target "$OUT_DOCX" || exit 1
+fi
+
 PANDOC="${PANDOC:-$(command -v pandoc || true)}"
-[ -n "$PANDOC" ] || for p in "$HOME/miniconda3/envs/i4rdoc/bin/pandoc" /opt/homebrew/bin/pandoc /usr/local/bin/pandoc; do
-  [ -x "$p" ] && PANDOC="$p" && break
-done
-[ -n "$PANDOC" ] || { echo "FATAL: pandoc not found. Install it (conda create -n i4rdoc -c conda-forge pandoc) or set PANDOC=<path>"; exit 1; }
-[ -f "$SRC" ] || { echo "FATAL: $SRC not found"; exit 1; }
-[ -f "$DIR/report/front_matter.md" ] || { echo "FATAL: write $DIR/report/front_matter.md first (see reference/report_structure.md)"; exit 1; }
-[ -f "$DIR/report/captions.txt" ] || { echo "FATAL: write $DIR/report/captions.txt — one caption per line, in document order"; exit 1; }
-[ -f "$CACHE_HELPER" ] || { echo "FATAL: cache helper missing: $CACHE_HELPER"; exit 1; }
-
-# Resolve the exact reference document before computing the build key. The small default-reference
-# lookup is cached separately by Pandoc identity; the document cache itself hashes the exact bytes.
-mkdir -p "$DIR/.cache"
-PANDOC_KEY=$("$PANDOC" --version | head -1 | shasum -a 256 | cut -c1-12)
-REF_CACHE="$DIR/.cache/reference-${PANDOC_KEY}.docx"
-if [ ! -s "$REF_CACHE" ]; then
-  "$PANDOC" --print-default-data-file reference.docx > "$REF_CACHE.tmp" || exit 1
-  mv "$REF_CACHE.tmp" "$REF_CACHE"
+if [ -z "$PANDOC" ]; then
+  for candidate in "${HOME:-}/miniconda3/envs/i4rdoc/bin/pandoc" \
+                   /opt/homebrew/bin/pandoc /usr/local/bin/pandoc; do
+    [ -x "$candidate" ] && PANDOC="$candidate" && break
+  done
 fi
+[ -n "$PANDOC" ] && [ -x "$PANDOC" ] || fatal "pandoc not found; install it or set PANDOC=<path>"
+SOFFICE=$(command -v soffice || true)
+[ -n "$SOFFICE" ] || SOFFICE="/Applications/LibreOffice.app/Contents/MacOS/soffice"
+[ -x "$SOFFICE" ] || fatal "LibreOffice/soffice is required; proxy PDF rendering is forbidden"
+command -v pdfinfo >/dev/null 2>&1 || fatal "pdfinfo is required for exact page counting"
+command -v pdftotext >/dev/null 2>&1 || fatal "pdftotext is required for exact boundary checks"
 
-SOF=$(command -v soffice || echo "/Applications/LibreOffice.app/Contents/MacOS/soffice")
-PANDOC_ID=$("$PANDOC" --version 2>/dev/null | head -1)
-PYTHON_ID=$(python3 --version 2>&1)
-PDFINFO_ID=$(pdfinfo -v 2>&1 | head -1 || true)
-PDFTOTEXT_ID=$(pdftotext -v 2>&1 | head -1 || true)
-if [ -x "$SOF" ]; then
-  PDF_ENGINE="libreoffice"
-  PDF_ENGINE_ID=$("$SOF" --version 2>/dev/null | head -1)
-else
-  PDF_ENGINE="xelatex-proxy"
-  PDF_ENGINE_ID=$(xelatex --version 2>/dev/null | head -1 || echo unavailable)
-fi
+PANDOC_ID=$("$PANDOC" --version 2>/dev/null | sed -n '1p')
+RENDERER_ID=$("$SOFFICE" --version 2>/dev/null | sed -n '1p')
+PDFINFO_ID=$(pdfinfo -v 2>&1 | sed -n '1p')
+PDFTOTEXT_ID=$(pdftotext -v 2>&1 | sed -n '1p')
+[ -n "$PANDOC_ID" ] && [ -n "$RENDERER_ID" ] && [ -n "$PDFINFO_ID" ] && [ -n "$PDFTOTEXT_ID" ] ||
+  fatal "renderer identity telemetry is incomplete"
 
+BUILD_STAGE="reference_doc"
+# pandoc stamps the current time into the zip entries of the reference document it prints, and the
+# cache key binds those bytes, so before 2.6.8 no two builds shared a key and the cache never hit.
+# A fixed SOURCE_DATE_EPOCH pins the timestamps; the member contents are the same either way.
+SOURCE_DATE_EPOCH=0 "$PANDOC" --print-default-data-file reference.docx > "$TX/reference.docx" ||
+  fatal "pandoc could not produce its exact reference document"
+[ -s "$TX/reference.docx" ] || fatal "pandoc reference document is empty"
+
+CACHE_DESCRIPTOR="$TX/cache-inputs.json"
+CACHE_METADATA="$TX/cache-validation.json"
 CACHE_KEY=""
 CACHE_ARCHIVE=""
 if [ "$CACHE_MODE" != "bypass" ]; then
-  mkdir -p "$DIR/.cache/document-builds"
-  CACHE_DESCRIPTOR=$(mktemp "$DIR/.cache/.document-build-inputs.XXXXXX.json") || exit 1
-  CACHE_METADATA=$(mktemp "$DIR/.cache/.document-build-validation.XXXXXX.json") || exit 1
+  mkdir -p "$DIR/.cache/document-builds" || fatal "cannot create document cache directory"
   CACHE_KEY=$(python3 "$CACHE_HELPER" key \
     --descriptor "$CACHE_DESCRIPTOR" \
     --input "report=$SRC" \
     --input "front_matter=$DIR/report/front_matter.md" \
     --input "captions=$DIR/report/captions.txt" \
-    --input "reference_doc=$REF_CACHE" \
+    --input "reference_doc=$TX/reference.docx" \
+    --input "policy_snapshot=$DIR/pipeline-policy.snapshot.json" \
     --input "build_script=$SELF" \
+    --input "document_verifier=$DOCUMENT_RELEASE" \
     --input "cache_helper=$CACHE_HELPER" \
-    --option "max_pages=$MAX_PAGES" \
+    --option "body_page_cap=$CAP" \
+    --option "build_kind=canonical" \
     --option "output_basename=$(basename "$OUT_BASE")" \
     --option "pandoc_reader=markdown+pipe_tables" \
-    --option "pdf_engine=$PDF_ENGINE" \
     --tool "pandoc=$PANDOC_ID" \
-    --tool "pdf_engine=$PDF_ENGINE_ID" \
+    --tool "pdf_engine=$RENDERER_ID" \
     --tool "pdfinfo=$PDFINFO_ID" \
-    --tool "pdftotext=$PDFTOTEXT_ID" \
-    --tool "python=$PYTHON_ID")
-  [ $? -eq 0 ] && [ -n "$CACHE_KEY" ] || { echo "FATAL: could not compute document cache key" >&2; exit 1; }
+    --tool "pdftotext=$PDFTOTEXT_ID") || fatal "could not compute document cache key"
+  [ -n "$CACHE_KEY" ] || fatal "empty document cache key"
   CACHE_ARCHIVE="$DIR/.cache/document-builds/$CACHE_KEY.zip"
 fi
 
+CACHE_HIT=0
 if [ "$CACHE_MODE" = "use" ]; then
+  BUILD_STAGE="cache_restore"
   python3 "$CACHE_HELPER" restore --archive "$CACHE_ARCHIVE" --key "$CACHE_KEY" \
-    --docx "$OUT_DOCX" --pdf "$OUT_PDF" --root "$DIR" --metadata-out "$CACHE_METADATA"
+    --docx "$TX/document.docx" --pdf "$TX/document.pdf" --root "$DIR"
   CACHE_RC=$?
   if [ "$CACHE_RC" -eq 0 ]; then
-    write_document_manifest || exit 1
-    python3 - "$CACHE_METADATA" <<'PYCACHEHIT'
-import json,sys
-v=json.load(open(sys.argv[1],encoding="utf-8"))
-print("built from validated cache: %s pages total%s" %
-      (v.get("pages","unknown"), (" — "+v["page_source"]) if v.get("page_source") else ""))
-PYCACHEHIT
-    echo ""
-    echo "NOW VERIFY: pdftoppm -jpeg -r 85 -f 1 -l 2 $OUT_PDF pg   then read pg-*.jpg"
-    echo "Check a page containing a table. Cached bytes passed their original page, abstract, and table gates."
-    exit 0
+    CACHE_HIT=1
   elif [ "$CACHE_RC" -eq 4 ]; then
     echo "WARNING: invalid document cache entry ignored; rebuilding $CACHE_KEY" >&2
   elif [ "$CACHE_RC" -ne 3 ]; then
-    echo "FATAL: document cache restore failed operationally (exit $CACHE_RC)" >&2
-    exit 1
+    fatal "document cache restore failed operationally (exit $CACHE_RC)"
   fi
 fi
 
-python3 - "$SRC" "$DIR/report/captions.txt" "$DIR/report/_body.md" << 'PY'
-import sys, re, pathlib
-src, capfile, dest = sys.argv[1], sys.argv[2], sys.argv[3]
-raw = pathlib.Path(src).read_text()
-# The source-only claim cross-reference is a machine join, not journal prose. Remove the exact
-# generated block before document conversion; deleting only the `[claim N]` tokens would leave a
-# duplicate findings list in the published body.
+if [ "$CACHE_HIT" -ne 1 ]; then
+  BUILD_STAGE="source_transform"
+  python3 - "$SRC" "$DIR/report/captions.txt" "$TX/body.md" "$DOCUMENT_RELEASE" <<'PYBODY'
+import pathlib, re, sys
+source, caption_file, destination, release_module = map(pathlib.Path, sys.argv[1:])
+# The findings-table helpers live in the document verifier, which the cache key and the manifest
+# already bind; importing it must not leave bytecode beside the skill's scripts.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(release_module.parent))
+import document_release
+raw = source.read_text(encoding="utf-8")
 starts = raw.count("<!-- I4R-GENERATED-CLAIM-TAGS:START -->")
 ends = raw.count("<!-- I4R-GENERATED-CLAIM-TAGS:END -->")
 if starts != ends or starts > 1:
-    print(f"  FATAL: malformed generated claim-tag block ({starts} start, {ends} end)")
-    raise SystemExit(2)
-raw, tag_blocks = re.subn(
+    raise SystemExit(f"FATAL: malformed generated claim-tag block ({starts} start, {ends} end)")
+raw, blocks = re.subn(
     r"(?ms)^<!-- I4R-GENERATED-CLAIM-TAGS:START -->.*?"
     r"^<!-- I4R-GENERATED-CLAIM-TAGS:END -->\s*", "", raw,
 )
-L = raw.split("\n")
-CAPS = [c.strip() for c in pathlib.Path(capfile).read_text().split("\n") if c.strip()]
-try:    L = L[next(i for i,l in enumerate(L) if l.startswith("## Executive summary") or l.startswith("## Abstract")):]
-except StopIteration: pass
-mid=[]
-for line in L:
-    m=re.match(r"^## (\d+)\. (.+)$", line)
-    if m: mid.append(f"# Section {m.group(1)}. {m.group(2)}"); continue
+lines = raw.split("\n")
+try:
+    lines = lines[next(index for index, line in enumerate(lines)
+                       if line.startswith("## Executive summary") or line.startswith("## Abstract")):]
+except StopIteration:
+    pass
+captions = [line.strip() for line in caption_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()]
+middle = []
+for line in lines:
+    section = re.match(r"^## (\d+)\. (.+)$", line)
+    if section:
+        middle.append(f"# Section {section.group(1)}. {section.group(2)}")
+        continue
     if line.startswith("## Executive summary") or line.startswith("## Abstract"):
-        mid.append("# "+line[3:]); continue
-    if line.startswith("## References") or line.startswith("## Appendix"):
-        # Back matter starts a new page. References and appendices do not count toward the page
-        # cap, so they must begin cleanly rather than sharing a page with the body.
-        mid += ["```{=openxml}", '<w:p><w:r><w:br w:type="page"/></w:r></w:p>', "```", ""]
-        mid.append("# "+line[3:]); continue
-    # subsection heading: "**6.1 Title.** body" or "**6.1 Title.**" alone on its line.
-    # Suffixed numbers (6.8a, 7.1b-ii) are headings too.
-    m2=re.match(r"^\*\*(\d+\.\d+[a-z]?(?:-[a-z]+)?) (.+?)\.?\*\*[ ]?(.*)$", line)
-    if m2: mid += [f"## {m2.group(1)} {m2.group(2)}",""] + ([m2.group(3)] if m2.group(3) else []); continue
-    mid.append(line)
-out,k,i=[],0,0
-while i<len(mid):
-    if mid[i].lstrip().startswith("|"):
-        j=i
-        while j<len(mid) and mid[j].lstrip().startswith("|"): j+=1
-        if k<len(CAPS):
-            if out and out[-1].strip(): out.append("")
-            out += [f"*Table {k+1}. {CAPS[k]}*",""]; k+=1
-        out += mid[i:j]+[""]; i=j; continue
-    out.append(mid[i]); i+=1
-txt="\n".join(out)
-txt=re.sub(r"§(\d+)\.(\d+)", r"Section \1.\2", txt); txt=re.sub(r"§(\d+)", r"Section \1", txt)
-# [claim N] tags are the replicator-facing join key to the claims script and the verdict survey.
-# They stay in REPORT_final.md; the published deliverable is built without them (meeting 2026-08-21).
-ntags = len(re.findall(r"\s?\[claim \d+\]", txt))
-txt = re.sub(r"\s?\[claim \d+\]", "", txt)
-if tag_blocks or ntags:
-    print(f"claim handoff stripped from the deliverable: {tag_blocks} generated block(s), "
-          f"{ntags} legacy inline tag(s) (source remains in REPORT_final.md)")
-pathlib.Path(dest).write_text(txt)
-nb = sum(1 for x,l in enumerate(out) if l.lstrip().startswith("|") and not out[x-1].lstrip().startswith("|"))
-print(f"table blocks: {nb}   captions available: {len(CAPS)}   captions placed: {k}")
-if nb != len(CAPS):
-    print(f"  FATAL: {nb} table blocks but {len(CAPS)} captions")
-    raise SystemExit(2)
-PY
-[ $? -eq 0 ] || exit 1
+        middle.append("# " + line[3:])
+        continue
+    if (line.startswith("## Data and Code Availability") or
+            line.startswith("## References") or line.startswith("## Appendix")):
+        middle.extend([
+            "```{=openxml}", '<w:p><w:pPr><w:pStyle w:val="I4RPageBreakBeforeNext"/></w:pPr></w:p>', "```", "",
+            "# " + line[3:],
+        ])
+        continue
+    subsection = re.match(r"^\*\*(\d+\.\d+[a-z]?(?:-[a-z]+)?) (.+?)\.?\*\*[ ]?(.*)$", line)
+    if subsection:
+        middle.extend([f"## {subsection.group(1)} {subsection.group(2)}", ""])
+        if subsection.group(3):
+            middle.append(subsection.group(3))
+        continue
+    middle.append(line)
 
-cd "$DIR/report"
-cat front_matter.md _body.md > _full.md
-"$PANDOC" _full.md -f markdown+pipe_tables -t docx --reference-doc="$REF_CACHE" -o "$OUT_DOCX" || exit 1
+output = []
+caption_index = 0
+index = 0
+table_blocks = 0
+findings_tags = 0
+while index < len(middle):
+    if middle[index].lstrip().startswith("|"):
+        end = index
+        while end < len(middle) and middle[end].lstrip().startswith("|"):
+            end += 1
+        table_blocks += 1
+        if caption_index < len(captions):
+            if output and output[-1].strip():
+                output.append("")
+            output.extend([f"*Table {caption_index + 1}. {captions[caption_index]}*", ""])
+            caption_index += 1
+        # The generated findings table renders literally, with fixed column widths; every other
+        # table passes through unchanged. Its claim tags are stripped here, before escaping.
+        block = middle[index:end]
+        if document_release.is_findings_table(block):
+            findings_tags += sum(len(document_release.CLAIM_TAG.findall(line)) for line in block)
+            try:
+                block = document_release.pandoc_findings_table(block)
+            except document_release.DocumentReleaseError as exc:
+                raise SystemExit(f"FATAL: {exc}")
+        output.extend(block + [""])
+        index = end
+        continue
+    output.append(middle[index])
+    index += 1
+text = "\n".join(output)
+text = re.sub(r"§(\d+)\.(\d+)", r"Section \1.\2", text)
+text = re.sub(r"§(\d+)", r"Section \1", text)
+legacy_tags = findings_tags + len(re.findall(r"\s?\[claim \d+\]", text))
+text = re.sub(r"\s?\[claim \d+\]", "", text)
+if table_blocks != len(captions):
+    raise SystemExit(f"FATAL: {table_blocks} table blocks but {len(captions)} captions")
+destination.write_text(text, encoding="utf-8")
+print(f"table blocks: {table_blocks}; captions placed: {caption_index}")
+if blocks or legacy_tags:
+    print(f"claim handoff stripped: {blocks} generated block(s), {legacy_tags} legacy tag(s)")
+PYBODY
+  [ $? -eq 0 ] || exit 1
 
+  python3 - "$DIR/report/front_matter.md" "$TX/body.md" "$TX/full.md" <<'PYFULL'
+import pathlib, sys
+front, body, output = map(pathlib.Path, sys.argv[1:])
+output.write_bytes(front.read_bytes() + b"\n" + body.read_bytes())
+PYFULL
 
-# ---- link colouring (house style, 2026-08-22) -------------------------------------------------
-# Citations and URLs BLUE, cross-references to tables, figures and sections RED, matching the
-# group's paper template (citecolor blue / linkcolor red). Word takes hyperlink colour from a
-# character style, so two colours would need two styles; the run colour is set directly instead,
-# which renders identically in Word, LibreOffice and any PDF converted from either.
-python3 - "$OUT_DOCX" <<'PYLINK'
+  BUILD_STAGE="pandoc"
+  "$PANDOC" "$TX/full.md" -f markdown+pipe_tables -t docx \
+    --reference-doc="$TX/reference.docx" -o "$TX/document.docx" || exit 1
+
+  BUILD_STAGE="docx_link_style"
+  python3 - "$TX/document.docx" <<'PYLINK'
 import re, shutil, sys, zipfile
 docx = sys.argv[1]
-z = zipfile.ZipFile(docx); names = z.namelist(); blobs = {n: z.read(n) for n in names}
-doc = blobs["word/document.xml"].decode("utf-8")
-rels = blobs["word/_rels/document.xml.rels"].decode("utf-8")
-z.close()
-external = set(re.findall(r'Id="([^"]+)"[^>]*TargetMode="External"', rels))
+with zipfile.ZipFile(docx) as source:
+    names = source.namelist()
+    blobs = {name: source.read(name) for name in names}
+document = blobs["word/document.xml"].decode("utf-8")
+relationships = blobs["word/_rels/document.xml.rels"].decode("utf-8")
+external = set(re.findall(r'Id="([^"]+)"[^>]*TargetMode="External"', relationships))
 
-def colour_of(open_tag):
-    m = re.search(r'w:anchor="([^"]*)"', open_tag)
-    if m:
-        return "0000FF" if m.group(1).startswith("ref-") else "FF0000"
-    m = re.search(r'r:id="([^"]*)"', open_tag)
-    if m and m.group(1) in external:
+def colour(open_tag):
+    anchor = re.search(r'w:anchor="([^"]*)"', open_tag)
+    if anchor:
+        return "0000FF" if anchor.group(1).startswith("ref-") else "FF0000"
+    relation = re.search(r'r:id="([^"]*)"', open_tag)
+    if relation and relation.group(1) in external:
         return "0000FF"
     return None
 
-RPR = '<w:rPr><w:color w:val="%s"/><w:u w:val="single"/>'
-out, i, blue, red = [], 0, 0, 0
-for m in re.finditer(r"<w:hyperlink\b[^>]*>.*?</w:hyperlink>", doc, re.S):
-    blk = m.group(0)
-    col = colour_of(blk[:blk.find(">") + 1])
-    out.append(doc[i:m.start()]); i = m.end()
-    if col:
-        blk = re.sub(r'<w:color w:val="[^"]*"\s*/>', "", blk)
-        blk = blk.replace("<w:rPr>", RPR % col)
-        blk = re.sub(r"<w:r>(?!<w:rPr>)", "<w:r>" + (RPR % col) + "</w:rPr>", blk)
-        blue += col == "0000FF"; red += col == "FF0000"
-    out.append(blk)
-out.append(doc[i:])
-tmp = docx + ".tmp"
-zo = zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED)
-for nm in names:
-    zo.writestr(nm, "".join(out).encode("utf-8") if nm == "word/document.xml" else blobs[nm])
-zo.close(); shutil.move(tmp, docx)
-print("  links coloured: %d blue (citations, URLs), %d red (tables, figures, sections)" % (blue, red))
+rpr = '<w:rPr><w:color w:val="%s"/><w:u w:val="single"/>'
+pieces, cursor = [], 0
+for match in re.finditer(r"<w:hyperlink\b[^>]*>.*?</w:hyperlink>", document, re.S):
+    block = match.group(0)
+    value = colour(block[:block.find(">") + 1])
+    pieces.append(document[cursor:match.start()])
+    cursor = match.end()
+    if value:
+        block = re.sub(r'<w:color w:val="[^"]*"\s*/>', "", block)
+        block = block.replace("<w:rPr>", rpr % value)
+        block = re.sub(r"<w:r>(?!<w:rPr>)", "<w:r>" + (rpr % value) + "</w:rPr>", block)
+    pieces.append(block)
+pieces.append(document[cursor:])
+document = "".join(pieces)
+# Back-matter headings start a new page through the heading's own pageBreakBefore, never through a
+# separate paragraph holding a page-break run: when the body exactly fills a page, that paragraph
+# spills onto the next page and the break then leaves it blank (a counted, empty body page).
+MARKER = '<w:p><w:pPr><w:pStyle w:val="I4RPageBreakBeforeNext"/></w:pPr></w:p>'
+marked = document.count(MARKER)
+out, rest = [], document
+while MARKER in rest:
+    before, rest = rest.split(MARKER, 1)
+    out.append(before)
+    heading = re.match(r'((?:\s|<w:bookmark(?:Start|End)\b[^>]*/>)*)<w:p><w:pPr><w:pStyle w:val="Heading1" ?/>', rest)
+    if not heading:
+        raise SystemExit("FATAL: a back-matter page-break marker is not followed by a Heading1 paragraph")
+    rest = rest[:heading.end()] + "<w:pageBreakBefore/>" + rest[heading.end():]
+out.append(rest)
+document = "".join(out)
+if MARKER in document or document.count("<w:pageBreakBefore/>") < marked:
+    raise SystemExit("FATAL: back-matter page breaks were not applied")
+pieces = [document]
+temporary = docx + ".styled"
+with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as output:
+    for name in names:
+        output.writestr(name, "".join(pieces).encode("utf-8")
+                        if name == "word/document.xml" else blobs[name])
+shutil.move(temporary, docx)
 PYLINK
+  [ $? -eq 0 ] || exit 1
 
-
-# Page count. Preferred path is LibreOffice converting the actual .docx, because that is the
-# document being delivered. Where soffice is absent, fall back to typesetting the same markdown
-# through xelatex at I4R's page geometry — a PROXY, not the real thing, so it is labelled as one.
-PAGE_SRC=""
-PAGES=""
-rm -f "$OUT_PDF" "${OUT_BASE}_proxy.pdf"
-if [ -x "$SOF" ]; then
-  LO_PROFILE=$(mktemp -d "${TMPDIR:-/tmp}/i4r-lo.XXXXXX")
-  "$SOF" --headless -env:UserInstallation="file://$LO_PROFILE" --convert-to pdf \
-    --outdir "$(dirname "$OUT_PDF")" "$OUT_DOCX" >/dev/null 2>&1
+  BUILD_STAGE="libreoffice"
+  # The profile location is passed to LibreOffice as a file:// URL. An audit directory named after
+  # a paper title routinely contains colons and spaces, which are not URL-safe; LibreOffice aborts
+  # (SIGABRT) on such a URL. Keep the throwaway profile in a URL-safe private temp directory and
+  # pass the document and output directory as plain paths, which LibreOffice handles correctly.
+  LO_PROFILE=$(mktemp -d "${TMPDIR:-/tmp}/i4r-lo-profile.XXXXXX") || exit 1
+  "$SOFFICE" --headless -env:UserInstallation="file://$LO_PROFILE" --convert-to pdf \
+    --outdir "$TX" "$TX/document.docx" >/dev/null 2>&1
+  lo_rc=$?
   rm -rf "$LO_PROFILE"
-  PAGES=$(pdfinfo "$OUT_PDF" 2>/dev/null | awk '/Pages/{print $2}')
-  [ -n "$PAGES" ] && PAGE_SRC="docx (LibreOffice)"
+  [ "$lo_rc" -eq 0 ] || exit 1
+  [ -s "$TX/document.pdf" ] || fatal "LibreOffice did not produce the exact PDF"
 fi
-if [ -z "${PAGES:-}" ] && command -v xelatex >/dev/null; then
-  # Match pandoc default reference.docx as closely as xelatex allows. Heading spacing is pinned to the
-  # reference Heading style (12pt before, 0 after) via titlesec: LaTeX default section spacing (~25pt)
-  # inflated the proxy by ~a third of a page over 16 headings, failing documents the real format fits.
-  # The remaining settings keep the proxy conservative rather than optimistic. That reference.docx sets w:sz=24 (12pt body) and
-  # w:spacing w:after="200" (10pt after EVERY paragraph), on Word's default Letter page with 1in
-  # margins. An earlier version of this proxy used 11pt with LaTeX's default indented paragraphs and
-  # no inter-paragraph space, which under-counted pages — the opposite of a safe error.
-  # Font is the remaining gap: the reference uses the minor theme font (Calibri), which is narrower
-  # than any serif installed here, so a serif proxy still runs slightly long on text-heavy pages.
-  "$PANDOC" _full.md -f markdown+pipe_tables --pdf-engine=xelatex \
-    -V geometry:margin=1in -V fontsize=12pt -V mainfont="Arial" \
-    -V indent=false \
-    -V header-includes='\usepackage{etoolbox}\usepackage{titlesec}\setlength{\parskip}{10pt}\setlength{\parindent}{0pt}\AtBeginEnvironment{longtable}{\setlength{\parskip}{0pt}}\titlespacing*{\section}{0pt}{12pt}{0pt}\titlespacing*{\subsection}{0pt}{10pt}{0pt}' \
-    -o "${OUT_BASE}_proxy.pdf" >/dev/null 2>&1
-  PAGES=$(pdfinfo "${OUT_BASE}_proxy.pdf" 2>/dev/null | awk '/Pages/{print $2}')
-  [ -n "$PAGES" ] && PAGE_SRC="xelatex PROXY at reference.docx geometry (12pt, 10pt para spacing) — LibreOffice absent, so the .docx itself is UNMEASURED"
-fi
-echo "built: $OUT_DOCX (${PAGES:-unknown} pages total${PAGE_SRC:+ — $PAGE_SRC})"
-rm -f _full.md _body.md
 
-# The cap counts the BODY only: front matter through the last numbered section. References and
-# appendices start on their own page and are excluded (team decision 2026-08-22), because a
-# comment should not lose a finding to make room for its own bibliography.
-BODY_PAGES=""
-if [ -n "${PAGES:-}" ] && [ -f "$OUT_PDF" ]; then
-BODY_PAGES=$(python3 - "$OUT_PDF" "$PAGES" <<'PYPG'
-import subprocess, sys
-pdf, pages = sys.argv[1], int(sys.argv[2])
-raw = subprocess.run(["pdftotext", "-layout", pdf, "-"], capture_output=True, text=True).stdout
-texts = raw.split("\f")
-first_back = None
-for i in range(1, pages + 1):
-    t = " ".join((texts[i-1] if i-1 < len(texts) else "").split())
-    if t.startswith("References") or t.startswith("Appendix"):
-        first_back = i; break
-print(first_back - 1 if first_back else pages)
-PYPG
+BUILD_STAGE="findings_table_integrity"
+# Fail closed on the exact bytes, rebuilt or restored from the cache, before any manifest can bind
+# them: each DOCX cell of the generated Appendix A table must be its literal source text, and no
+# table word may be broken across lines in the PDF. Build-time only; it is not a manifest
+# validation. A report without the generated table passes before either file is read.
+python3 "$DOCUMENT_RELEASE" findings-table-integrity --report "$SRC" \
+  --docx "$TX/document.docx" --pdf "$TX/document.pdf" \
+  --build-kind "$BUILD_KIND" --diagnostic-out "$TX/failure.json" || exit 1
+
+BUILD_STAGE="validation"
+CREATE_ARGS=(
+  create-manifest --audit "$DIR" --report "$SRC"
+  --front-matter "$DIR/report/front_matter.md" --captions "$DIR/report/captions.txt"
+  --docx "$TX/document.docx" --pdf "$TX/document.pdf"
+  --docx-relative "${OUT_DOCX#$DIR/}" --pdf-relative "${OUT_PDF#$DIR/}"
+  --builder "$SELF" --cache-helper "$CACHE_HELPER"
+  --pandoc-identity "$PANDOC_ID" --renderer-identity "$RENDERER_ID"
+  --pdfinfo-identity "$PDFINFO_ID" --pdftotext-identity "$PDFTOTEXT_ID"
+  --build-kind "$BUILD_KIND" --cap "$CAP"
+  --manifest-out "$TX/document_build_manifest.json" --diagnostic-out "$TX/failure.json"
 )
+python3 "$DOCUMENT_RELEASE" "${CREATE_ARGS[@]}" || exit 1
+
+if [ "$BUILD_KIND" = "canonical" ] && [ "$CACHE_MODE" != "bypass" ] && [ "$CACHE_HIT" -ne 1 ]; then
+  BUILD_STAGE="cache_store"
+  python3 - "$TX/document_build_manifest.json" "$CACHE_METADATA" <<'PYCACHE'
+import json, pathlib, sys
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+value = {
+    "schema_version": manifest["schema_version"],
+    "status": "passed",
+    "build_kind": manifest["build_kind"],
+    "all_validations_passed": manifest["all_validations_passed"],
+    "pages": manifest["pages"],
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
+PYCACHE
+  python3 "$CACHE_HELPER" store --archive "$CACHE_ARCHIVE" --key "$CACHE_KEY" \
+    --descriptor "$CACHE_DESCRIPTOR" --docx "$TX/document.docx" --pdf "$TX/document.pdf" \
+    --metadata "$CACHE_METADATA"
+  CACHE_RC=$?
+  [ "$CACHE_RC" -eq 0 ] ||
+    echo "WARNING: document passed but cache storage failed (exit $CACHE_RC); promotion continues" >&2
 fi
 
-# The abstract must not run onto page 2: it is the first thing an editor reads and it belongs
-# whole on the opening page with the citation block.
-if [ -f "$OUT_PDF" ] && [ -f "$SRC" ]; then
-  python3 - "$OUT_PDF" "$SRC" <<'PYABS'
-import re, subprocess, sys
-pdf, md = sys.argv[1], sys.argv[2]
-s = open(md, encoding="utf-8").read()
-m = re.search(r"^## Abstract\s*\n(.*?)(?=^## )", s, re.S | re.M)
-if m:
-    txt = m.group(1)
-    txt = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", txt)   # links render as their text
-    txt = re.sub(r"[*`_]", "", txt)                          # emphasis markers do not render
-    words = " ".join(txt.split()).split()
-    if len(words) > 8:
-        tail = " ".join(words[-8:]).rstrip(".")
-        p1 = " ".join(subprocess.run(["pdftotext","-f","1","-l","1",pdf,"-"],
-                                     capture_output=True, text=True).stdout.split())
-        # self-test the matcher: a string known to be on page 1 must be found
-        head = " ".join(words[:6])
-        if head not in p1:
-            print("  WARN: could not locate the abstract on page 1 — check the render by eye")
-        elif tail not in p1:
-            print("  FAIL: the abstract runs onto page 2; it must finish on page 1")
-            sys.exit(1)
-        else:
-            print("  ok: the abstract finishes on page 1")
-PYABS
-  [ $? -ne 0 ] && { echo "Shorten the abstract, or tighten the front matter."; exit 1; }
-fi
+BUILD_STAGE="promotion"
+python3 "$DOCUMENT_RELEASE" promote --audit "$DIR" \
+  --manifest-source "$TX/document_build_manifest.json" --manifest-target "$MANIFEST_TARGET" \
+  --docx-source "$TX/document.docx" --docx-target "$OUT_DOCX" \
+  --pdf-source "$TX/document.pdf" --pdf-target "$OUT_PDF" || exit 1
 
-# Hard cap: MAX_PAGES rendered BODY pages (house rule 1). Default 10.
-if [ -z "${PAGES:-}" ]; then
-  echo "WARNING: no PDF page count — the ${MAX_PAGES}-page cap is UNVERIFIED. Convert to PDF and count before release."
-elif [ -n "$BODY_PAGES" ]; then
-  echo "  body pages (front matter through the last numbered section): $BODY_PAGES of ${MAX_PAGES}; back matter $((PAGES - BODY_PAGES)) page(s), uncounted"
-  if [ "$BODY_PAGES" -gt "$MAX_PAGES" ]; then
-    echo "FAIL: $BODY_PAGES body pages — capped at ${MAX_PAGES}."
-    echo "Cut prose, not findings: shrink a finding to two body sentences and move the evidence"
-    echo "detail to LEDGER.md / ADJUDICATION.md, which ship with the package."
-    exit 1
-  fi
-elif [ "$PAGES" -gt "$MAX_PAGES" ]; then
-  echo "FAIL: $PAGES pages — capped at ${MAX_PAGES} (back matter could not be located to exclude it)."
-  exit 1
-fi
-echo ""
-echo "NOW VERIFY: pdftoppm -jpeg -r 85 -f 1 -l 2 $OUT_PDF pg   then read pg-*.jpg"
-echo "Check a page containing a table. Truncated tables mean a caption landed inside one."
-
-# Bind the exact editable source to the exact deliverables. Publication refuses an arbitrary
-# lone PDF even when it happens to be named correctly.
-if [ -f "$OUT_PDF" ]; then
-  write_document_manifest || exit 1
-  if [ "$CACHE_MODE" != "bypass" ] && [ -n "${PAGES:-}" ]; then
-    python3 - "$CACHE_METADATA" "$PAGES" "$BODY_PAGES" "$PAGE_SRC" "$MAX_PAGES" <<'PYCACHEMETA'
-import json,os,pathlib,sys,tempfile
-target=pathlib.Path(sys.argv[1])
-def integer(value): return int(value) if value else None
-value={"status":"passed","pages":integer(sys.argv[2]),"body_pages":integer(sys.argv[3]),
-       "page_source":sys.argv[4] or None,"max_pages":int(sys.argv[5]),"exact_pdf":True}
-fd,tmp=tempfile.mkstemp(prefix=target.name+".",dir=target.parent)
-with os.fdopen(fd,"w",encoding="utf-8") as handle:
-    json.dump(value,handle,sort_keys=True,separators=(",",":")); handle.write("\n")
-    handle.flush(); os.fsync(handle.fileno())
-os.replace(tmp,target)
-PYCACHEMETA
-    python3 "$CACHE_HELPER" store --archive "$CACHE_ARCHIVE" --key "$CACHE_KEY" \
-      --descriptor "$CACHE_DESCRIPTOR" --docx "$OUT_DOCX" --pdf "$OUT_PDF" \
-      --metadata "$CACHE_METADATA"
-    CACHE_RC=$?
-    [ "$CACHE_RC" -eq 0 ] || echo "WARNING: document built successfully but cache storage failed (exit $CACHE_RC)" >&2
-  elif [ "$CACHE_MODE" != "bypass" ]; then
-    echo "WARNING: exact PDF exists but its page gate was unverified; this build was not cached" >&2
-  fi
+if [ "$BUILD_KIND" = "canonical" ]; then
+  BUILD_STAGE="post_promotion_verification"
+  python3 "$DOCUMENT_RELEASE" verify "$DIR" --manifest "$MANIFEST_TARGET" \
+    --builder "$SELF" --boundary build-promotion || exit 1
 else
-  echo "WARNING: no exact PDF was built; document_build_manifest.json was not created. Publication will remain blocked."
+  echo "preview built (NON-RELEASE): $OUT_PDF"
+  echo "  body-page limit: $CAP; manifest: $MANIFEST_TARGET"
 fi
+
+BUILD_OK=1
+if [ "$CACHE_HIT" -eq 1 ]; then
+  echo "built from validated cache: $OUT_DOCX and $OUT_PDF"
+else
+  echo "built and validated: $OUT_DOCX and $OUT_PDF"
+fi
+exit 0

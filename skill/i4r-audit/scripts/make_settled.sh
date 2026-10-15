@@ -21,7 +21,7 @@ if [ "${1:-}" = "--self-test" ]; then
   HC="$(shasum -a 256 "$T/work/reviewer-c.json" | awk '{print $1}')"
   HD="$(shasum -a 256 "$T/work/reviewer-d.json" | awk '{print $1}')"
   cat > "$T/run.json" <<'EOF'
-{"audit_id":"settled-self-test","rounds":[{"round":1,"started_at":"2026-08-27T10:00:00Z","ended_at":"2026-08-27T11:00:00Z","integrated_at":"2026-08-27T12:00:00Z","consistency_check_run":true,"consistency_check_exit":0}]}
+{"schema_version":"2.1.0","normalization":null,"audit_id":"settled-self-test","rounds":[{"round":1,"started_at":"2026-08-27T10:00:00Z","ended_at":"2026-08-27T11:00:00Z","integrated_at":"2026-08-27T12:00:00Z","consistency_check_run":true,"consistency_check_exit":0}]}
 EOF
   cat > "$T/critique/round_1/ROUND_STATUS.json" <<'EOF'
 {"audit_id":"settled-self-test","round":1,"outcome":"complete","exit_code":0,"quorum_met":true,"expected_roles":["stats","data","fairness","completeness"],"completed_roles":["stats","data","fairness","completeness"],"failed_roles":[]}
@@ -50,6 +50,14 @@ for index,(inv,role,role_class,round_no,provider,family,relative) in enumerate(s
       "usage":{"obtainable":True,"input_tokens":10,"output_tokens":5,"cached_input_tokens":0,
                "reasoning_tokens":1,"total_tokens":16,"source":"api_response"},
       "error":None,"error_class":None,"legacy_source":None})
+    if inv == "inv-b":
+      rows[-1].update({"observed_model":None,"served_model":None,
+        "model_source":"declared","identity_assurance":"requested_only",
+        "attempt_kind":"role_inference","provider_request_status":"accepted",
+        "inference_start_status":"started","source_invocation_id":None,
+        "turn_count":1,"provider_cost":None,"model_identity_evidence":None,
+        "usage_by_model":[],"unattributed_usage":rows[-1]["usage"],
+        "provider_duration_seconds":60})
 (root/"invocations.jsonl").write_text("".join(json.dumps(row,sort_keys=True)+"\n" for row in rows))
 PYINV
   cat > "$T/work/findings.jsonl" <<EOF
@@ -98,6 +106,136 @@ PY
     exit 1
   fi
   mv "$T/run.good.json" "$T/run.json"
+  # A claim reworded at the latest integration is not settled on confirmations of the old wording.
+  python3 - "$T/work/findings.jsonl" "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl" <<'PY'
+import json,sys
+rows=[json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+rows[0]["claim"]="N was 12 before the correction"
+open(sys.argv[2],"w").write("".join(json.dumps(row)+"\n" for row in rows))
+PY
+  I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" >/dev/null
+  python3 - "$T/SETTLED.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+assert d["facts"] == [], d["facts"]
+assert any("revised at round 1 integration" in r for r in {x["id"]: x["reasons"] for x in d["rejected"]}["F-ok"])
+PY
+  # ...and a later integration that confirms nothing new does not lift the hold.
+  cp "$T/run.json" "$T/run.good.json"
+  mkdir -p "$T/critique/round_2"
+  cp "$T/work/findings.jsonl" "$T/critique/round_2/FINDINGS_BEFORE_INTEGRATION.jsonl"
+  python3 - "$T/run.json" <<'PY'
+import json,sys
+p=sys.argv[1]; value=json.load(open(p))
+value["rounds"].append({"round":2,"state":"integrated","started_at":"2026-08-27T13:00:00Z",
+                        "ended_at":"2026-08-27T14:00:00Z","integrated_at":"2026-08-27T15:00:00Z"})
+open(p,"w").write(json.dumps(value)+"\n")
+PY
+  I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" >/dev/null 2>&1
+  python3 - "$T/SETTLED.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+assert d["facts"] == [], d["facts"]
+PY
+  mv "$T/run.good.json" "$T/run.json"
+  rm -r "$T/critique/round_2"
+  rm "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl"
+  # A merge that adopts another finding's wording is a rewording: the snapshot's "N is 10" belonged to
+  # F-one, which still holds it, so F-ok's critics never reviewed that text for F-ok.
+  cp "$T/work/findings.jsonl" "$T/work/findings.good.jsonl"
+  python3 - "$T/work/findings.jsonl" "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl" <<'PY'
+import json,sys
+rows=[json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+by={r["id"]:r for r in rows}
+by["F-one"]["claim"]=by["F-ok"]["claim"]
+open(sys.argv[1],"w").write("".join(json.dumps(r)+"\n" for r in rows))
+snap=[dict(r) for r in rows]
+for r in snap:
+    if r["id"]=="F-ok": r["claim"]="N was 9"
+open(sys.argv[2],"w").write("".join(json.dumps(r)+"\n" for r in snap))
+PY
+  I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" >/dev/null 2>&1
+  python3 - "$T/SETTLED.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+assert d["facts"] == [], d["facts"]
+PY
+  mv "$T/work/findings.good.jsonl" "$T/work/findings.jsonl"
+  rm "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl"
+  # An integrated latest round whose snapshot was never copied: a change since round 1's snapshot is
+  # attributed to round 2 (it has an INTEGRATION_SUMMARY), so no round-2 record can settle it.
+  cp "$T/run.json" "$T/run.good.json"
+  mkdir -p "$T/critique/round_2"
+  echo '{"round": 2}' > "$T/critique/round_2/INTEGRATION_SUMMARY.json"
+  python3 - "$T/work/findings.jsonl" "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl" "$T/run.json" <<'PY'
+import json,sys
+rows=[json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+snap=[dict(r) for r in rows]
+snap[0]["claim"]="N was 9"
+open(sys.argv[2],"w").write("".join(json.dumps(r)+"\n" for r in snap))
+value=json.load(open(sys.argv[3]))
+value["rounds"].append({"round":2,"state":"integrated","started_at":"2026-08-27T13:00:00Z",
+                        "ended_at":"2026-08-27T14:00:00Z","integrated_at":"2026-08-27T15:00:00Z"})
+open(sys.argv[3],"w").write(json.dumps(value)+"\n")
+PY
+  I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" 2>"$T/warn.txt" >/dev/null
+  grep -q "round 2 was integrated but has no FINDINGS_BEFORE_INTEGRATION" "$T/warn.txt"
+  python3 - "$T/SETTLED.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+assert d["facts"] == [], d["facts"]
+assert any("revised at round 2 integration" in r for r in {x["id"]: x["reasons"] for x in d["rejected"]}["F-ok"])
+PY
+  mv "$T/run.good.json" "$T/run.json"
+  rm -r "$T/critique/round_2"
+  rm "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl"
+  # Exact mode (integrate_round's backup, no legacy renumber): a wording swapped between two findings
+  # is a rewording, while a renumber recorded in the history is not.
+  cp "$T/work/findings.jsonl" "$T/work/findings.good.jsonl"
+  python3 - "$T/work/findings.jsonl" "$T/work/findings.before_round1_integration.jsonl" <<'PY'
+import json,sys
+rows=[json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+by={r["id"]:r for r in rows}
+snap=[dict(r) for r in rows]
+sb={r["id"]:r for r in snap}
+sb["F-ok"]["claim"], sb["F-one"]["claim"] = by["F-one"]["claim"], by["F-ok"]["claim"]
+open(sys.argv[2],"w").write("".join(json.dumps(r)+"\n" for r in snap))
+PY
+  I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" >/dev/null 2>&1
+  python3 - "$T/SETTLED.json" <<'PY'
+import json,sys
+assert json.load(open(sys.argv[1]))["facts"] == []
+PY
+  python3 - "$T/work/findings.jsonl" "$T/work/findings.before_round1_integration.jsonl" "$T/work/id_map_history.jsonl" <<'PY'
+import json,sys
+rows=[json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+snap=[dict(r) for r in rows]
+snap[0]["id"]="F-moved"
+open(sys.argv[2],"w").write("".join(json.dumps(r)+"\n" for r in snap))
+open(sys.argv[3],"w").write(json.dumps({"map":{"F-moved":rows[0]["id"]},"rounds_run_before_renumber":["round_1"]})+"\n")
+PY
+  I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" >/dev/null
+  python3 - "$T/SETTLED.json" <<'PY'
+import json,sys
+assert [x["id"] for x in json.load(open(sys.argv[1]))["facts"]] == ["F-ok"]
+PY
+  rm "$T/work/findings.before_round1_integration.jsonl" "$T/work/id_map_history.jsonl"
+  mv "$T/work/findings.good.jsonl" "$T/work/findings.jsonl"
+  # A renumber moves ids without rewording anything: a snapshot naming F-ok by another id but with
+  # the same claim text must not hold it.
+  python3 - "$T/work/findings.jsonl" "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl" <<'PY'
+import json,sys
+rows=[json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+rows[0]["id"]="F-moved"
+open(sys.argv[2],"w").write("".join(json.dumps(row)+"\n" for row in rows))
+PY
+  I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" >/dev/null
+  python3 - "$T/SETTLED.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+assert [x["id"] for x in d["facts"]] == ["F-ok"], d["facts"]
+PY
+  rm "$T/critique/round_1/FINDINGS_BEFORE_INTEGRATION.jsonl"
   printf 'tampered reviewer output\n' > "$T/work/reviewer-a.json"
   if I4R_SKIP_FINDING_SCHEMA=1 "$0" "$T" >/dev/null 2>&1; then
     echo "FAIL: changed reviewer evidence record was accepted" >&2
@@ -292,7 +430,129 @@ def load_invocations():
         "records_at_generation": len(rows),
     }
 
-round_gate, round_one_integrated_at = round_one_gate()
+try:
+    round_gate, round_one_integrated_at = round_one_gate()
+except (ValueError, OSError) as exc:
+    # The gate's own checks raise ValueError with the reason; show that reason, not a traceback.
+    print(f"FATAL: Round-1 completion/integration/consistency gate: {exc}"
+          + ("; re-journal it: bash scripts/log_event.sh round_integrated round=1 integrated_at=<the same time with "
+             "Z or an offset>" if "timezone" in str(exc) else ""), file=sys.stderr)
+    sys.exit(1)
+run_metadata_path = safe_regular_file("run.json", "settled identity policy")
+run_metadata = strict_loads(
+    run_metadata_path.read_text(encoding="utf-8"), str(run_metadata_path)
+)
+# Round 0 (Phase 1) is bounded by round 1's integration; every later INTEGRATED critique round is
+# bounded by its own integrated_at, so that round's confirmations are admissible evidence.
+integrated_rounds = {0: round_one_integrated_at, 1: round_one_integrated_at}
+for _row in ((run_metadata.get("rounds") if isinstance(run_metadata, dict) else None) or []):
+    if not isinstance(_row, dict):
+        continue
+    _n, _at = _row.get("round"), _row.get("integrated_at")
+    if isinstance(_n, int) and _n > 1 and _row.get("state") == "integrated" and _at:
+        try:
+            integrated_rounds[_n] = iso_time(_at, f"round {_n} integrated_at")
+        except ValueError as _exc:
+            print(f"FATAL: {_exc}; re-journal it: bash scripts/log_event.sh round_integrated round={_n} "
+                  "integrated_at=<the same time with Z or an offset>", file=sys.stderr)
+            sys.exit(1)
+# A claim reworded at an integration was confirmed in its earlier wording only: it settles once a
+# LATER round confirms the new wording, never on the records that reviewed the old one
+# (adjudication_guide: settled facts rest on records confirming the claim text as published).
+# Rewording is detected by claim TEXT, not id: a withdrawal renumber moves ids between findings
+# without changing any wording, and comparing by id held every moved claim forever. Each integrated
+# round's FINDINGS_BEFORE_INTEGRATION.jsonl is the text its critics reviewed; a text absent from one
+# snapshot and present in the next was introduced at an integration in between (attributed to the
+# latest round it could have been, which is the conservative choice). The final round is not
+# integrated and has no snapshot; any other round missing one is treated as integrated unrecorded.
+latest_round = max(integrated_rounds)
+# A reviewer that called a finding OVERSTATED/REFUTED in a later, never-integrated round (the final clean
+# round) no longer confirms it; a fact resting on it is not settled. One rule, shared with finalize.
+sys.path.insert(0, str(validator_dir))
+import later_disputes
+_disputed_later = later_disputes.later_disputes(ws)
+_invocation_rounds = later_disputes.invocation_rounds(ws)
+_live_claims = {r["id"]: r.get("claim") for r in load_rows(registry)
+                if isinstance(r, dict) and isinstance(r.get("id"), str)}
+_texts = {}          # round -> claim text -> ids holding it in that round's snapshot
+_exact = {}          # round -> ids in _texts are today's ids (translated through the renumber history)
+_unrecorded = []
+_history_path = ws / "work" / "id_map_history.jsonl"
+_history = ([json.loads(line) for line in _history_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            if _history_path.is_file() else None)
+def _map_moves(path):
+    try:
+        return any(k != v for k, v in json.loads(path.read_text(encoding="utf-8")).items())
+    except (OSError, ValueError, AttributeError):
+        return path.is_file()
+# no history but a renumber happened (2.6.3 wrote only work/id_map.json): ids cannot be translated exactly
+_legacy_renumbered = later_disputes.legacy_renumbered(ws)   # one rule for every tool (F<n> moves only)
+for _n in sorted(n for n in integrated_rounds if n >= 1):
+    # integrate_round's write-once backup first: SKILL step 1's copy is overwritten when a round is
+    # re-integrated from step 1, and the withdrawal renumber rewrites it to new ids.
+    _backup = ws / "work" / f"findings.before_round{_n}_integration.jsonl"
+    _copy = ws / "critique" / f"round_{_n}" / "FINDINGS_BEFORE_INTEGRATION.jsonl"
+    _before = next((c for c in (_backup, _copy) if c.is_file() and not c.is_symlink()), None)
+    if _before is None:
+        if (ws / "critique" / f"round_{_n}" / "INTEGRATION_SUMMARY.json").is_file():
+            _unrecorded.append(_n)      # integrated, but no snapshot survives
+        continue                        # else never integrated (the clean final round)
+    _rows = [r for r in load_rows(_before) if isinstance(r, dict)]
+    _exact[_n] = _before == _backup and not _legacy_renumbered
+    if _exact[_n]:
+        _marker = _backup.with_suffix(".invocation")
+        _backup_invocation = _marker.read_text(encoding="utf-8").strip() if _marker.is_file() else None
+        for _entry in (_history or []):
+            _ran = _entry.get("rounds_run_before_renumber") or {}
+            if f"round_{_n}" not in _ran:
+                continue
+            if isinstance(_ran, dict) and _backup_invocation is not None and \
+                    _ran[f"round_{_n}"] != _backup_invocation:
+                continue    # the round ran again after this renumber: its backup already has the new ids
+            _map = _entry.get("map") or {}
+            for r in _rows:
+                r["id"] = _map.get(r.get("id"), r.get("id"))
+    _held = {}
+    for r in _rows:
+        _held.setdefault(r.get("claim"), set()).add(r.get("id"))
+    _texts[_n] = _held
+for _n in _unrecorded:
+    if any(m < _n for m in _texts):
+        print(f"warning: round {_n} was integrated but has no FINDINGS_BEFORE_INTEGRATION.jsonl; claims that "
+              f"changed after the previous snapshot are held until a round after {_n} confirms them",
+              file=sys.stderr)
+    else:
+        print(f"warning: round {_n} was integrated but no earlier snapshot exists, so claims reworded at it "
+              "cannot be detected and are not held", file=sys.stderr)
+_available = sorted(_texts)
+
+def _reviewed(claim, fid, n):
+    """Round n's critics reviewed `claim` for finding `fid`: some snapshot row held that text and is fid,
+    or its id no longer holds that text now (a renumber moved it). A different live finding that still
+    holds the same text is not fid's review (a merge that adopted another finding's wording)."""
+    holders = _texts[n].get(claim, ())
+    if _exact.get(n):
+        return fid in holders
+    return any(h == fid or _live_claims.get(h) != claim for h in holders)
+
+def reworded_round(claim, fid):
+    """The latest integration at which `claim`'s current text can have been introduced, or None."""
+    found = None
+    for _index, _n in enumerate(_available):
+        if _reviewed(claim, fid, _n):
+            continue
+        nxt = _available[_index + 1] if _index + 1 < len(_available) else None
+        if nxt is not None:
+            if _reviewed(claim, fid, nxt):
+                found = max([nxt - 1] + [m for m in _unrecorded if _n < m < nxt])
+        else:
+            found = max([_n] + [m for m in _unrecorded if m > _n])
+    return found
+live_metadata_2_1 = (
+    isinstance(run_metadata, dict)
+    and run_metadata.get("schema_version") == "2.1.0"
+    and not run_metadata.get("normalization")
+)
 
 # The schemas are loaded for both ordinary and I4R_SKIP_FINDING_SCHEMA self-test execution:
 # skipping the finding-row fixture schema must never skip canonical invocation validation.
@@ -302,7 +562,26 @@ import validate_json_schema
 import validate_v2
 invocations, invocation_ledger = load_invocations()
 
-def confirmations(row):
+# Post-fan-out verifier (2.6.4, scripts/verifier_contract.py). Admission is computed once, over
+# the whole ledger, and only when the ledger holds a role_class "verifier" row; without one this
+# block does nothing and every output is byte-identical to 2.6.3.
+verifier_contract = None
+verifier_verdicts, verifier_errors, verifier_phase_one_roles = {}, [], None
+if any(row.get("role_class") == "verifier" for row in invocations.values()):
+    import verifier_contract
+    verifier_verdicts, verifier_errors = verifier_contract.collect_verdicts(ws, list(invocations.values()))
+# A verifier call (round 0) must have finished before the integration that bound it; the latest
+# integration of an integrated round is the bound, since it may bind in any round.
+verifier_bound_round = max(integrated_rounds, key=lambda number: (integrated_rounds[number], number))
+
+def phase_one_roles():
+    global verifier_phase_one_roles
+    if verifier_phase_one_roles is None:
+        verifier_phase_one_roles = verifier_contract.required_roles(
+            verifier_contract.load_snapshot_policy(ws))
+    return verifier_phase_one_roles
+
+def confirmations(row, verifier_notes=None):
     good = []
     for index, value in enumerate(row.get("verifications") or []):
         if not isinstance(value, dict):
@@ -323,21 +602,88 @@ def confirmations(row):
         invocation = invocations.get(invocation_id)
         if invocation is None:
             raise ValueError(f"verification invocation does not exist in invocations.jsonl: {invocation_id}")
+        # A cache replay is bookkeeping, not a second review: it re-serves the bytes an earlier
+        # provider call produced, and records that call in source_invocation_id. Any resume --
+        # a killed Phase 1, a recovered strand, a rerun after a fix -- replays the roles that
+        # already completed, so their reports are legitimately served from cache. Refusing the
+        # replay id made every such audit unsettleable, and the operator's only route was to
+        # hand-rewrite the registry. Follow the pointer to the call that did the work instead;
+        # the bytes are hash-checked below either way.
+        seen_replays = set()
+        while invocation.get("attempt_kind") == "cache_replay":
+            source = invocation.get("source_invocation_id")
+            if not source or source in seen_replays:
+                raise ValueError(
+                    f"verification cites a cache replay with no resolvable source call: {invocation_id}")
+            seen_replays.add(source)
+            invocation = invocations.get(source)
+            if invocation is None:
+                raise ValueError(
+                    f"verification cites a cache replay whose source call is absent from "
+                    f"invocations.jsonl: {source}")
+        # "verifier" is admitted only through its own branch below (receipt-bound record, timing
+        # bound, and a CONFIRMED verdict for this row's current claim text).
+        is_verifier = invocation.get("role_class") == "verifier"
         if (invocation.get("status") != "completed" or invocation.get("provider_call") is not True or
-                invocation.get("role_class") not in {"auditor", "critic", "adjudicator"}):
+                invocation.get("role_class") not in {"auditor", "critic", "adjudicator", "verifier"}):
             raise ValueError(f"verification invocation is not a completed reviewer provider call: {invocation_id}")
+        if is_verifier and verifier_errors:
+            # An inadmissible verifier record, even one on another claim, might hold a REFUTED for
+            # this row's claim text, so a row that cites a verifier cannot be promoted. Only such
+            # rows depend on verifier verdicts: they are rejected with the reason, and every other
+            # fact is still settled (aborting here lost the whole cache over one record).
+            note = "verifier: verifier record is not admissible: " + "; ".join(verifier_errors)
+            if verifier_notes is None:
+                raise ValueError(note.removeprefix("verifier: "))
+            if note not in verifier_notes:
+                verifier_notes.append(note)
+            continue
         if invocation.get("role") != reviewer:
             raise ValueError(f"reviewer_id does not match invocation role for {invocation_id}")
         invocation_family = str(invocation.get("model_family") or "").strip().lower()
         if (str(family).strip().lower() != invocation_family or
                 invocation_family in {"", "unknown", "unavailable"}):
             raise ValueError(f"model_family does not match canonical invocation {invocation_id}")
-        if invocation.get("model_source") != "observed" or not invocation.get("observed_model"):
-            raise ValueError(f"verification invocation lacks observed served-model identity: {invocation_id}")
-        if not isinstance(invocation.get("round"), int) or invocation["round"] not in {0, 1}:
-            raise ValueError(f"verification invocation occurred after Round 1: {invocation_id}")
-        if iso_time(invocation.get("ended_at"), f"{invocation_id}.ended_at") > round_one_integrated_at:
-            raise ValueError(f"verification invocation ended after Round 1 integration: {invocation_id}")
+        served = invocation.get("served_model") or invocation.get("observed_model")
+        if served:
+            if (invocation.get("model_source") != "observed"
+                    or invocation.get("identity_assurance", "observed") != "observed"):
+                raise ValueError(
+                    f"verification invocation has unobserved served-model identity: {invocation_id}"
+                )
+        elif not (
+            live_metadata_2_1
+            and invocation.get("identity_assurance") == "requested_only"
+            and isinstance(invocation.get("requested_model"), str)
+            and invocation["requested_model"].strip()
+            and invocation.get("model_source") in {"declared", "unavailable"}
+        ):
+            raise ValueError(
+                f"verification invocation lacks an honest model-identity disposition: {invocation_id}"
+            )
+        # A reviewer call from any INTEGRATED round may back a settled fact, bounded by that
+        # round's own integration time. Restricting this to round 1 forced later rounds' literal
+        # confirmations of corrected claims to be left unbound (first audit: F8 and F11 were
+        # promoted on round-1 records whose verdicts read OVERSTATED).
+        invocation_round = invocation.get("round")
+        if not isinstance(invocation_round, int) or invocation_round not in integrated_rounds:
+            raise ValueError(
+                f"verification invocation is not from an integrated round: {invocation_id}"
+            )
+        bound = integrated_rounds[invocation_round]
+        if is_verifier:
+            # A verifier call is round 0 but may be bound by any round's integration: it must
+            # have ended no later than the latest integrated round's integration.
+            if (iso_time(invocation.get("ended_at"), f"{invocation_id}.ended_at") >
+                    integrated_rounds[verifier_bound_round]):
+                raise ValueError(
+                    f"verification invocation ended after round {verifier_bound_round} integration, "
+                    f"the latest integration: {invocation_id}"
+                )
+        elif iso_time(invocation.get("ended_at"), f"{invocation_id}.ended_at") > bound:
+            raise ValueError(
+                f"verification invocation ended after round {invocation_round} integration: {invocation_id}"
+            )
         evidence_path = safe_regular_file(relative, f"verification evidence for {invocation_id}")
         actual_hash = sha256(evidence_path)
         if actual_hash != expected_hash:
@@ -345,12 +691,31 @@ def confirmations(row):
         if (invocation.get("output_artifact") != relative or
                 invocation.get("output_sha256") != expected_hash):
             raise ValueError(f"evidence record is not the canonical output of invocation {invocation_id}")
+        if is_verifier:
+            problem = verifier_contract.confirmation_problem(
+                row, str(invocation.get("invocation_id")), phase_one_roles(), verifier_verdicts)
+            if problem:
+                # A well-formed record that does not confirm this claim text does not count; the
+                # row is rejected with the reason rather than aborting every other fact.
+                if verifier_notes is not None:
+                    verifier_notes.append(f"verifier: {problem}")
+                continue
         good.append({
             "reviewer_id": reviewer, "invocation_id": invocation_id,
             "evidence_record": {"path": relative, "sha256": expected_hash},
             "model_family": family, "outcome": outcome,
         })
     return good
+
+def _confirms_new_wording(item, reworded_at):
+    """A record that reviewed the claim's current wording: a critic/adjudicator call of a round after the
+    rewording, or an admitted post-fan-out verifier call (round 0, but confirmations() keeps it only when it
+    returned CONFIRMED for this exact claim text's hash)."""
+    invocation = invocations.get(item["invocation_id"]) or {}
+    if invocation.get("role_class") == "verifier":
+        return True
+    return isinstance(invocation.get("round"), int) and invocation["round"] > reworded_at
+
 
 def evidence_for(row):
     ev = row.get("evidence")
@@ -419,7 +784,20 @@ for row in rows:
         why.append("valid_for_report_hash does not match the current canonical report")
     if (row.get("ledger_disposition") or {}).get("status") != "INCLUDED":
         why.append("finding is not INCLUDED in the final ledger")
-    reviewers = confirmations(row)
+    verifier_notes = []
+    reviewers = confirmations(row, verifier_notes)
+    verifier_at = len(why)
+    _disputing = later_disputes.stale_confirmations(ws, fid, reviewers, _disputed_later, _invocation_rounds)
+    if _disputing:
+        # Excluded, not filtered: a fact's confirmations must equal the registry row's (make_diff_packet's
+        # closed validation), and the registry keeps the record until that round is integrated.
+        why.append(f"{', '.join(_disputing)} confirmed it earlier but called it OVERSTATED/REFUTED in a later, "
+                   "unintegrated round")
+    _reworded = reworded_round(row.get("claim"), fid) if _available else None
+    if _reworded is not None and not any(_confirms_new_wording(item, _reworded) for item in reviewers):
+        why.append(f"claim text was revised at round {_reworded} integration and no later round "
+                   "has confirmed the new wording yet (a later round's literal CONFIRMED verdict is bound "
+                   "by that round's decision rebind_literal_confirmations: true)")
     if len(reviewers) < 2:
         why.append("fewer than two independent confirmations")
     if len({item["reviewer_id"] for item in reviewers}) < 2:
@@ -438,6 +816,11 @@ for row in rows:
     env = deps.get("environment_fingerprint") if isinstance(deps, dict) else None
     if not env:
         why.append("environment fingerprint missing")
+    if verifier_notes:
+        # A confirmed-outcome verifier record that does not count rejects its row, even when the
+        # other records would promote it: a fact must never omit a confirmation its registry row
+        # carries (make_diff_packet.py requires the two to be equal and refuses the whole cache).
+        why[verifier_at:verifier_at] = verifier_notes
     if why:
         rejected.append({"id": fid or "<missing>", "reasons": why})
         continue
@@ -446,6 +829,13 @@ for row in rows:
                   "confirmations": reviewers, "environment_fingerprint": env,
                   "coordinator_approved": True,
                   "valid_for_report_hash": report_sha256})
+    if _reworded is not None:
+        # The family rule still counts records of the earlier wording: only the critics' family reviews
+        # after Phase 1, so requiring two families on the new wording would mean a reworded claim can
+        # never settle. Say so in the fact rather than imply both families saw the published text.
+        facts[-1]["reworded_at_round"] = _reworded
+        facts[-1]["new_wording_confirmed_by_families"] = sorted({
+            item["model_family"] for item in reviewers if _confirms_new_wording(item, _reworded)})
 
 payload = {"schema_version": "2.0.0",
            "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -466,6 +856,10 @@ for fact in sorted(facts, key=lambda x: x["id"]):
     lines += [f"## {fact['id']}: {fact.get('claim') or '(no claim text)'}", ""]
     if fact.get("value") is not None:
         lines += [f"- Value: `{fact['value']}`"]
+    if fact.get("reworded_at_round") is not None:
+        lines += [f"- Reworded at round {fact['reworded_at_round']} integration: the published wording is "
+                  f"confirmed by {', '.join(fact['new_wording_confirmed_by_families'])} only; earlier records "
+                  "reviewed the prior wording."]
     lines += [f"- Environment: `{fact['environment_fingerprint']}`",
               "- Confirmed by: " + ", ".join(
                   f"`{x['reviewer_id']}` ({x['model_family']}; invocation `{x['invocation_id']}`; "

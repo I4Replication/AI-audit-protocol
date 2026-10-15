@@ -226,7 +226,7 @@ Subject Welfare`, `Transfer of Copyright and/or Ownership`), and NISO's removal 
 | `none` | No disclosure defect found. | — |
 | `routine` | Defect is formal; no live exposure. Typical of `licence_absent`. | Normal queue. |
 | `prompt` | Real but not immediate exposure risk; re-identification requires effort or auxiliary data. | Expedite. |
-| `immediate` | Identifiable individuals are exposed in a live public deposit. | **Escalate to the coordinator before the comment is drafted or circulated.** Consistent with removal. Do not publish a worked example that itself demonstrates the re-identification route. |
+| `immediate` | Identifiable individuals are exposed in a live public deposit. | **Report it in the comment** as a disclosure-flagged finding (identifier kind, file and column, rows or participants affected, verified remedy) and in `disclosure.statement`. Filing the comment with I4R is the escalation; drafting, critique and filing are never paused. Consistent with removal. Never publish an identifying value, or a procedure or worked example that demonstrates re-identification. |
 
 ---
 
@@ -360,11 +360,15 @@ Operationally:
 - **`artefact_of_construction` is a statement about the code, not the coder.** It says the
   pipeline entails its output. It does not say anyone arranged that, or knew.
 - **Escalation, not adjudication.** Where auditors believe the artifacts warrant an integrity
-  investigation, they say so to the coordinator through a private channel and it stays out of the
-  comment. Bodies with investigative powers and a right of reply make those findings; the
-  programme supplies observations to them and nothing more.
-- **Field 3 is subject to the same rule.** `ethics_approval_absent` records an absent record. It
-  does not allege that anyone evaded review.
+  investigation, they say so to the coordinator through a private channel and that suspicion stays
+  out of the comment. Bodies with investigative powers and a right of reply make those findings; the
+  programme supplies observations to them and nothing more. The private channel carries suspicions
+  about conduct only. A disclosure (Field 3) defect is an observation about the deposit, so it is
+  always reported in the comment and never routed around it.
+- **Field 3 states observables, never intent.** A disclosure finding names the kind of identifier,
+  the file and column, and the counts, never a value; it does not say why the data were deposited
+  that way. `ethics_approval_absent` records an absent record. It does not allege that anyone evaded
+  review.
 
 ### Rule 4 — Evidence sufficiency
 
@@ -378,7 +382,8 @@ specification or structural argument must be stated explicitly enough to be *dis
 `impact`, `verification_tier`, and `disclosure` are assigned independently, and no value of one
 constrains any value of another. Specifically: a `disclosure` defect never raises `impact` (a
 consent problem is not evidence the result is wrong), and `impact: none` never suppresses a
-disclosure flag. `disclosure.urgency: immediate` routes on its own, outside the impact queue.
+disclosure flag. `disclosure.urgency: immediate` is flagged on its own in the comment and in
+`comment.json`, independent of impact; it is never held back from the comment.
 
 ### Rule 6 — Numerical tolerance
 
@@ -447,7 +452,9 @@ incompatible with the reported data on the face of the paper.
 deposited analysis file also contains a free-text field with participant-supplied descriptions
 including workplace and job title, alongside a five-digit postcode and date of birth, in a public
 repository. → `disclosure.flags: [identifiability_direct, identifiability_indirect]`,
-`urgency: immediate`. Escalated to the coordinator before drafting. Reproducibility and disclosure
+`urgency: immediate`. Reported in the comment as a disclosure-flagged finding naming the file and
+its free-text, postcode and date-of-birth columns with row counts, without any value; filed with
+I4R. Reproducibility and disclosure
 are unrelated here, which is the point of Field 3.
 
 ---

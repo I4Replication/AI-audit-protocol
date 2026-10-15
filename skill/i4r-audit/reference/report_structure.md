@@ -12,7 +12,15 @@ inventory waits in an appendix.
 **Hard cap: 10 rendered pages of BODY** — front matter through the last numbered section.
 References and appendices start on their own page and do **not** count: a comment should never lose a
 finding to make room for its own bibliography. `build_docx.sh` locates the first back-matter page,
-counts everything before it, and exits non-zero above 10 (override with `MAX_PAGES=`).
+counts everything before it, and exits non-zero above 10. The canonical limit comes only from the
+hash-bound audit policy snapshot; `MAX_PAGES` is rejected. To inspect a deliberately longer draft,
+use `--preview-max-pages N`: the result is written below `report/previews/`, marked non-release, and
+cannot enter the document cache, staging tree, finalization receipt, or publication.
+
+Draft toward **nine body pages before Round 2**, leaving one page for adversarial corrections. For
+the 20-finding Fessi regression shape, aim for 2,900--3,200 body words while preserving P1--P20,
+their statuses, impact classes, evidence/remedy bindings, body treatments, and Appendix rows. Put
+extended corroboration and benign-explanation detail in `LEDGER.md` or `ADJUDICATION.md`.
 
 **The abstract must finish on page 1.** It is the first thing an editor reads and it belongs whole on
 the opening page beside the citation block. `build_docx.sh` checks the rendered PDF for this and
@@ -52,7 +60,8 @@ First Author^1^\*, Second^1^, Third^1^
 
 Use the `:::` divs exactly as above and **do not end `front_matter.md` with a `---` rule**. Pandoc
 reads a trailing `---` as the start of a YAML block, swallows the body and fails with a parse error
-pointing at the wrong file. **Keep the `**` bold markers inside the Title div**: `custom-style` only
+pointing at the wrong file. Any trailing line of only `=` or `-` (even `==` or `-`) is refused too:
+Pandoc reads it as a setext underline and turns the byline above it into a heading. **Keep the `**` bold markers inside the Title div**: `custom-style` only
 takes effect on the `.docx` path, so without the inline bold the title renders as body text.
 
 The **Original study** and **Replication package** lines are not optional. They are the first thing an
@@ -71,7 +80,7 @@ editor checks, and they are what makes the comment self-locating when it circula
 | k+1 | Minor issues — discrepancies with no numerical impact, mechanical reproducibility, reporting omissions, cosmetic items | ≤ ½ page |
 | k+2 | Hypotheses tested and not confirmed — tests of the **paper**, never corrections of a draft | ≤ ½ page |
 | k+3. Conclusion | What the audit establishes and what it does not. Two short paragraphs; no new findings | ≤ ¼ page |
-| — | `## Data and Code Availability`, then `## References` — **new page, uncounted** | — |
+| — | `## Data and Code Availability`, then `## References` — **new page, uncounted**. Both protocol citations from `house_citations.md` are mandatory and are checked | — |
 | — | `## Appendix A. Summary of findings` — the numbered findings table, and a deposited-files table where the deposit is large enough to need one. **New page, uncounted** | — |
 
 **There is no Recommendations section** (team decision 2026-08-22). Every finding already carries a
@@ -96,9 +105,25 @@ replicator can key the claims script to it. **It must never appear in the body o
 `report/APPENDIX_A.md` from `work/findings.jsonl`. Replace the Appendix A block in `REPORT_final.md`
 with that generated text; do not maintain a second hand-written table.
 
+`build_docx.sh` renders the generated table literally and sets its column widths; the Markdown
+source keeps its bytes. In the converter input it escapes every character pandoc would read as
+markup in the table's cells, so `*`, `_`, `$`, `<`, `~`, `^`, backticks, brackets and quotes print
+as the registry holds them (quotes print straight). Typography still applies as in body text:
+`--`, `---` and `...` print as an en dash, an em dash and an ellipsis, and `§4` prints as
+`Section 4`. The column widths keep `CONFIRMED`, `SPECULATIVE`, two-digit numbers and a Section
+cell such as `Section 10.2` on one line. The build refuses a document whose DOCX cell differs from
+the claim text or whose PDF breaks a table word across lines. So write each claim as plain text,
+and never edit a claim to change how it renders: the verifier's records are bound to the exact
+claim text.
+
 Where the deposit is large or its structure is itself a finding, a second appendix table lists one
 row per deposited object: File · Role (data / code / output) · Issue ("—" if none). Aggregate uncited
 files into one closing row with a count. Never place a participant identifier and a date on one row.
+
+Release staging (check 3c, `scripts/check_deposit_values.py`) refuses any staged text that
+reproduces a value from the deposit's name, e-mail, birth-date, IP, address or phone columns, or
+any other e-mail, IPv4 or IPv6 address, so name an identifier by kind, file, column and count, never by
+its value.
 
 ## Per-finding template (§3…k)
 
@@ -108,6 +133,19 @@ files into one closing row with a count. Never place a participant identifier an
 
 Name a benign explanation only when a plausible one exists, in one sentence stating how it was ruled
 out; the full list lives in the ledger.
+
+## Disclosure findings
+
+Personal data in the deposit is reported in the comment, never withheld, deferred or moved to a
+private channel. Each disclosure-flagged finding gets a normal numbered section (a Minor-issues entry
+when its urgency is `routine`) and an Appendix A row. **What** names the identifier kind, the
+package-relative file and column, and the rows or participants affected, or the directory and a
+file count when file names are themselves participant codes. **Evidence** names a count or presence
+script that prints no value. **Impact** is usually "None." on the paper's conclusions, because
+disclosure is orthogonal to impact. **Remedy** is the verified deposit change: drop or coarsen the
+column, then replace the file through the repository. Never write an identifying value, a new
+linkage such as a code beside a date, or a procedure for re-identifying anyone, and keep study dates
+and clock times off any line that mentions participants.
 
 ## Objectivity
 

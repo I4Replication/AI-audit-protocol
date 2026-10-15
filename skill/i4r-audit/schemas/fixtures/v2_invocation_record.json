@@ -11,6 +11,9 @@
   "session_id": "session-example-1",
   "requested_model": "model-alias",
   "observed_model": "provider-model-version",
+  "observed_model_ids": [
+    "provider-model-version"
+  ],
   "model_family": "family-a",
   "model_source": "observed",
   "reasoning_effort": "high",

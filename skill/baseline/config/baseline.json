@@ -1,0 +1,67 @@
+{
+ "schema_version": "i4r-baseline-config-1",
+ "condition": "single_agent_single_pass",
+ "model": {
+  "requested_model": "sonnet-5-5",
+  "reasoning_effort": "xhigh"
+ },
+ "limits": {
+  "timeout_seconds": 7200,
+  "max_budget_usd": "30",
+  "note": "budget per call, enforced by the CLI; a retry happens only when no inference started"
+ },
+ "retries_on_transient": 1,
+ "subset": {
+  "n": 25,
+  "seed": 20261009,
+  "pool": "shipped",
+  "stratify": "proportional",
+  "pools": {
+   "shipped": {
+    "claude_model": "Sonnet 5.5",
+    "claude_effort": [
+     "xhigh"
+    ],
+    "critic_model": [
+     "GPT-6.1 Sol"
+    ],
+    "note": "the shipped full-pipeline condition: Sonnet 5.5 at xhigh with GPT-6.1 Sol critics"
+   },
+   "sonnet55-xhigh": {
+    "claude_model": "Sonnet 5.5",
+    "claude_effort": [
+     "xhigh"
+    ],
+    "critic_model": [
+     "GPT-6.1 Sol",
+     "GPT-5.6 Terra"
+    ],
+    "note": "Sonnet 5.5 at xhigh, either critic model"
+   },
+   "sonnet55": {
+    "claude_model": "Sonnet 5.5",
+    "claude_effort": [
+     "xhigh",
+     "max"
+    ],
+    "critic_model": [
+     "GPT-6.1 Sol",
+     "GPT-5.6 Terra"
+    ],
+    "note": "every Sonnet 5.5 audit, either effort and critic model"
+   }
+  },
+  "stratify_by": "code_present"
+ },
+ "work_root": "~/.i4r_baseline_work",
+ "output_dir": "baseline_comments",
+ "source_pipeline": "i4r-audit 2.7.7 (reference files and launch contract copied from it)",
+ "extra_deny_read": [],
+ "cache_write_usd_per_mtok": {
+  "claude-sonnet-5-5": {
+   "5m": 2.5,
+   "1h": 4.0
+  },
+  "note": "Sonnet 5.5 cache-write prices, USD per million tokens: one price list (input 2, 5-minute write 2.50, 1-hour write 4.00, cache read 0.20, output 10) fits the baseline's and the full run's envelopes for 20261009-audit-114a0825 with zero residual (2026-10-10). Used only to put both sides on a 1-hour cache price in summarize_baseline.py."
+ }
+}

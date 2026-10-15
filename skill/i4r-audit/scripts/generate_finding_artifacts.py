@@ -12,6 +12,7 @@ import os
 import pathlib
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -187,7 +188,7 @@ def comment_projection(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def ensure_final_invariants(rows: list[dict[str, Any]], root: pathlib.Path) -> list[dict[str, Any]]:
+def ensure_final_invariants(rows: list[dict[str, Any]], root: pathlib.Path, quiet: bool = False) -> list[dict[str, Any]]:
     final = [
         r for r in rows
         if r.get("status") in FINAL_STATUSES
@@ -196,8 +197,27 @@ def ensure_final_invariants(rows: list[dict[str, Any]], root: pathlib.Path) -> l
     ]
     final.sort(key=number)
     nums = [number(r) for r in final]
+    # Every INCLUDED row, approved or not: a withdrawal gap below an unapproved finding otherwise surfaces only
+    # rounds later, once that finding is approved. Draft ids (before the round-1 renumber) are exempt.
+    # Once every INCLUDED id is final, contiguity is a property of the INCLUDED rows: an approval deferred to a
+    # later round (integrate_round's remedy) leaves a hole among the APPROVED ones that is not a withdrawal gap,
+    # and finalize refuses a stop while any INCLUDED finding is still unapproved.
+    included = [r.get("id") for r in rows if (r.get("ledger_disposition") or {}).get("status") == "INCLUDED"]
+    if included and all(re.fullmatch(r"F[1-9][0-9]*", str(i)) for i in included):
+        nums = sorted(int(str(i)[1:]) for i in included)
+    approved_nums = [number(r) for r in final]
+    if not quiet and nums == list(range(1, len(nums) + 1)) and approved_nums != list(range(1, len(approved_nums) + 1)):
+        pending = sorted(set(nums) - set(approved_nums))
+        print(f"note: INCLUDED finding(s) {['F%d' % n for n in pending]} are not yet approved, so the projection "
+              f"numbers the approved ones {['F%d' % n for n in approved_nums]} with a gap; approve or withdraw them "
+              "before the stop (finalize refuses target_complete/converged, and a cap_with_unresolved or aborted "
+              "release would ship the gap)", file=sys.stderr)
     if nums != list(range(1, len(nums) + 1)):
-        raise SystemExit(f"final finding IDs must be contiguous F1..F{len(nums)}; observed {nums}")
+        raise SystemExit(
+            f"final finding IDs must be contiguous F1..F{len(nums)}; observed {nums}. A finding withdrawn at "
+            "integration leaves this gap: remove its report marker, then run renumber_findings.py --apply with "
+            "--also for that round's REPORT_/FINDINGS_BEFORE_INTEGRATION snapshots and report/ADJUDICATION.md "
+            "(every round's RESPONSE_notes.md is rewritten automatically; INSTALL.md, 'Renumbering').")
     seen: set[str] = set()
     for row in final:
         if row["id"] in seen:
@@ -239,9 +259,12 @@ def render(all_rows: list[dict[str, Any]], final_rows: list[dict[str, Any]]) -> 
               "Do not edit this projection; edit the canonical JSONL registry and regenerate.", "",
               "| ID | Disposition | Status | Finding | Impact | Evidence | Remedy | Verification |",
               "|---|---|---|---|---|---|---|---|"]
+    # Pipe-table separator dash counts set the relative column widths when the table wraps
+    # (pandoc); the Finding column carries the text, so it takes most of the width. The header
+    # follows reference/report_structure.md (Status).
     appendix = ["## Appendix A. Summary of findings", "",
-                "| # | Finding | Confidence | Changes a published conclusion? | Section |",
-                "|---:|---|---|:---:|---|"]
+                "| # | Finding | Status | Changes a published conclusion? | Section |",
+                "|---:|" + "-" * 64 + "|" + "-" * 12 + "|:" + "-" * 10 + ":|" + "-" * 10 + "|"]
     buf = io.StringIO(); writer = csv.writer(buf, delimiter="\t", lineterminator="\n")
     plan: list[dict[str, Any]] = []
     claim_tags = ["<!-- I4R-GENERATED-CLAIM-TAGS:START -->",
@@ -291,6 +314,41 @@ def render(all_rows: list[dict[str, Any]], final_rows: list[dict[str, Any]]) -> 
             "settled_candidates": json.dumps(settled_candidates, indent=2) + "\n"}
 
 
+def _called_functions(source: pathlib.Path) -> set[str] | None:
+    """Function names the R parser sees called in `source`, or None when R cannot answer.
+
+    Asking R's own parser is the only exact way to tell a real call from one in a comment or a
+    string (raw strings r"(...)" included); a regex over the text cannot. None (no Rscript, a
+    timeout, or a parse error that the notebook render will report anyway) falls back to the
+    text heuristic.
+    """
+    rscript = shutil.which("Rscript")
+    if not rscript:
+        return None
+    code = ('p <- tryCatch(parse(file = commandArgs(TRUE)[1], keep.source = TRUE), error = function(e) NULL); '
+            'if (is.null(p)) quit(status = 3); d <- utils::getParseData(p); '
+            'cat(unique(d$text[d$token == "SYMBOL_FUNCTION_CALL"]), sep = "\\n")')
+    try:
+        # Own process group, so a timeout kills Rscript's children too, not just the launcher.
+        proc = subprocess.Popen([rscript, "--vanilla", "-e", code, str(source)],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                start_new_session=True)
+    except OSError:
+        return None
+    try:
+        stdout, _ = proc.communicate(timeout=60)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        proc.communicate()
+        return None
+    if proc.returncode != 0:
+        return None
+    return {line.strip() for line in stdout.splitlines() if line.strip()}
+
+
 def prepare_snippets(rows: list[dict[str, Any]], root: pathlib.Path) -> dict[str, str]:
     prepared: dict[str, str] = {}
     for row in rows:
@@ -308,7 +366,52 @@ def prepare_snippets(rows: list[dict[str, Any]], root: pathlib.Path) -> dict[str
             except ValueError as exc:
                 raise SystemExit(f"{row['id']}: snippet path escapes audit directory: {path}") from exc
             if not source.is_file(): raise SystemExit(f"{row['id']}: snippet file missing: {path}")
+            # make_verification_notebook.sh inlines every executable snippet into an R chunk.
+            # Silently relabelling Python/Stata/etc. as C-N.R produces a notebook that can only
+            # fail at render time and makes the generated claims map misstate the language.
+            # Fail at projection until the registry carries an explicit language and the
+            # notebook has a corresponding execution contract.
+            if source.suffix.lower() != ".r":
+                raise SystemExit(
+                    f"{row['id']}: code verification snippet must be R source because the "
+                    f"generated notebook executes it in an R chunk: {path}"
+                )
             content = source.read_text(encoding="utf-8")
+            # The file is copied verbatim over verification_snippets/C-N.R on every --apply, and
+            # the notebook records an outcome only through expect()/check(). A print-only script
+            # otherwise surfaces three steps later as "claim chunk produced no outcome".
+            calls = _called_functions(source)
+            if calls is None:
+                # No R parser available: drop comments and string contents as a best effort, so
+                # neither a commented-out call nor a call named inside a string counts.
+                live = re.sub(r'[rR](["\'])(-*)\(.*?\)\2\1'   # raw strings: the closing bracket
+                              r'|[rR](["\'])(-*)\[.*?\]\4\3'   # must match the opening one:
+                              r'|[rR](["\'])(-*)\{.*?\}\6\5'   # r"(...)", r"[...]", r"-{...}-"
+                              r'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|(#[^\n]*)',
+                              lambda m: "" if m.group(7) else '""', content, flags=re.S)
+                calls = {name for name in ("expect", "check") if re.search(rf"\b{name}\s*\(", live)}
+            if not {"expect", "check"} <= calls:
+                raise SystemExit(
+                    f"{row['id']}: code verification snippet {path} has no expect(...) and check(...) "
+                    f"calls; the notebook would record no outcome. Write it in the notebook's "
+                    f"expect()/check() form (see reference/verification_guide.md). Edit {path}, not "
+                    f"verification_snippets/{name}, which is regenerated from it on every --apply."
+                )
+            own = f"C-{number(row)}"
+            # Comments dropped, string literals kept (the ids ARE strings): a comment that mentions an
+            # old id records nothing and must not be refused.
+            uncommented = re.sub(r'[rR](["\'])(-*)[(\[{].*?[)\]}]\2\1|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|(#[^\n]*)',
+                                 lambda m: "" if m.group(3) else m.group(0), content, flags=re.S)
+            stale = sorted({m.group(3) for m in re.finditer(
+                r"\b(expect|check|judgement|unverifiable)\s*\(\s*(?:id\s*=\s*)?([\"'])(C-[^\"']*)\2", uncommented)
+                if m.group(3) != own})
+            if stale:
+                # After a renumber the source still names the finding's old claim id; the notebook would
+                # fail it later with no file named, and editing the generated copy only defers the refusal.
+                raise SystemExit(
+                    f"{row['id']}: code verification snippet {path} records outcomes under {', '.join(stale)}, "
+                    f"but this finding is {own}. Change those expect()/check() ids to \"{own}\" in {path}, "
+                    f"then re-run generate_finding_artifacts.py --apply.")
         else:
             if not isinstance(basis, str) or not basis.strip():
                 raise SystemExit(f"{row['id']}: judgement/unverifiable snippet needs a basis")
@@ -336,6 +439,33 @@ def inject_report(report: str, appendix: str, claim_tags: str) -> str:
     report = (report[:appendix_start.start()].rstrip() + "\n\n" + claim_tags.rstrip() +
               "\n\n" + report[appendix_start.start():].lstrip())
     return report.rstrip() + "\n"
+
+
+CLAIM_HEADER=re.compile(r"\bCLAIM\s+([1-9][0-9]*)\s+\[")
+
+
+def parse_claim_numbers(text: str) -> list[int]:
+    return [int(value) for value in CLAIM_HEADER.findall(text)]
+
+
+def check_claims_join(claim_numbers: list[int], expected_numbers: list[int]) -> None:
+    """Every finding claimed exactly once, no claim invented, none duplicated.
+
+    A PERMUTATION check, not an ordering one. make_claims_script.sh emits every claim it can
+    execute in order and then an explicit no-code tail for claims verified by inspection --
+    which SKILL.md states as the required shape. Demanding strict ascending order contradicted
+    that and failed any audit carrying a judgement or unverifiable claim; the first production
+    audit's own claims script is [1,2,3,5,6,7,8,10,11,12,13,14,16,17,4,9,15]. Ordering here is
+    presentational.
+    """
+    if sorted(claim_numbers) == expected_numbers:
+        return
+    missing=[n for n in expected_numbers if n not in claim_numbers]
+    extra=[n for n in claim_numbers if n not in expected_numbers]
+    duplicated=sorted({n for n in claim_numbers if claim_numbers.count(n) > 1})
+    raise SystemExit(
+        "claims script does not join findings exactly: "
+        f"missing={missing} unexpected={extra} duplicated={duplicated} observed={claim_numbers}")
 
 
 def safe_target(root: pathlib.Path, relative: str) -> pathlib.Path:
@@ -396,6 +526,15 @@ def apply_transaction(root: pathlib.Path, registry: pathlib.Path, rendered: dict
     comment_path = root / "comment.json"
     if not report_path.is_file() or not comment_path.is_file():
         raise SystemExit("--apply requires report/REPORT_final.md and comment.json")
+    if not final:
+        # Before critique every row is unapproved. Applying here would replace the drafted Appendix A in
+        # REPORT_final.md with an empty table and strip every claim tag, while critics may be
+        # reviewing that very file. Preview without --apply until at least one row is approved.
+        raise SystemExit(
+            "--apply refused: no coordinator-approved INCLUDED row is final, so the projection "
+            "would rewrite REPORT_final.md with an empty Appendix A. Run without --apply to "
+            "preview work/generated/, and apply after Round 1 integration approves rows."
+        )
     try:
         comment = strict_json_text(comment_path.read_text(), str(comment_path))
     except (json.JSONDecodeError, ValueError) as exc:
@@ -438,10 +577,14 @@ def apply_transaction(root: pathlib.Path, registry: pathlib.Path, rendered: dict
         for relative, content in contents.items(): atomic_text(root / relative, content)
         for name, content in snippets.items(): atomic_text(root / "verification_snippets" / name, content)
 
-        subprocess.run(["bash", str(here / "scripts/make_verification_notebook.sh"), str(root)],
-                       check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        subprocess.run(["bash", str(here / "scripts/make_claims_script.sh"), str(root)],
-                       check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for helper_script in ("make_verification_notebook.sh", "make_claims_script.sh"):
+            child = subprocess.run(["bash", str(here / "scripts" / helper_script), str(root)],
+                                   text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if child.returncode:
+                # Surface the child's own diagnostics; a bare CalledProcessError hid the cause of
+                # the first production audit's projection rollback.
+                tail = "\n".join((child.stdout or "").strip().splitlines()[-12:])
+                raise RuntimeError(f"{helper_script} exited {child.returncode}:\n{tail}")
         claim_files = [path for path in root.glob("claims_script.*") if path.is_file()]
         if len(claim_files) != 1 or not (root / "verification.Rmd").is_file():
             raise RuntimeError("notebook/claims assembly did not produce its exact output quorum")
@@ -473,7 +616,15 @@ def check_projection(root: pathlib.Path, registry: pathlib.Path, rendered: dict[
     expected_registry = str(registry.resolve().relative_to(root))
     if ((manifest.get("registry") or {}).get("path") != expected_registry or
             (manifest.get("registry") or {}).get("sha256") != file_sha256(registry)):
-        raise SystemExit("finding projection manifest does not match the canonical registry")
+        raise SystemExit(
+            "finding projection manifest does not match the canonical registry.\n"
+            "  work/findings.jsonl has changed since the projection was written. The usual cause\n"
+            "  is approve_settled.py, which binds the current report hash into each row's\n"
+            "  `settled` object AFTER the projection ran (make_settled.sh only reads the registry).\n"
+            "  Re-run the chain (the projection can change the report, which re-binds the settled cache):\n"
+            "      approve_settled.py -> generate_finding_artifacts.py --apply -> approve_settled.py -> "
+            "generate_finding_artifacts.py --apply -> make_settled.sh -> re-log settled -> "
+            "make_diff_packet.py --round N -> run_post_delta_gates.py --round N (then stage, if a release is due)")
     finding_ids = [row["id"] for row in final]
     if manifest.get("finding_ids") != finding_ids:
         raise SystemExit("finding projection manifest has stale or reordered finding IDs")
@@ -502,14 +653,17 @@ def check_projection(root: pathlib.Path, registry: pathlib.Path, rendered: dict[
         raise SystemExit("verification snippet quorum diverges from the canonical registry")
     for name, expected in snippets.items():
         path=safe_target(root,f"verification_snippets/{name}")
-        if path.read_text() != expected: raise SystemExit(f"verification snippet is stale: {name}")
+        if path.read_text() != expected:
+            raise SystemExit(
+                f"verification snippet is stale: verification_snippets/{name} differs from what the projection "
+                "writes. That file is regenerated: edit the source named by the row's verification_snippet.path, "
+                "then run generate_finding_artifacts.py --apply (and rebuild the notebook).")
 
     claims=[path for path in root.glob("claims_script.*") if path.is_file()]
     if len(claims) != 1: raise SystemExit(f"expected exactly one generated claims script, found {len(claims)}")
-    claim_numbers=[int(value) for value in re.findall(r"\bCLAIM\s+([1-9][0-9]*)\s+\[", claims[0].read_text(errors="replace"))]
-    expected_numbers=list(range(1,len(final)+1))
-    if claim_numbers != expected_numbers:
-        raise SystemExit(f"claims script does not join findings exactly: {claim_numbers}")
+    claim_numbers=parse_claim_numbers(claims[0].read_text(errors="replace"))
+    expected_numbers=[number(r) for r in final]   # the approved findings' own numbers (a deferred approval leaves a hole)
+    check_claims_join(claim_numbers, expected_numbers)
     notebook=root/"verification.Rmd"
     if not notebook.is_file(): raise SystemExit("generated verification.Rmd is missing")
     notebook_text=notebook.read_text()
@@ -563,7 +717,13 @@ def check_projection(root: pathlib.Path, registry: pathlib.Path, rendered: dict[
     for relative, expected_hash in artifact_map.items():
         path=safe_target(root,relative)
         if not path.is_file() or file_sha256(path) != expected_hash:
-            raise SystemExit(f"projection manifest hash is stale: {relative}")
+            raise SystemExit(
+                f"projection manifest hash is stale: {relative}\n"
+                "  This file changed after the projection was written. Re-run it, and note the\n"
+                "  order the rest of the chain needs: approve_settled.py (binds the CURRENT report\n"
+                "  hash) -> --apply -> approve_settled.py -> --apply (approve, project, approve, project)\n"
+                "  -> make_settled.sh -> re-log the settled event -> stage.\n"
+                "      python3 scripts/generate_finding_artifacts.py \"$AUDIT_DIR\" --apply")
 
 
 def main() -> int:
@@ -588,6 +748,22 @@ def main() -> int:
         raise SystemExit("findings registry must be inside the audit directory") from exc
     rows = load_rows(registry); validate_rows(rows, schema)
     final = ensure_final_invariants(rows, root); rendered = render(rows, final)
+    # every INCLUDED finding keeps its marker in the report (the coordinator contract), and no other marker
+    # appears; an ordinary edit that dropped one otherwise surfaced only at the next renumber
+    report_path = root / "report/REPORT_final.md"
+    included_ids = [r.get("id") for r in rows if (r.get("ledger_disposition") or {}).get("status") == "INCLUDED"]
+    if (args.apply or args.check) and report_path.is_file() and included_ids \
+            and all(re.fullmatch(r"F[1-9][0-9]*", str(i)) for i in included_ids):
+        markers = re.findall(r"<!--\s*finding:(\S+?)\s*-->", report_path.read_text(encoding="utf-8"))
+        # only a report that uses markers (older audits and some fixtures carry none)
+        if markers and (sorted(set(markers)) != sorted(set(included_ids)) or len(markers) != len(set(markers))):
+            missing = sorted(set(included_ids) - set(markers), key=lambda i: int(i[1:]))
+            extra = sorted(set(markers) - set(included_ids))
+            repeated = sorted({m for m in markers if markers.count(m) > 1})
+            raise SystemExit(
+                f"report/REPORT_final.md finding markers do not match the INCLUDED findings: missing {missing}, "
+                f"not INCLUDED {extra}, repeated {repeated}. Restore each missing <!-- finding:ID --> marker at its "
+                "claim (a withdrawn finding's marker is removed and the ids renumbered, INSTALL.md 'Renumbering')")
     snippets = prepare_snippets(final, root)
     destination = root if args.apply or args.check else root / "work/generated"
     paths = {
