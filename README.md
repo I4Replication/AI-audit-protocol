@@ -5,7 +5,6 @@
 
 This repository holds:
 - the skill, `skill/i4r-audit` (version 2.7.7);
-- the protocol paper that specifies it, `paper/`;
 - a single-agent baseline used to evaluate it, `skill/baseline` (version 1.1.0).
 
 ## How it works
@@ -117,7 +116,6 @@ rounds and the verification notebook.
   upgrade notes.
 - [`GUIDE.md`](GUIDE.md): a detailed guide to the pipeline, its outputs, its safety gates and its code.
 - [`CHEATSHEET.pdf`](CHEATSHEET.pdf): the operator's cheat sheet.
-- [`paper/`](paper/): the protocol specification.
 
 ## The baseline
 

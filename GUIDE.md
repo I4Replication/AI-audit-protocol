@@ -29,7 +29,6 @@ cheat sheet (which itself says `INSTALL.md` wins).
 
 | Path | What it is |
 |---|---|
-| `paper/` | *A Protocol for AI-Assisted Reproducibility Auditing: Specification and Empirical Agenda*: the Markdown source and the built PDF |
 | `skill/i4r-audit/` | The audit skill. Five parallel auditors feed an adjudication with a dispositioned ledger. A second model family then runs adversarial critique rounds. The audit ends in a gated release with a verification notebook and a numbered claims script |
 | `skill/baseline/` | The baseline. One Claude call per paper audits it and writes the whole comment, from the same inputs the pipeline's auditors received. It has no critics and no rounds ([§9](#9-the-baseline-skill)) |
 | `CHEATSHEET.html`, `CHEATSHEET.pdf` | The operator's cheat sheet, byte-identical to the copies in `skill/i4r-audit/`. Its header still reads 2.6.2, but its install step and models are 2.7.x |
