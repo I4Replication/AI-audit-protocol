@@ -796,7 +796,7 @@ and lower round cap have all been replaced.
 
 ### Status
 
-**Private for now.** The files in this repository do not name the papers that were audited or their authors. Earlier commits in its history do, so rewrite the history (or start a new repository from the current files) before making it public.
+Neither the files in this repository nor its commit history name the papers that were audited or their authors.
 
 ### How to cite
 
