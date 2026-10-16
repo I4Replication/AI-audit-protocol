@@ -1,7 +1,7 @@
 # Shared output contract. Rendered into BOTH the critic prompts and the targeted-adjudicator
 # prompt. {{INVENTORY}} is substituted with the evidence-inventory path for THAT role's
 # snapshot layout: critics get source/context/EVIDENCE_HASHES.json, the targeted adjudicator
-# gets source/EVIDENCE_HASHES.json. Round 2 of the second production audit died because this
+# gets source/EVIDENCE_HASHES.json. Round 2 of audit A38 died because this
 # block existed only in common.txt, which is never rendered into the adjudicator prompt --
 # so the adjudicator was graded by the full critic validator while being shown none of it.
 Return exactly one v2 JSON object as your final response: no Markdown fence, preamble, or file writes.

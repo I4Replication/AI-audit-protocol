@@ -5,7 +5,7 @@ CLI prints no result envelope, ``parse_result`` then raised ``run_coordinator.Co
 ``run_process`` did not catch, so no status or terminal row was written. ``--recover-stranded`` then closed it as a
 request the provider never accepted, and two such closes refused the role for good
 (``maximum_pre_inference_retryable_rejections_per_role``), although both calls had run for the full timeout. On
-the Goepp et al. audit (20260930-audit-2b59fd0d) that stopped four of five Sonnet 5.5 auditors after two dispatches.
+audit A19 that stopped four of five Sonnet 5.5 auditors after two dispatches.
 
 * ``TimeoutAccounting`` -- with a fake CLI that hangs past a two-second timeout, ``run_process`` returns, and the
   runner's own failure path writes the terminal row: a call that wrote into its output workspace is a started,

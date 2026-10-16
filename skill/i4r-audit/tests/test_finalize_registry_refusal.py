@@ -1,6 +1,6 @@
 """finalize_run.sh must not file into the skill-local registry in production (2.4.11).
 
-The fallback was announced but taken. On the seventh production audit, run from a stale copy,
+The fallback was announced but taken. On audit A28, run from a stale copy,
 the announcement scrolled past and the row landed in the skill checkout; re-filing and moving
 the Completed-reports set aside were done by hand. Outside a fixture the fallback is a refusal.
 """

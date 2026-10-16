@@ -17,8 +17,8 @@ the audit's model.
 
 Why this exists: an audit's critic route is frozen in its pipeline-policy.snapshot.json at
 init_run.sh, and the critique driver refuses any other route. On 2026-09-23 a teammate's audit
-was pinned to gpt-6-sol, which her ChatGPT account cannot use, and nothing in the skill could
-change the pin without hand-editing hash-bound files -- which she correctly refused to do.
+was pinned to gpt-6-sol, which the teammate's ChatGPT account cannot use, and nothing in the skill could
+change the pin without hand-editing hash-bound files -- which the teammate correctly refused to do.
 
 What it does, and what it refuses:
   * refuses once any critic or adjudicator review has COMPLETED, or any round has reached quorum

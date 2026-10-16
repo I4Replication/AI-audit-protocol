@@ -1,6 +1,6 @@
 """2.6.4: a finding raised after fan-out is confirmed by the packaged verifier, end to end.
 
-The Neudorfer incident (20260923-audit-3309cfcf). Three article-text findings (F13-F15) that the
+The incident of audit A23. Three article-text findings (F13-F15) that the
 operator raised at coordinator time, and that every critic confirmed, were excluded: a registry row
 needs a family-A (Claude) confirmation, and before 2.6.4 only the Phase-1 auditor that raised a row
 could give one. The hand-made verification records the operator tried were refused one gate after
@@ -77,10 +77,10 @@ AUDITORS = {
     "auditor_privacy_archive": "report/05_privacy_archive.md",
 }
 CRITICS = ("stats", "data", "fairness", "completeness")
-F13_CLAIM = ("Table 2 of the article reports a mean bias of 3.1 bpm for the wrist sensor, but the "
-             "Results text states 1.3 bpm for the same comparison.")
-EDITED_CLAIM = ("Table 2 of the article reports a mean bias of 3.1 bpm for the wrist sensor, while "
-                "the Results text states 1.3 bpm.")
+F13_CLAIM = ("Table 2 of the article reports a mean bias of 2.4 bpm for device A, but the "
+             "Results text states 1.6 bpm for the same comparison.")
+EDITED_CLAIM = ("Table 2 of the article reports a mean bias of 2.4 bpm for device A, while "
+                "the Results text states 1.6 bpm.")
 OTHER_CLAIM = "The article's abstract reports n = 40 participants but Table 1 lists 38."
 
 T_INIT = "2026-08-27T08:00:00Z"
@@ -269,13 +269,13 @@ def build_template(root: pathlib.Path, *, legacy_rows: bool = False, operator_id
     """Everything up to the end of the round-1 critic quorum; no verifier, no integration.
 
     ``operator_id`` is the operator row's draft id: F13, or a pre-renumbering id such as OPR-N1
-    (the Neudorfer draft ids), whose report marker then comes first.
+    (the A23 draft ids), whose report marker then comes first.
     """
     for relative in ("report", "work", "paper", "critique/round_1", "pkg"):
         (root / relative).mkdir(parents=True, exist_ok=True)
     write(root / "paper/paper.txt",
-          "Results. The wrist sensor showed a mean bias of 1.3 bpm against the chest strap.\n"
-          "Table 2. Mean bias (bpm): wrist 3.1; arm 0.8.\n")
+          "Results. Device A showed a mean bias of 1.6 bpm against the reference device.\n"
+          "Table 2. Mean bias (bpm): device A 2.4; device B 0.8.\n")
     write(root / "pkg/README.txt", "deposit\n")
     write(root / "work/check_primary.txt", "expected=2 observed=2\n")
     write(root / "work/check_primary.R", "stopifnot(1 + 1 == 2)\n")
@@ -325,7 +325,7 @@ def build_template(root: pathlib.Path, *, legacy_rows: bool = False, operator_id
         "quorum_met": True, "expected_roles": list(CRITICS), "completed_roles": list(CRITICS),
         "failed_roles": []}) + "\n")
     if legacy_rows:
-        # The Neudorfer out-of-protocol shapes: named like verifiers, but role_class other/auditor
+        # The A23 out-of-protocol shapes: named like verifiers, but role_class other/auditor
         # and corrected to legacy_record. Nothing may key on their names.
         for invocation_id, role, role_class in (
                 ("operator-verifier-legacy", "operator_verifier", "other"),
@@ -494,7 +494,7 @@ class Fixture(unittest.TestCase):
 
     def hand_bind(self, verifier: dict, *, fid: str = "F13", outcome: str = "confirmed",
                   approve: bool = True) -> None:
-        """Attach a verifier record by editing the registry, as the Neudorfer decisions script did."""
+        """Attach a verifier record by editing the registry, as the A23 decisions script did."""
         rows = jsonl(self.audit / "work/findings.jsonl")
         for row in rows:
             if row["id"] != fid:
@@ -618,7 +618,7 @@ class VerifierConfirmsARowRaisedAfterFanOut(Fixture):
 
 
 class RenumberingAfterBindingKeepsTheBinding(Fixture):
-    """Ids are renumbered after the verifier ran (Neudorfer: OPR-N1 -> F2 -> F13); claims are not."""
+    """Ids are renumbered after the verifier ran (A23: OPR-N1 -> F2 -> F13); claims are not."""
 
     operator_id = "OPR-N1"
 
@@ -916,7 +916,7 @@ class VerifierNegativeControls(Fixture):
         self.apply(decisions(approve_f13=False))
         self.assertNotIn(verifier["role"], self.reviewers(self.registry()["F13"]))
         self.log_integration()
-        # Attached by hand anyway (the Neudorfer r1b record ended after round-1 integration).
+        # Attached by hand anyway (the A23 r1b record ended after round-1 integration).
         self.hand_bind(verifier)
         self.run_script("approve_settled.py")
         self._settle_raises("verification invocation ended after round 1 integration, the latest "
@@ -979,7 +979,7 @@ class VerifierNegativeControls(Fixture):
                 self.tearDown()
                 self.setUp()
                 # The identical call, output, receipt and CONFIRMED verdict the runner would make,
-                # journaled under the Neudorfer role and class: nothing may admit it by its name or
+                # journaled under the A23 role and class: nothing may admit it by its name or
                 # its files.
                 shaped = self.verifier(
                     [F13_CLAIM], ["CONFIRMED"], invocation_id=f"inv-{role}", relabel=(role, role_class),
@@ -1186,7 +1186,7 @@ class NoVerifierIsByteIdenticalTo263(Fixture):
         out["plan2"] = run("integrate_round.py", "--round", "2", "plan")
         decided = write(audit / "work/coordinator/decisions_round2.json", json.dumps({
             "F2": {"rebind_literal_confirmations": True, "applied_note": "round-2 wording kept"},
-            "F13": {"claim": "F13: Table 2 and the Results text disagree on the wrist bias.",
+            "F13": {"claim": "F13: Table 2 and the Results text disagree on the device A bias.",
                     "status": "draft", "rebind_literal_confirmations": True}}, indent=2))
         out["apply2"] = run("integrate_round.py", "--round", "2", "apply", "--decisions", str(decided),
                             "--at", T_R2_INTEGRATE)

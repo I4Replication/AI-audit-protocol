@@ -72,8 +72,8 @@ def claims_match_assignment(values: list[str], assigned: list[str]) -> bool:
     This is the rule the critique runtime enforces when it projects a round
     (test_run_critique_runtime.py, command_projection): each id once, compared casefolded as a set.
     No prompt states an ordering rule and the provider schema cannot express one, so a plain list
-    comparison here refused, at finalization, a round the runtime had accepted -- the tenth
-    production audit's round-2 completeness critic listed F39 before F3.
+    comparison here refused, at finalization, a round the runtime had accepted -- audit
+    A21's round-2 completeness critic listed F39 before F3.
     """
     folded = [value.casefold() for value in values]
     return len(folded) == len(set(folded)) and set(folded) == {value.casefold() for value in assigned}

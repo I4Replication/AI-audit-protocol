@@ -5,7 +5,7 @@ found; each fails on the pre-review tree and passes here. No provider or model i
 personal value is synthetic and out of range.
 
 * ``FrozenBoundBeforeFindings`` (make_diff_packet.py). A round's step-1 registry copy that was renumbered
-  by a version that kept no history (Schütz: F19 back to F4 after round 4, only the draft map in
+  by a version that kept no history (audit A20: F19 back to F4 after round 4, only the draft map in
   id_map.json) differs from integrate_round's backup, while the next round's frozen packet binds exactly
   its bytes. The packet could not be rebuilt -- so the last round's receipt could not be regenerated and
   the published audit could not be re-filed -- and the printed restore copied the same bytes over
@@ -13,7 +13,7 @@ personal value is synthetic and out of range.
   restore that changes something.
 * ``DisclosureEnforcementFrom269`` (disclosure_policy.ENFORCED_FROM). An audit initialised on the live
   2.6.8, whose prompts still said to pause for a disclosure decision, is re-finalized with warnings
-  (the food-insecurity SJMSS audit: pii_present true, flagged findings, empty flags and statement).
+  (audit A27: pii_present true, flagged findings, empty flags and statement).
 * ``DeferredRowsByCriticItem`` (disclosure_policy.deferred_rows). The stop may list a deferred
   disclosure row by the critic item that assessed it (``critic_stats:S3``), as the adjudication guide
   says to copy the ids from the round records.
@@ -267,7 +267,7 @@ class DeferredRowsByCriticItem(FinalizeFixture):
 
 
     def test_an_audit_renumbered_without_history_translates_no_item(self) -> None:
-        # The Schutz shape: work/id_map.json maps original ids to today's F-ids (composed through renumbers after
+        # The A20 shape: work/id_map.json maps original ids to today's F-ids (composed through renumbers after
         # critique) and no id_map_history.jsonl exists, so a round's item finding_id may name a row that has
         # since moved. No item is matched; the row must be listed by its finding id.
         import disclosure_policy

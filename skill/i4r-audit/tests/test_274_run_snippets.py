@@ -1,6 +1,6 @@
 """2.7.4: snippets run through the release notebook's own setup before release (scripts/run_snippets.sh).
 
-The Perfectionism audit (2026-09-30) wrote its seventeen snippets against an operator harness whose
+Audit A15 (2026-09-30) wrote its seventeen snippets against an operator harness whose
 hand-copied setup attached lavaan and psych. The generated notebook's setup attaches knitr and the
 deposit loaders only, and verification_snippets/_prelude.R did not attach lavaan, so at release
 run_verification.sh recorded five claims (C-1, C-2, C-5, C-10, C-12) as "could not find function sem"

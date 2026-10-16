@@ -125,7 +125,7 @@ class IntegrateNamesTheApprovalFields(unittest.TestCase):
 
     def test_a_conclusion_changing_row_must_say_which_conclusion(self):
         """2.6.2: apply never copied changes_conclusion_which from the decision, so a row could not be
-        set conclusion-changing through the documented path; the seventh audit hit it in round 1."""
+        set conclusion-changing through the documented path; audit A28 hit it in round 1."""
         row = {"status": "confirmed", "coordinator_approved": True, "report_section": "Section 3",
                "verification_snippet": {"kind": "code", "path": "p", "basis": "b"}, "changes_conclusion": True}
         self.assertEqual(integrate_round.approval_fields_missing(row), ["changes_conclusion_which"])

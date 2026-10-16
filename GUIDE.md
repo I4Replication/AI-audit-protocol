@@ -775,7 +775,7 @@ in 2026.
 | Version (date) | Highlights |
 |---|---|
 | 2.1.0 (08-28) | Became the canonical skill. The critique driver was rewritten around immutable snapshots, cached probes and outputs, retry budgets that cannot reset, and schema quorum. Added `tests/`, `schemas/v2` and `config/` |
-| 2.2.x (09-02 to 09-08) | First production audit. OAuth logins work (no `--bare`). `--probe-only` became the live canary. Sandbox paths are checked for glob characters. Every paid call leaves a ledger row |
+| 2.2.x (09-02 to 09-08) | Production audits begin. OAuth logins work (no `--bare`). `--probe-only` became the live canary. Sandbox paths are checked for glob characters. Every paid call leaves a ledger row |
 | 2.3.0 (09-08) | Unattended runs became the default. Finalize resolves the tree's registry |
 | 2.4.x (09-08 to 09-17) | Batch readiness: archive tests before reservation, refusal of conflicted copies, `--recover-stranded`, `status.py`, `renumber_findings.py`, `reserve_paper.sh reap`, an adversarial sweep of the skill itself, and a check that the running skill matches the canonical copy |
 | 2.5.0 (09-22) | The `data/ runs/ comments/ metadata/ old_runs/` tree; `new_audit.sh` as one-command intake |
@@ -796,18 +796,7 @@ and lower round cap have all been replaced.
 
 ### Status
 
-**Private by design for now.** The skill's failure-mode documentation names papers from audits
-whose authors have not yet been notified. Do not make this repository public before that
-correspondence is complete (protocol §3, Disclosure), or scrub the named audits first.
-
-A scrub has to cover `CHANGELOG.md`, `reference/failure_history.md`, passages and headings in `INSTALL.md`,
-some reference files (the baseline's copies included), the cheat sheet's terminal captures and
-`skill/MERGE_NOTES.md`. It also has to cover comments and docstrings in many `scripts/` and `tests/` modules,
-the retained-history script and the names `scripts/README.md` gives it, test-fixture names, and the audit id
-in `skill/baseline/config/baseline.json` (the baseline's tests use synthetic ids). New documentation
-should describe failure modes generically.
-
-<sub>Sources: a search of the repository for audit-id patterns and audited-paper names (matches deliberately not reproduced); `skill/i4r-audit/scripts/README.md` "Retained history".</sub>
+**Private for now.** The files in this repository do not name the papers that were audited or their authors. Earlier commits in its history do, so rewrite the history (or start a new repository from the current files) before making it public.
 
 ### How to cite
 

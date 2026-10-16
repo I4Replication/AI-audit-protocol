@@ -1,6 +1,6 @@
 """Every way the critique validators reject a response must be either stated or unemittable.
 
-Nine separate round-killing defects on the second production audit shared one shape: a rule was
+Nine separate round-killing defects on audit A38 shared one shape: a rule was
 enforced in one place and expressed in another, or not at all. The worst two --
 ``new_issues[].finding_id`` and the targeted adjudicator's evidence-inventory path -- each cost a
 full round, and the adjudicator one cost it twice.
@@ -158,7 +158,7 @@ SCHEMA_ENFORCED = {
 
 
 # Rejections do not all live in the entry points. `verify_evidence_bindings` is where the message
-# that killed round 2 of the second production audit is raised, and `nonempty`/`exact_keys` carry
+# that killed round 2 of audit A38 is raised, and `nonempty`/`exact_keys` carry
 # eighteen and thirteen more. An extractor that scanned only the two entry points would have
 # missed the very defect this file exists to prevent, so the helpers are scanned as well.
 REJECTION_HELPERS = ("verify_evidence_bindings", "safe_relative_path", "nonempty", "exact_keys")

@@ -8,7 +8,7 @@ bind therefore had no admissible (path, sha256) pair, and citing it failed the a
 
 That is backwards for exactly the rows the coordinator is required to write. A tested negative
 says "I looked at this file and found nothing there"; the file it looked at is by definition one
-no finding rests on. On the dart-throwing audit this discarded a clean 25-minute coordinator
+no finding rests on. On audit A37 this discarded a clean 25-minute coordinator
 session -- four complete outputs, 49 rows -- over one such citation in one tested-negative row,
 where the hash the model supplied was the file's true hash, read from the manifest it was given.
 
@@ -39,10 +39,10 @@ class DepositedFilesAreCitable(unittest.TestCase):
         self.digest = hashlib.sha256(body).hexdigest()
         deposited = self.root / "pkg/dataset"
         deposited.mkdir(parents=True)
-        (deposited / "df_exploratory.xlsx").write_bytes(body)
+        (deposited / "df_example.xlsx").write_bytes(body)
         (self.root / "package_manifest.json").write_text(json.dumps({
             "schema_version": "2.0.0", "algorithm": "sha256", "file_count": 1,
-            "files": [{"path": "dataset/df_exploratory.xlsx", "size": len(body),
+            "files": [{"path": "dataset/df_example.xlsx", "size": len(body),
                        "sha256": self.digest, "extension": "xlsx"}],
         }))
 
@@ -55,14 +55,14 @@ class DepositedFilesAreCitable(unittest.TestCase):
 
     def test_a_deposited_file_no_role_cited_is_bound(self) -> None:
         pairs, paths = self.bound()
-        self.assertIn(("pkg/dataset/df_exploratory.xlsx", self.digest), pairs)
-        self.assertIn("pkg/dataset/df_exploratory.xlsx", paths)
+        self.assertIn(("pkg/dataset/df_example.xlsx", self.digest), pairs)
+        self.assertIn("pkg/dataset/df_example.xlsx", paths)
 
     def test_the_wrong_hash_for_that_file_is_still_rejected(self) -> None:
         # Negative control. Admitting the manifest must not admit any hash for the path -- the
         # point of the rule is that the digest has to be the real one.
         pairs, _ = self.bound()
-        self.assertNotIn(("pkg/dataset/df_exploratory.xlsx", "b" * 64), pairs)
+        self.assertNotIn(("pkg/dataset/df_example.xlsx", "b" * 64), pairs)
 
     def test_an_undeposited_path_is_still_rejected(self) -> None:
         pairs, paths = self.bound()
@@ -71,10 +71,10 @@ class DepositedFilesAreCitable(unittest.TestCase):
 
     def test_the_manifest_path_convention_matches_the_draft_rows(self) -> None:
         # Manifest paths are deposit-relative, every other binding is audit-relative. Getting this
-        # wrong would bind "dataset/df_exploratory.xlsx", which no citation would ever match, and
+        # wrong would bind "dataset/df_example.xlsx", which no citation would ever match, and
         # the test above would still pass on the pairs set alone.
         _, paths = self.bound()
-        self.assertNotIn("dataset/df_exploratory.xlsx", paths)
+        self.assertNotIn("dataset/df_example.xlsx", paths)
 
     def test_role_bindings_and_report_hashes_survive(self) -> None:
         row = {"evidence": {"source_hashes": [{"path": "pkg/R codes/x.R", "sha256": "c" * 64}]},

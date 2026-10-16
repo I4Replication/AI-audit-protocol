@@ -4,8 +4,8 @@ Model and role assignments are defined by
 [`config/pipeline-policy-v2.json`](../config/pipeline-policy-v2.json). This reference defines the
 checks, not which model runs them.
 
-Distilled from published I4R comments (CRAVE, CRAVE-C, CRAVE-BR, Bonetti et al.) and from the
-Späth & Brand calibration run. Items 1–7 come from the published comments; items 8–12 were added
+Distilled from published I4R comments (papers A40, A46, A45 and A47) and from the
+calibration run on paper A48. Items 1–7 come from the published comments; items 8–12 were added
 from calibration and production audits.
 
 ## Role routing
@@ -22,8 +22,8 @@ Coverage overlaps deliberately; each role approaches shared risks from a differe
 
 ## 1. Duplication and sample inflation
 Exact duplicate rows; near-duplicates; contiguous block duplication at every offset; repeat
-submissions sharing timestamp/IP/contact; whole-sample duplication (CRAVE-BR: rows 1–584 copied into
-585–1168 to clear a 1,000-participant threshold). **Quantify the coincidence** — how many response
+submissions sharing timestamp/IP/contact; whole-sample duplication (a block of
+rows copied to inflate n). **Quantify the coincidence** — how many response
 patterns are possible? — and **name the mechanism**. Distinguish scope: "no near-duplicates" in
 survey exports is not "no near-duplicates" in the response data.
 

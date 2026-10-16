@@ -419,7 +419,7 @@ class FindingsTableIntegrityTest(unittest.TestCase):
             self.check(split_word=("Attribution", 6))
 
     def test_a_word_wider_than_the_finding_column_may_break(self) -> None:
-        name = "study_three_intention_positive_noise_condition.mp4"
+        name = "stimulus_folder_three_second_condition_clip.mp4"
         claims = [f"The file {name} carries the wrong marker."]
         report = integrity_report(self.root, claims)
         rows = expected_rows(claims)

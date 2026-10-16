@@ -41,7 +41,7 @@ EXPECTED_FAILURE = (
     "canonical critic semantic error: critic_result.coverage: "
     "completed and skipped checks must be assigned"
 )
-EXPECTED_ATTEMPT2_INVOCATION = "20260828T210446Z.r1.completeness.a2.42d89e81"
+EXPECTED_ATTEMPT2_INVOCATION = "20260101T000001Z.r1.completeness.a2.00000001"
 EXPECTED_ATTEMPT2_EVENTS_SHA256 = (
     "f731d0a27180dea62e447a75243cd429a6463befbfd22d01e5470d0bda9acba5"
 )

@@ -3,7 +3,7 @@
 
 ``generate_finding_artifacts.py`` requires every final id to match ``F<number>`` and requires the
 INCLUDED rows to be contiguous F1..FN. ``build_draft_registry.py`` emits role-scoped ids instead
-(``REP-f1_d421_n60_reproduce``, ``TXT-TVD-F2``, ``COD-FIND-FORMULA-01``) and the coordinator carries
+(``REP-f1_d100_n50_reproduce``, ``TXT-TVD-F2``, ``COD-FIND-FORMULA-01``) and the coordinator carries
 those straight through, so every audit needs this conversion exactly once and no tool did it. Doing
 it by hand means touching the report's markers, the registry ids, every ``ledger_disposition.target``
 and every ``dependencies.finding_ids`` in step, and getting one wrong fails a gate several stages
@@ -93,7 +93,7 @@ def rewrite_prose(text: str, mapping: dict[str, str]) -> str:
     """Rewrite bare finding ids inside free text, in ONE pass.
 
     ``ledger_disposition.reason`` is prose that names other findings ("merged into
-    REP-f1_d421_n60_reproduce"), and leaving it alone published reasons pointing at ids that no
+    REP-f1_d100_n50_reproduce"), and leaving it alone published reasons pointing at ids that no
     longer exist anywhere. Substituting key by key would be worse than doing nothing: with
     F1->F2 and F2->F3 both pending, whichever runs first rewrites what the other has already
     written. One alternation, longest key first so a shorter id cannot claim a prefix of a

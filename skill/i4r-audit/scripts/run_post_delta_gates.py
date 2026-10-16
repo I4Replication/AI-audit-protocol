@@ -712,7 +712,7 @@ def verify_receipt(root: pathlib.Path, receipt_path: pathlib.Path,
 
 def journal_gate_result(root: pathlib.Path, round_number: int, receipt: pathlib.Path) -> None:
     """Project the passing gate into run.json. Finalization derives `post_delta_gates_passed` from a
-    journaled `gate=post_delta` event with exit_status 0; the first production audit reached
+    journaled `gate=post_delta` event with exit_status 0; one audit reached
     finalization with a valid receipt and no such event, so the gate journals itself."""
     run_json = root / "run.json"
     if not run_json.is_file():

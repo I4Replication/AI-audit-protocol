@@ -156,7 +156,7 @@ def main() -> int:
     }
     if scenario == "transport_then_success":
         # First call: the provider drops the connection mid-response (the exact shape of the
-        # 39-minute failure on the sixth production audit). Every later call: success. The
+        # 39-minute failure on audit A30). Every later call: success. The
         # counter lives in FAKE_COORDINATOR_STATE so the runner's in-invocation retry is what
         # gets tested, not a lucky second invocation.
         state = pathlib.Path(os.environ["FAKE_COORDINATOR_STATE"])
@@ -164,7 +164,7 @@ def main() -> int:
         state.write_text(str(calls + 1))
         scenario = "transport_error" if calls == 0 else "success"
     if scenario in ("output_cap_then_success", "output_cap_always"):
-        # 2.7.4: the first live Sonnet 5.5 coordinator call (20260930-audit-0ccfcb4e, attempt 1): the CLI
+        # 2.7.4: the first live Sonnet 5.5 coordinator call (audit A15, attempt 1): the CLI
         # cut one response at its 64,000-token cap four times and failed the call, having written nothing.
         state = pathlib.Path(os.environ["FAKE_COORDINATOR_STATE"])
         calls = int(state.read_text().strip() or 0) if state.exists() else 0

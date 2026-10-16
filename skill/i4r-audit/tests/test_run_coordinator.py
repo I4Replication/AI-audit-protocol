@@ -681,7 +681,7 @@ class CoordinatorRunnerTests(unittest.TestCase):
     def test_safe_evidence_rejects_private_paths_and_participant_codes_before_provider(self) -> None:
         unsafe_values = (
             "Local command: /" + "Users/example/private/audit.R\n",
-            "Unsafe row: SA_P1,2022-05-09,118,74\n",
+            "Unsafe row: XY_P1,2021-03-04,101,62\n",
         )
         for index, value in enumerate(unsafe_values):
             with self.subTest(value=value):
@@ -711,12 +711,12 @@ class CoordinatorRunnerTests(unittest.TestCase):
         self.draft.write_text(json.dumps(draft_row(digest(path)), sort_keys=True) + "\n")
 
     def test_phase_one_report_quoting_deposit_column_names_reaches_the_provider(self) -> None:
-        # 2.6.5: the video-speed audit's reports quoted SPSS columns INT_P05/DUR_P15 and the
+        # 2.6.5: audit A20's reports quoted code-shaped SPSS column names and the
         # runner refused them before any provider call. A code-shaped column name of the deposit
         # itself is not a participant code.
         (self.root / "pkg").mkdir()
-        (self.root / "pkg/study.csv").write_text("id,INT_P05,DUR_P15\n1,3.2,1.1\n2,2.9,1.4\n")
-        self.quote_in_phase_one_report("The INT_P05 and DUR_P15 means reproduce exactly.")
+        (self.root / "pkg/study.csv").write_text("id,INT_P05,LEN_P15\n1,3.2,1.1\n2,2.9,1.4\n")
+        self.quote_in_phase_one_report("The INT_P05 and LEN_P15 means reproduce exactly.")
         result = self.run_runner()
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertTrue((self.root / "report/REPORT_v1.md").exists())

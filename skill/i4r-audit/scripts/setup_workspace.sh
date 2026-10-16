@@ -77,8 +77,8 @@ if [ -f "$PKG" ]; then
   case "$PKG" in
     *.zip|*.ZIP)
       # `zipinfo -t`, not `unzip -t`. What this guard is for is a *structurally* broken archive
-      # -- the truncated 9zsh2 deposit, which both tools reject with 3. `unzip -t` additionally
-      # inflates every member, and exits 2 on the p7rj3 deposit over a single zero-length entry
+      # -- the truncated A36 deposit, which both tools reject with 3. `unzip -t` additionally
+      # inflates every member, and exits 2 on the A35 deposit over a single zero-length entry
       # written as Defl:N with zero compressed bytes. That archive extracts fine (the entry's
       # true content is nothing), so refusing it would strand a real, auditable paper on a
       # cosmetic defect. zipinfo also never prompts for a password, where `unzip -t` on an

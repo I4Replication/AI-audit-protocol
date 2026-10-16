@@ -4,7 +4,7 @@ verifier) runs with CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1, and the coordina
 On Claude CLI 2.1.206 the macOS sandbox profile is passed as one argv string on every Bash call, at 0.77 to 0.91
 of ARG_MAX for the audit roots under runs/. After a `cd` into the deposit the CLI rebuilt the profile from the
 new directory when its settings changed, the profile passed ARG_MAX, and every later command failed with E2BIG:
-two of the five auditors of 20260930-audit-0ccfcb4e lost their shell. With the variable the CLI resets its
+two of the five auditors of audit A15 lost their shell. With the variable the CLI resets its
 tracked directory after every call. These tests run the real runners with the fake CLIs, which record the
 variable each spawn received; they fail on 2.7.3, which never set it.
 """

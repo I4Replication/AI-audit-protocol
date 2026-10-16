@@ -1,6 +1,6 @@
 """Three operator traps that each let a correct audit end in the wrong place, or not end at all.
 
-All three surfaced on the third production audit, the first driven end to end under this skill.
+All three surfaced on audit A37, the first driven end to end under this skill.
 None of them is a scientific defect; each wastes an operator's run or files it where nobody reads.
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ class FinalizeFilesToTheProgrammeRegistry(unittest.TestCase):
     """finalize defaulted to the registry inside the skill checkout, not the programme's.
 
     An operator who omitted --registry got a green "filed into the registry" and a row in
-    skill/i4r-audit-unified/registry that nobody would ever read. The third production audit filed
+    skill/i4r-audit-unified/registry that nobody would ever read. Audit A37 filed
     there and had to be re-filed by hand.
     """
 

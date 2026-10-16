@@ -1,6 +1,6 @@
 """A runner-valid post-fan-out verifier record in any on-disk metadata-2.1 test audit (2.6.4).
 
-The Neudorfer audit (20260923-audit-3309cfcf) excluded three true findings (F13-F15) because no
+Audit A23 excluded three true findings (F13-F15) because no
 family-A confirmation could be made for a row raised after fan-out; the hand-made records tried
 instead (``make_record.py``: a report, a result, an empty evidence manifest and a receipt, all
 written by hand) were what the packaged verifier replaced. Since 2.6.4,
@@ -69,7 +69,7 @@ The malformed variants the negative tests need:
   (``critic_route``: openai / gpt-6.1-sol / high from the 2.7.0 policy, gpt-5.6-terra before; family
   gpt). Record validation is skipped for it.
 * ``relabel=(role, role_class)``: the identical call journaled under a legacy name and class
-  (the Neudorfer ``operator_verifier``/``other`` and ``auditor_operator_verification``/``auditor``
+  (the A23 ``operator_verifier``/``other`` and ``auditor_operator_verification``/``auditor``
   shapes); record validation is skipped.
 * ``legacy_correction="reason"``: the terminal row is then corrected to ``legacy_record`` through
   ``lifecycle_journal.correct_invocation`` at ``corrected_at`` (default ``ended_at``).
@@ -104,7 +104,7 @@ if str(SCRIPTS) not in sys.path:
 FIXTURE_PROBE_KEY = hashlib.sha256(b"tests/verifier_fixtures.py minimal quorum probe key").hexdigest()
 FIXTURE_PAPER_TEXT = (
     "Results. The abstract reports 24 participants; the participant table lists 22.\n"
-    "Table 2. Mean bias (bpm): wrist 3.1; arm 0.8.\n"
+    "Table 2. Mean bias (bpm): device A 2.4; device B 0.8.\n"
 )
 SERVED = "claude-sonnet-5-20260801"
 # ROUTES["claude"] is the Sonnet 5 route, and ROUTES["gpt"] the Terra critic route, every audit initialised

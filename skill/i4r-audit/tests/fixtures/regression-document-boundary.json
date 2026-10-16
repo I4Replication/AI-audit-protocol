@@ -1,6 +1,6 @@
 {
-  "schema_version": "i4r-fessi-document-boundary-1",
-  "description": "Sanitized, compact boundary surrogate for the historical Fessi max-14 diagnostic. The original rendered artifact is intentionally not bundled.",
+  "schema_version": "i4r-regression-document-boundary-1",
+  "description": "Sanitized, compact boundary surrogate for the historical max-14 diagnostic of audit A01. The original rendered artifact is intentionally not bundled.",
   "original_artifact_bundled": false,
   "body_page_cap": 10,
   "diagnostic_body_pages": 14,
@@ -11,5 +11,5 @@
     "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10",
     "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19", "P20"
   ],
-  "surrogate_pdf_sha256": "c45da400dd8b57901a59a2d9a0377d2717517779909119c65bcff696be87d3aa"
+  "surrogate_pdf_sha256": "d40c0cdfbea3bd863d4c9a1f5c8a0baddcfa1f2943a75a8731a5f9d387a032a5"
 }

@@ -531,7 +531,7 @@ class ReviewDefectTests(DepositFixture):
         with zipfile.ZipFile(buffer, "w") as archive:
             archive.writestr("Ostravinsky Quellmarr.csv", "Name\nOstravinsky Quellmarr\n")
         write(self.audit / "pkg/data/bundle.zip", buffer.getvalue())
-        write(self.audit / "pkg/data/Weightroom Survey 2021 - Male.csv", "Name\nZelvarine Oquastrom\n")
+        write(self.audit / "pkg/data/Survey 2021 - Group A.csv", "Name\nZelvarine Oquastrom\n")
         write(self.audit / "pkg/data/export-1901-04-03.csv", "Name\nMarvolette Quistrand\n")
         files = sorted(path.relative_to(self.audit / "pkg").as_posix()
                        for path in (self.audit / "pkg").rglob("*") if path.is_file())
@@ -547,7 +547,7 @@ class ReviewDefectTests(DepositFixture):
         sources = {item["location"].split(" ", 1)[0]: item["source"] for item in summary["hits"]}
         self.assertIn("data/per_person.xlsx sheet 1", sources["report/a.md"])
         self.assertIn("data/bundle.zip member 1", sources["report/b.md"])
-        self.assertIn("in data/Weightroom Survey 2021 - Male.csv", sources["report/c.md"])
+        self.assertIn("in data/Survey 2021 - Group A.csv", sources["report/c.md"])
         self.assertIn(f"in manifest file #{dated_index}", sources["report/d.md"])
         printed = result.stdout + json.dumps(summary)
         for value in ("Vendelquist", "Oranamoor", "Ostravinsky", "1901-04-03", "Tessaly",

@@ -1,6 +1,6 @@
 """The Findings-section element check names what is missing, and the prompt spells the labels.
 
-On the sixth production audit `auditor_text_vs_data` lost two paid attempts to
+On audit A30 `auditor_text_vs_data` lost two paid attempts to
 "role report findings omit evidence/benign explanation/impact/remedy": both reports carried
 *Benign explanations tested*, *Impact* and *Remedy* labels and substantive evidence, but never the
 word "evidence" inside the Findings section. The rule was expressed as four ELEMENTS in the prompt
@@ -16,8 +16,8 @@ import phase1_runtime  # noqa: E402
 
 ATTEMPT_ONE_SHAPE = """
 - **F1 — A chi-square pairs an uncorrected statistic with a corrected p-value (CONFIRMED).**
-  Reconstructing the 2x2 table from the follow-up file gives chi2 = 2.4786, p = .1154 uncorrected
-  and chi2 = 1.5863, p = .2079 corrected. *Benign explanations tested*: a careful analyst may have
+  Reconstructing the 2x2 table from the follow-up file gives chi2 = 2.6123, p = .1060 uncorrected
+  and chi2 = 1.7342, p = .1878 corrected. *Benign explanations tested*: a careful analyst may have
   merged two runs. *Impact*: none. *Remedy*: state which convention was used.
 """
 FOUR_LABELS = ATTEMPT_ONE_SHAPE.replace("Reconstructing the 2x2 table", "*Evidence*: reconstructing the 2x2 table")

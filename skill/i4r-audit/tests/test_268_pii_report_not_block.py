@@ -245,7 +245,7 @@ class FinalizeReportsDepositPersonalData(unittest.TestCase):
         self.assertNotIn("a comment finding with disclosure_flag true", output)
         rc, output = self.finalize(protocol_version="2.6.4", mutate=no_flags)
         self.assert_warned(rc, output, "non-empty disclosure.flags")
-        # The food-insecurity SJMSS audit's shape (initialised and published on the live 2.6.8):
+        # Audit A27's shape (initialised and published on the live 2.6.8):
         # pii_present true, flagged comment findings, but empty flags, urgency none and an empty
         # statement. It re-finalizes with warnings.
         rc, output = self.finalize(protocol_version="2.6.8", mutate=no_flags)

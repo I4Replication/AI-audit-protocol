@@ -20,8 +20,8 @@ BUILDER = SKILL / "scripts/build_docx.sh"
 CACHE = SKILL / "scripts/document_build_cache.py"
 STAGE = SKILL / "scripts/stage_release.sh"
 MANIFEST_SCHEMA = SKILL / "schemas/v3/document-build-manifest.schema.json"
-FESSI_BOUNDARY_FIXTURE = SKILL / "tests/fixtures/fessi-document-boundary.json"
-FESSI_BOUNDARY_FIXTURE_SHA256 = "8e4648a833670604542cf2dc673ccbbcbe5f75d3a0a952e5b9cbadced3bafa44"
+BOUNDARY_FIXTURE = SKILL / "tests/fixtures/regression-document-boundary.json"
+BOUNDARY_FIXTURE_SHA256 = "d070f4d22f5e9e8a49f30fddedd95e0b7de803ea15bf011325d0d0b542dae7bb"
 
 ABSTRACT = (
     "This bounded audit fixture verifies exact rendered pages and keeps its distinctive "
@@ -104,15 +104,15 @@ def multi_page_pdf(pages: list[list[str]]) -> bytes:
     return bytes(payload)
 
 
-def fessi_boundary_pages(fixture: dict[str, object]) -> list[list[str]]:
+def regression_boundary_pages(fixture: dict[str, object]) -> list[list[str]]:
     body_pages = int(fixture["diagnostic_body_pages"])
     finding_ids = list(fixture["finding_ids"])
     pages: list[list[str]] = [[
         "Independent audit", "Abstract", *textwrap.wrap(ABSTRACT, width=70),
-        "Fessi sanitized boundary surrogate", finding_ids[0],
+        "Sanitized regression boundary surrogate", finding_ids[0],
     ]]
     pages.extend([
-        [f"Section {number}. Fessi boundary surrogate", finding_ids[number - 1]]
+        [f"Section {number}. Regression boundary surrogate", finding_ids[number - 1]]
         for number in range(2, body_pages + 1)
     ])
     pages.extend([
@@ -147,7 +147,7 @@ def audit_fixture(base: Path, *, body_pages: int, back_pages: int,
         pages.extend([[f"Appendix continuation {index}", "Arbitrary back matter."]
                       for index in range(2, back_pages + 1)])
     if preview:
-        pdf = report / "previews/fessi-max14.pdf"
+        pdf = report / "previews/regression-max14.pdf"
     else:
         pdf = report / "comment.pdf"
     write(pdf, multi_page_pdf(pages))
@@ -315,7 +315,7 @@ class DocumentReleaseTest(unittest.TestCase):
         )
         self.assertNotEqual(staged.returncode, 0)
         self.assertIn("document_build_manifest.json", staged.stdout + staged.stderr)
-        self.assertFalse((release / "report/previews/fessi-max14.pdf").exists())
+        self.assertFalse((release / "report/previews/regression-max14.pdf").exists())
 
     def test_failed_rebuild_leaves_prior_passing_bytes_and_manifest_untouched(self) -> None:
         audit, pdf = audit_fixture(self.root, body_pages=10, back_pages=1)
@@ -404,12 +404,12 @@ class DocumentReleaseTest(unittest.TestCase):
                 self.assertIn("schema 3.0.0", result.stderr)
 
     def test_fourteen_body_page_pdf_fails_verify_and_independent_recount(self) -> None:
-        self.assertEqual(digest(FESSI_BOUNDARY_FIXTURE), FESSI_BOUNDARY_FIXTURE_SHA256)
-        fixture = json.loads(FESSI_BOUNDARY_FIXTURE.read_text(encoding="utf-8"))
-        self.assertEqual(fixture["schema_version"], "i4r-fessi-document-boundary-1")
+        self.assertEqual(digest(BOUNDARY_FIXTURE), BOUNDARY_FIXTURE_SHA256)
+        fixture = json.loads(BOUNDARY_FIXTURE.read_text(encoding="utf-8"))
+        self.assertEqual(fixture["schema_version"], "i4r-regression-document-boundary-1")
         self.assertFalse(fixture["original_artifact_bundled"])
         self.assertEqual(fixture["finding_ids"], [f"P{number}" for number in range(1, 21)])
-        pages = fessi_boundary_pages(fixture)
+        pages = regression_boundary_pages(fixture)
         pdf_bytes = multi_page_pdf(pages)
         self.assertEqual(hashlib.sha256(pdf_bytes).hexdigest(), fixture["surrogate_pdf_sha256"])
 
@@ -426,7 +426,7 @@ class DocumentReleaseTest(unittest.TestCase):
             + "\n\n## References\n\nSanitized reference entry."
             + "\n\n## Appendix A. Summary of findings\n\n" + appendix + "\n",
         )
-        preview_pdf = audit / "report/previews/fessi-max14.pdf"
+        preview_pdf = audit / "report/previews/regression-max14.pdf"
         write(preview_pdf, pdf_bytes)
         create_manifest(audit, preview_pdf, preview=True)
         preview_manifest = preview_pdf.with_suffix(".manifest.json")
@@ -461,7 +461,7 @@ class DocumentReleaseTest(unittest.TestCase):
 
         commands = (
             [sys.executable, str(HELPER), "verify", str(audit),
-             "--builder", str(BUILDER), "--boundary", "fessi-regression"],
+             "--builder", str(BUILDER), "--boundary", "regression"],
             [sys.executable, str(HELPER), "recount",
              str(audit / "document_build_manifest.json"), str(pdf)],
         )
@@ -476,7 +476,7 @@ class DocumentReleaseTest(unittest.TestCase):
 class LibreOfficeProfileUrlTest(unittest.TestCase):
     """The LibreOffice profile is passed as a file:// URL. An audit directory named after a paper
     title routinely contains colons and spaces, which are not URL-safe, and LibreOffice aborts on
-    such a URL (first production audit: SIGABRT on every canonical build). The builder must never
+    such a URL (audit A34: SIGABRT on every canonical build). The builder must never
     derive that URL from the audit or transaction path."""
 
     def test_libreoffice_profile_url_is_not_derived_from_the_audit_path(self) -> None:

@@ -141,13 +141,13 @@ PROBE_LOCK_WAIT_SECONDS="${PROBE_LOCK_WAIT_SECONDS:-60}"
 FORCE_RERUN="${I4R_FORCE_RERUN:-0}"
 
 # The policy default is three total attempts per role. The operator may raise the ceiling (to 20,
-# the same range as I4R_MAX_ATTEMPTS for Phase 1 and the coordinator): on the first production
-# audit every exhausted budget was spent on harness defects, not on a critic failing at its task.
+# the same range as I4R_MAX_ATTEMPTS for Phase 1 and the coordinator): on audit
+# A34 every exhausted budget was spent on harness defects, not on a critic failing at its task.
 case "$MAX_TRIES" in ''|*[!0-9]*) fail_early "MAX_TRIES must be an integer from 1 to 20 (policy default 3)" ;; esac
 [ "$MAX_TRIES" -ge 1 ] && [ "$MAX_TRIES" -le 20 ] \
   || fail_early "MAX_TRIES must be from 1 to 20 (policy default 3)"
 # One knob governs the whole critique path. The runtime helper counts accepted inference starts
-# per role under I4R_MAX_ATTEMPTS (default 3); the first production audit lost two complete
+# per role under I4R_MAX_ATTEMPTS (default 3); audit A34 lost two complete
 # fourth-attempt reviews because the driver allowed attempt 4 while the helper still refused to
 # record it. The driver's ceiling is authoritative for its own helper calls.
 export I4R_MAX_ATTEMPTS="$MAX_TRIES"
@@ -931,7 +931,7 @@ classify_provider_failure() {
 }
 
 # The provider's own last words, from a sealed events/failure log, for the operator's terminal.
-# On the seventh production audit the probe failed "(permanent)" with error_class quota and the
+# On audit A28 the probe failed "(permanent)" with error_class quota and the
 # operator had to re-run codex by hand to learn "Your workspace is out of credits": the message
 # had been on disk in failure.log the whole time. One line, no newlines, at most 240 characters.
 provider_error_message() {
@@ -1059,7 +1059,7 @@ codex_exec() {
 # claim_attempt and lifecycle_before_provider, so a snapshot that fails costs no attempt, leaves no
 # reservation or telemetry row and makes no call; mode-only drift is re-frozen and journaled once.
 # (Not inside codex_exec: by then the attempt is claimed and the reservation made.) Before 2.6.8
-# nothing looked until after each call: a probe-time drift on the ninth production audit failed
+# nothing looked until after each call: a probe-time drift on audit A20 failed
 # twelve paid critic responses as schema-invalid and re-dispatched every one of them.
 # Returns the helper's code: 0 ready, SNAPSHOT_INTEGRITY_RC integrity failure, other nonzero error.
 snapshot_ready_for_dispatch() {
@@ -1975,13 +1975,13 @@ PYSRC
     elif [ "$validate_rc" -eq "$SNAPSHOT_INTEGRITY_RC" ]; then
       # The frozen snapshot's content changed during the call. Re-sampling cannot help and the
       # critic did nothing wrong: one call, recorded as an environment failure, and a stop. On
-      # the ninth production audit this was labelled schema and re-dispatched twelve times.
+      # audit A20 this was labelled schema and re-dispatched twelve times.
       failure_class=permanent
       failure_outcome=failed
       error_class=environment
     elif [ "$call_rc" -eq 0 ]; then
-      # A schema-invalid review is a property of one sample, not of the role: on the first
-      # production audit all three such critics passed on a fresh attempt. Re-sample within
+      # A schema-invalid review is a property of one sample, not of the role: on audit
+      # A34 all three such critics passed on a fresh attempt. Re-sample within
       # MAX_TRIES instead of marking the role permanent with budget unspent.
       failure_class=transient
       failure_outcome=schema_invalid
@@ -2452,7 +2452,7 @@ PY
       failure_class=permanent; failure_outcome=failed; error_class=environment
     elif [ "$call_rc" -eq 0 ]; then
       # Same rule as the critics above: a schema-invalid response is a property of one sample,
-      # not of the adjudicator. Round 2 of the second production audit died here at attempt 1 of
+      # not of the adjudicator. Round 2 of audit A38 died here at attempt 1 of
       # 3 -- one bad artifact ref out of ten in an otherwise complete, well-reasoned response --
       # because this branch alone said permanent while the critic branch says transient.
       failure_class=transient; failure_outcome=schema_invalid; error_class=schema

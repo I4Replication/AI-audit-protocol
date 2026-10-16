@@ -1356,7 +1356,7 @@ def read_ledger(root: pathlib.Path) -> list[dict[str, Any]]:
 # working directory whenever its settings change; after a `cd` into raw/pkg it adds that directory's
 # .claude/, .mcp.json and bare-repo deny paths for every level up to the --add-dir root (34 deny paths
 # become 52), the profile passes ARG_MAX, and every later command fails with E2BIG. Two of the five
-# auditors of 20260930-audit-0ccfcb4e lost their shell that way. With this variable the CLI returns the
+# auditors of audit A15 lost their shell that way. With this variable the CLI returns the
 # tracked directory to the start directory after every call, so a `cd DIR && cmd` still works within its
 # call and a rebuild never sees another directory. The environment enters no key, hash, prompt, settings
 # file or receipt, so it applies to every audit; the coordinator has no Bash tool and is not spawned here.
@@ -2633,8 +2633,8 @@ def run_role(
                         raise RunnerError(
                             f"{role} output failed validation and repair: {repair_exc}"
                         ) from repair_exc
-                # A schema-invalid output is a property of one sample, not of the role. On the first
-                # production audit every such failure passed on a fresh attempt, while the old
+                # A schema-invalid output is a property of one sample, not of the role. On audit
+                # A34 every such failure passed on a fresh attempt, while the old
                 # immediate stop left budget unused and forced a full journal reset. Spend the
                 # remaining budget on a fresh sample before giving up.
                 denied = allowlisted_denials(execution.attempt_dir)

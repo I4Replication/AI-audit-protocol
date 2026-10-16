@@ -1,6 +1,6 @@
 """2.7.4: the Claude CLI's per-response output cap (prototype regression test).
 
-The first live Sonnet 5.5/max coordinator call (20260930-audit-0ccfcb4e, attempt 1) failed after 33
+The first live Sonnet 5.5/max coordinator call (audit A15, attempt 1) failed after 33
 minutes with "API Error: Claude's response exceeded the 64000 output token maximum ...": Claude CLI
 2.1.206 sends max_tokens = its catalog default (64,000) unless CLAUDE_CODE_MAX_OUTPUT_TOKENS says
 otherwise, and the runner classed the failure `permanent`, so nothing retried it. These tests build that

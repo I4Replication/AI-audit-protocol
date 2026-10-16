@@ -341,7 +341,7 @@ def pdf_line_starts_back_matter(line: str) -> bool:
     """Return whether the first rendered line is a canonical back-matter heading.
 
     The whole line must be the heading. Body text that only begins with one of its words after a page break is not
-    one: on the MacIntyre 2026 audit, body page 8 opened mid-sentence with "appendix output and pkg/FS_during.xlsx",
+    one: on audit A18, body page 8 opened mid-sentence with "appendix output and pkg/data/sessions.xlsx",
     and publish_completed.sh's recount refused a release that build, staging and finalize had all accepted.
     """
     return BACK_MATTER_HEADING_LINE.fullmatch(" ".join(line.split())) is not None

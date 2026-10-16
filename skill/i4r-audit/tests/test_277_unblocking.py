@@ -1,7 +1,7 @@
 """2.7.7: two defects that stopped real audits, each tested with the real scripts.
 
 1. Phase-1 output admission refused any line that held the word "participant(s)" or "subject(s)" and any d:dd, as a
-   participant linked to a date or time. A sleep study's mean bedtime (23:23) or conditions named by a ratio (20:80)
+   participant linked to a date or time. A study's mean bedtime (22:40) or conditions named by a ratio (30:70)
    are on such lines, so one audit was parked before Phase 1 and one role failed all six attempts. The admission rule
    now needs an identifier holding a digit and a real date or clock time. The privacy scan's patterns, whose counts
    are Phase-1 evidence, are unchanged.
@@ -51,37 +51,37 @@ def admit(line: str) -> None:
 # Lines about participants as a group beside a time, a ratio or a date: the lines that stopped the two audits
 # (reworded; no paper text, no participant value) and the review's group-level lines.
 FALSE_POSITIVES = (
-    'Across participants, mean bedtime was 23:23 and mean wake time 7:41 (SD 0:38).',
-    'Participants in the 20:80 and 50:50 conditions were compared with a mixed model.',
-    'Subjects went to bed at 22:45 on average in the intensified week.',
+    'Across participants, mean bedtime was 22:40 and mean wake time 7:41 (SD 0:38).',
+    'Participants in the 30:70 and 50:50 conditions were compared with a mixed model.',
+    'Subjects went to bed at 22:55 on average on work nights.',
     'The participant pool split 70:30 between the two schedules; subject to the 12:00 cut-off.',
-    'Participants 18 to 30 years old went to bed at a mean of 23:23.',
-    'Subjects 1-24 completed the protocol; mean bedtime 23:23.',
-    'Participants (N = 24) went to bed at 23:23 on 2019-03-02.',
+    'Participants 18 to 30 years old went to bed at a mean of 22:40.',
+    'Subjects 1-24 completed the protocol; mean bedtime 22:40.',
+    'Participants (N = 24) went to bed at 22:40 on 2019-03-02.',
     'Sessions ran from 1900-01-01; the Name column identifies 57 participants.',
-    'participant 20 was in the 20:80 condition and participant 21 in the 50:50 one',
-    'Recomputed Monday week-1 bedtime 23:23 ± 00:42 (between-participant SD) matches Table 2.',
-    "The paper's ± values are the between-subject SD (e.g., 23:23 ± 00:42), not the SE.",
+    'participant 20 was in the 30:70 condition and participant 21 in the 50:50 one',
+    'Recomputed day-1 bedtime 22:40 ± 00:35 (between-participant SD) matches the table.',
+    "The paper's ± values are the between-subject SD (e.g., 22:40 ± 00:35), not the SE.",
     'Half of the participants (12/24) went to bed after 23:00.',
-    'Participants (12 and 12 per group) went to bed at 23:23.',
+    'Participants (12 and 12 per group) went to bed at 22:40.',
     'Participants 12 or 13 years old went to bed at 21:30 on average.',
     'Participants were tested between 08:00 and 10:00 on weekdays.',
-    'Participant characteristics: mean age 21, bedtime 23:23.',
-    "The participants' sleep onset (00:15) followed lights-out (23:40).",
-    'PARTICIPANTS AND METHODS section reports 23:23 bedtimes.',
+    'Participant characteristics: mean age 21, bedtime 22:40.',
+    "The participants' sleep onset (00:20) followed lights-out (23:40).",
+    'PARTICIPANTS AND METHODS section reports 22:40 bedtimes.',
     'Data from all subjects were collected between 2019-03-02 and 2019-04-02.',
     'Participant flow: 30 screened on 2019-03-02, 24 analysed.',
     'participants no longer slept past 07:00 after the intervention.',
-    'Subjects with no 3 valid nights are dropped, which moves the mean bedtime from 23:23 to 23:31.',
-    'Participants with no 7-day actigraphy record were excluded before the mean bedtime (23:23) was computed.',
-    'Participant N = 24; the mean bedtime was 23:23.',
-    'Participant M = 23:23, SD = 0:42.',
+    'Subjects with no 3 valid nights are dropped, which moves the mean bedtime from 22:40 to 22:47.',
+    'Participants with no 7-day sleep record were excluded before the mean bedtime (22:40) was computed.',
+    'Participant N = 24; the mean bedtime was 22:40.',
+    'Participant M = 22:40, SD = 0:35.',
     'Participant IDs were anonymised before 2019-03-02.',
     'Participants "slept" until 07:00 on average.',
 )
 # A participant identifier beside a date or clock time, in the forms an auditor might write (all refused by 2.7.6).
 LINKAGES = (
-    'participant 12 went to bed at 23:23',
+    'participant 12 went to bed at 22:40',
     'subject07 was tested on 2019-03-02',
     'Participant P07 woke at 6:05.',
     'pid_3 2024-1-5',
@@ -112,7 +112,7 @@ LINKAGES = (
     '`participant_id == 12` is dropped for the 2019-03-02 session.',
     'The log line reads participant_id=12 start=08:30.',
     'subject_id = 7 was tested on 2019-03-02.',
-    'Participant TEN-07 played the 20:80 block on 2019-03-02.',
+    'Participant PX-07 played the 30:70 block on 2019-03-02.',
     'Participant ABC-12 was tested on 2019-03-02.',
     "subject sub-01's scan began at 08:30.",
     'Participant VPN 07 was tested on 2019-03-02.',
@@ -129,8 +129,8 @@ LINKAGES = (
     'Participant #12 went to bed at 23:15, later than the other participants.',
     'Participant #12 (one of 24 participants) was tested on 2019-03-02.',
     'Of the 24 participants, Subj. 12 went to bed latest (01:30).',
-    "Participant\xa012 went to bed at 23:15 (the participants' mean was 23:23).",
-    "Participant **12** went to bed at 23:15 (the participants' mean was 23:23).",
+    "Participant\xa012 went to bed at 23:15 (the participants' mean was 22:40).",
+    "Participant **12** went to bed at 23:15 (the participants' mean was 22:40).",
     'Subject ID `S07` was tested on 2019-03-02.',
     'Participant ID: `P07` went to bed at 01:30.',
     'Participants `P07` and `P09` went to bed after 01:30.',
@@ -165,14 +165,14 @@ class ParticipantDateAdmission(unittest.TestCase):
                 self.assertEqual(caught.exception.rule, "participant_date")
 
     def test_a_ratio_beside_a_numbered_participant_is_not_a_time(self) -> None:
-        admit("participant 20 was in the 20:80 condition and participant 21 in the 50:50 one")
+        admit("participant 20 was in the 30:70 condition and participant 21 in the 50:50 one")
 
     def test_the_rule_only_loosened(self) -> None:
         """Every line the 2.7.7 rule refuses was refused by the 2.7.6 rule, so a report admitted before is admitted
         again on re-admission (the verifier re-admits old records with this check)."""
         labels = ("participant", "Participants", "subject", "subj", "PID", "sid", "rapid", "Subject-", "participant_")
         tokens = ("", " 7", "07", " P07", "s", " 4A", "A", " to", " #3", "_12", "-x9", " 12345678901234567")
-        times = ("23:23", "0:41", "9:05", "24:00", "20:80", "12:60", "T14:32", "14:32h", "1:23:45", "12:30:75",
+        times = ("22:40", "0:41", "9:05", "24:00", "30:70", "12:60", "T14:32", "14:32h", "1:23:45", "12:30:75",
                  "2019-03-02", "2024-1-5", "1999/12/31", "1:2", "123:45", "")
         seen = refused = 0
         for label, token, time in itertools.product(labels, tokens, times):
@@ -188,7 +188,7 @@ class ParticipantDateAdmission(unittest.TestCase):
     def test_long_lines_are_checked_in_linear_time(self) -> None:
         # Adjacent unbounded separator runs made a line of "participant" and 100k spaces take minutes.
         for line in ("participant" + " " * 100_000 + "x", "subjects" + "_-_ " * 25_000 + "12",
-                     "participants " + " and ".join(["P07"] * 20_000) + " 23:23", "participant " * 9_000 + "23:23"):
+                     "participants " + " and ".join(["P07"] * 20_000) + " 22:40", "participant " * 9_000 + "22:40"):
             started = time.monotonic()
             phase1_runtime.participant_date_linked(line)
             phase1_runtime.PARTICIPANT_LABELLED_ID.search(line)
@@ -200,7 +200,7 @@ class ParticipantDateAdmission(unittest.TestCase):
                      "2019-03-02T08:30:00", "2019-03-02t23:10", "２３:１５"):
             with self.subTest(time=text):
                 self.assertTrue(clock.search(f"at {text}."), "a date or clock time")
-        for text in ("12:60", "20:80", "50:50", "70:30", "25:10", "123:45", "T14:32", "14:32h"):
+        for text in ("12:60", "30:70", "50:50", "70:30", "25:10", "123:45", "T14:32", "14:32h"):
             with self.subTest(not_a_time=text):
                 self.assertIsNone(clock.search(f"at {text}."), "an hour of 0-24 and minutes of 00-59")
 

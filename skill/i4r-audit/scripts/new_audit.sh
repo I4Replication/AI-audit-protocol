@@ -8,7 +8,7 @@
 #
 # Before 2.5.0 the operator typed the audit path by hand and the audit lived inside the paper
 # folder; a mistyped path, or a title with a glob character in it, cost a run. Here the layout
-# rule decides the path, and a title such as "...exercise dependence?" gets a run folder
+# rule decides the path, and a title that ends in a question mark gets a run folder
 # without the '?' while the paper keeps its true name in data/ and in paper_source.json.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"

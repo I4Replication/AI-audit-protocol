@@ -796,12 +796,12 @@ class RoundTwelveFixes(unittest.TestCase):
 
     def test_anchored_rewrite_handles_lists_sources_conflicts_reasons_and_drafts(self):
         import renumber_findings
-        mapping = {"F3": "F5", "F4": "F3", "F5": "F4", "REP-f1_d421_n60_reproduce": "F1"}
+        mapping = {"F3": "F5", "F4": "F3", "F5": "F4", "REP-f1_d100_n50_reproduce": "F1"}
         with tempfile.TemporaryDirectory() as tmp:
             notes = pathlib.Path(tmp) / "RESPONSE_notes.md"
-            notes.write_text("findings F3 and F4 overlap\nSources: REP-f1_d421_n60_reproduce, F4\n"
+            notes.write_text("findings F3 and F4 overlap\nSources: REP-f1_d100_n50_reproduce, F4\n"
                              "- critic_stats C1 on F3, F4: overlap\n- withdrawn (EXCLUDED): same value as F4\n"
-                             "Table F4 stays\nsee REP-f1_d421_n60_reproduce\n### A-F3 round 1\n", encoding="utf-8")
+                             "Table F4 stays\nsee REP-f1_d100_n50_reproduce\n### A-F3 round 1\n", encoding="utf-8")
             self.assertEqual(renumber_findings.rewrite_extra(notes, mapping),
                              "findings F5 and F3 overlap\nSources: F1, F3\n"
                              "- critic_stats C1 on F5, F3: overlap\n- withdrawn (EXCLUDED): same value as F3\n"
@@ -809,7 +809,7 @@ class RoundTwelveFixes(unittest.TestCase):
 
     def test_email_detector_round_twelve_cases(self):
         import check_release_privacy as crp
-        for text in ("ane.garcia@ehu.eus", "x@uab.cat", "info@savethechildren.ngo"):
+        for text in ("jane.doe@uni.eus", "x@lab.cat", "info@charity.ngo"):
             self.assertEqual(len(crp._email_issues(text, "f")), 1, text)
         for text in ("git+ssh://git@github.com/org/pkg.git@v1.2", "https://oauth2@gitlab.com/x",
                      "y = x@W.to(device)", "x@W.at[i]"):
@@ -2731,14 +2731,14 @@ class RoundThirtySevenFixes(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             (root / "reservations").mkdir()
-            for rel in ("data/AER/smith_2020", "data/Psych/Athlete burnout"):
+            for rel in ("data/AER/smith_2020", "data/Psych/Paper with spaces"):
                 (root / rel).mkdir(parents=True)
-            legacy = root / "reservations" / "Psych_Athlete_burnout.json"
+            legacy = root / "reservations" / "Psych_Paper_with_spaces.json"
             legacy.write_text('{"owner": "alice@h", "paper": "%s", "claimed_at": "2026-09-20T00:00:00Z", '
-                              '"status": "active"}' % (root / "data/Psych/Athlete burnout"))
+                              '"status": "active"}' % (root / "data/Psych/Paper with spaces"))
             script = str(SKILL / "scripts" / "reserve_paper.sh")
             env = dict(os.environ, I4R_RESERVE_GRACE="0", I4R_OWNER="bob@h")
-            refused = subprocess.run(["bash", script, "claim", "data/Psych/Athlete burnout"], cwd=root,
+            refused = subprocess.run(["bash", script, "claim", "data/Psych/Paper with spaces"], cwd=root,
                                      capture_output=True, text=True, env=env)
             self.assertIn("reserved by alice@h", refused.stdout)
             subprocess.run(["bash", script, "claim", "data/AER/smith_2020"], cwd=root, capture_output=True, env=env)

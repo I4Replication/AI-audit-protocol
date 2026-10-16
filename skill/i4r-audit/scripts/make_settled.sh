@@ -663,7 +663,7 @@ def confirmations(row, verifier_notes=None):
             )
         # A reviewer call from any INTEGRATED round may back a settled fact, bounded by that
         # round's own integration time. Restricting this to round 1 forced later rounds' literal
-        # confirmations of corrected claims to be left unbound (first audit: F8 and F11 were
+        # confirmations of corrected claims to be left unbound (audit A34: F8 and F11 were
         # promoted on round-1 records whose verdicts read OVERSTATED).
         invocation_round = invocation.get("round")
         if not isinstance(invocation_round, int) or invocation_round not in integrated_rounds:

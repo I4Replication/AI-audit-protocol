@@ -8,7 +8,7 @@ second, perfectly extractable deposit over one zero-length entry written as Defl
 one would have stranded a real paper, which is the opposite of what the guard is for.
 
 Fixtures are built here rather than taken from the tree, so the tests hold on any machine; the
-zero-length Defl:N entry reproduces the real p7rj3 deposit's exact defect.
+zero-length Defl:N entry reproduces the real A35 deposit's exact defect.
 """
 from __future__ import annotations
 
@@ -65,12 +65,12 @@ def zero_length_deflate_zip(path: Path) -> None:
 
     `unzip -t` calls this 'invalid compressed data to inflate' and exits 2; the entry extracts
     to its true content -- nothing -- and the archive is otherwise perfectly readable. This is
-    the exact shape of the p7rj3 deposit in this tree.
+    the exact shape of the A35 deposit in this tree.
     """
     body = b"a,b\n1,2\n"
     build_zip(path, [
         ("data/values.csv", deflate(body), 8, len(body)),
-        ("data/Analysis Strategy.txt", b"", 8, 0),
+        ("data/empty_notes.txt", b"", 8, 0),
     ])
 
 
@@ -109,7 +109,7 @@ class IntakeArchiveGuardTest(unittest.TestCase):
         self.assertFalse((self.audit / "pkg").exists())
 
     def test_zero_length_deflate_entry_does_not_strand_the_paper(self) -> None:
-        package = self.base / "p7rj3-like.zip"
+        package = self.base / "zero-length-entry.zip"
         zero_length_deflate_zip(package)
         # Precondition: this fixture is the one `unzip -t` gets wrong and `zipinfo -t` gets right.
         unzip_rc = subprocess.run(["unzip", "-t", "-qq", str(package)], capture_output=True,
@@ -136,12 +136,12 @@ class IntakeArchiveGuardTest(unittest.TestCase):
         package = self.base / "deposit"
         (package / "data").mkdir(parents=True)
         (package / "data" / "values.csv").write_text("a,b\n1,2\n", encoding="utf-8")
-        (package / "data" / "values (Bruno's conflicted copy 2026-08-02).csv").write_text(
+        (package / "data" / "values (alice's conflicted copy 2026-08-02).csv").write_text(
             "a,b\n9,9\n", encoding="utf-8")
         result = run_setup(self.audit, self.paper, package)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("conflicted copies", result.stderr)
-        self.assertIn("values (Bruno's conflicted copy", result.stderr)
+        self.assertIn("values (alice's conflicted copy", result.stderr)
 
     def test_clean_directory_deposit_is_accepted(self) -> None:
         package = self.base / "clean_deposit"

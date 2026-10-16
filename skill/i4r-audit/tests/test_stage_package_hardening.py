@@ -307,8 +307,8 @@ class StagePathAndSymlinkTest(unittest.TestCase):
         self.assertTrue((release / "work/reproducible.qmd").is_file())
 
     def test_detector_source_spelling_the_users_prefix_does_not_block_staging(self) -> None:
-        # Regex source in evidence scripts spells the prefix without an account name; the first
-        # production audit's release was blocked by its own privacy detectors' patterns.
+        # Regex source in evidence scripts spells the prefix without an account name;
+        # audit A34's release was blocked by its own privacy detectors' patterns.
         audit = release_fixture(self.root / "detector-source")
         write(audit / "work/privacy_check.py",
               'import re\nMARK = re.compile(r\'"(/Users/|/home/|[A-Za-z]:\\\\\\\\)\')\n'

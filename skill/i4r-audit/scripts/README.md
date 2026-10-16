@@ -52,9 +52,9 @@ the pins, or delete the script, before relying on one.
 
 ## Retained history (audit-specific, not reusable)
 
-`integrate_fessi_round1.py` and `write_fessi_round2_wrapup.py` were written for one audit and are
+A round-1 integration script and `write_round2_wrapup_once.py` were written for one audit (A01) and are
 kept as a record of that run. They are not templates for other papers. This repository omits
-`integrate_fessi_round1.py`, which embeds that audit's draft comment text; the released package keeps it.
+the round-1 integration script, which embeds that audit's draft comment text; the released package keeps it.
 
 ## Misplaced test
 

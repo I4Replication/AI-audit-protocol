@@ -978,7 +978,7 @@ fi
   || fail "changed input allowed more than three round-wide stats attempts"
 
 echo "[knob] MAX_TRIES above the policy default governs the helper's inference-start ceiling too"
-# The first production audit lost two complete fourth-attempt reviews: the driver allowed attempt 4
+# Audit A34 lost two complete fourth-attempt reviews: the driver allowed attempt 4
 # under MAX_TRIES=5 while the runtime helper still refused to record a fourth accepted inference
 # start under its own default of 3. One knob must govern both.
 AUDIT_KNOB="$TMP_ROOT/audit_knob"
@@ -1102,8 +1102,8 @@ done
 
 # tamper_evidence is not a bad sample: the data critic's frozen REPORT_TO_REVIEW.md gains a line
 # DURING its call, so the snapshot, not the response, is what changed. 2.6.7 re-sampled it as
-# schema-invalid and spent all three attempts against the same broken snapshot (on the ninth
-# production audit a snapshot fault cost twelve paid calls that way). Now the post-call validator
+# schema-invalid and spent all three attempts against the same broken snapshot (on audit
+# A20 a snapshot fault cost twelve paid calls that way). Now the post-call validator
 # exits 5: one call, recorded as error_class environment, no focused repair, no retry, no permanent
 # marker against the role, nothing published. Parallel critics that validate after the tamper stop
 # the same way; none is ever re-dispatched.
@@ -1443,7 +1443,7 @@ else
   first_cache_sha=$(shasum -a 256 "$AUDIT_CONFLICT/critique/round_1/result_cache"/*/stats/output.json | awk '{print $1}')
   # Two valid reviews of identical input that differ is ordinary sampling variance. The first
   # cached object stays canonical and the alternative is preserved; the round must still finish.
-  # The first production audit lost a fully valid four-critic round to this being fatal.
+  # Audit A34 lost a fully valid four-critic round to this being fatal.
   if ! run_driver "$AUDIT_CONFLICT" 1 conflict-two nondeterministic I4R_FORCE_RERUN=1; then
     fail "nondeterministic forced rerun must complete using the first cached object"
     show_log "$TMP_ROOT/conflict-two.log"
@@ -1758,7 +1758,7 @@ grep -q "already completed" "$TMP_ROOT/repin-done.log" || { fail "the completed-
 [ "$(snapshot_sha "$AUDIT_DONE")" = "$before" ] || fail "a refused re-pin changed the snapshot"
 
 echo "[12/12] a frozen snapshot that drifts is re-frozen before any paid call; one that changes stops"
-# On the ninth production audit the Dropbox File Provider reset a freshly frozen snapshot's source
+# On audit A20 the Dropbox File Provider reset a freshly frozen snapshot's source
 # directory to 0700 during the model probe. Nothing checked before dispatch, every critic's
 # post-call check then failed as "schema", and the retry loop spent twelve paid calls; the
 # adjudicator's target snapshot hit the same race. FAKE_SNAPSHOT_DRIFT=<role> is that mode-only
@@ -1805,7 +1805,7 @@ if expected:
 PY
 }
 
-# (a) The ninth audit's shape: the drift lands during the (uncached) model probe. Every critic
+# (a) Audit A20's shape: the drift lands during the (uncached) model probe. Every critic
 # now succeeds at attempt 1; the first pre-dispatch check re-freezes and journals one note.
 AUDIT_DRIFT_PROBE="$TMP_ROOT/audit_drift_probe"
 if ! make_audit_21 "$AUDIT_DRIFT_PROBE" audit-drift-probe-21; then

@@ -103,7 +103,7 @@ fi
 mkdir -p "$R"
 STAGE_ACCEPTED=0
 # The marker used to hold one word. A rejected staging directory found a day later, on another
-# machine, then said nothing about which gate refused it; the seventh production audit left two
+# machine, then said nothing about which gate refused it; audit A28 left two
 # such directories before a third attempt passed. Each banner below records the step it opens,
 # and the marker names the step that was open when the script stopped.
 STAGE_STEP="before the first step"
@@ -400,7 +400,7 @@ stage "pruning verbatim copies of the authors' files"
 # and copy the data alongside. Both are CC0 and already public, so the copies disclose nothing —
 # but shipping duplicates of someone else's deposit inside ours is redundant, and for the data
 # files it also breaches the audit's own no-identifier-with-timestamp rule. Prune by content
-# hash rather than by path, so a renamed copy (DualTask_clean_E.mat) is caught too.
+# hash rather than by path, so a renamed copy is caught too.
 python3 - "$A" "$R" <<'PY'
 import hashlib, json, pathlib, sys
 A, R = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
@@ -487,8 +487,8 @@ PY
 
 # 2. no data files at all in the release
 #
-# The extension list must cover SERIALIZED formats, not just the text and spreadsheet ones. In the
-# 2026-08-26 audit a full verbatim copy of the participant-level data survived a scrub as work/02_d.rds
+# The extension list must cover SERIALIZED formats, not just the text and spreadsheet ones. In one
+# audit a full verbatim copy of the participant-level data survived a scrub as work/02_d.rds
 # precisely because every scanner in the pipeline was looking at text: a .rds is a gzipped R object,
 # so it matches no grep, shows no identifier, and reads as a 40 KB binary blob. The same is true of
 # .rdata/.rda, .omv (a zip whose strings.bin holds the identifier values), .dta, .parquet, .feather
@@ -538,17 +538,17 @@ rm -rf "$__st"
 python3 - "$R" <<'PY'
 import re, pathlib, sys
 R = pathlib.Path(sys.argv[1])
-# NO \b BEFORE `sub`. The real deposited form is MSTE_AC_sub_E_5.mat, and `_` is a word
+# NO \b BEFORE `sub`. A prefixed deposit form such as ABC_XY_sub_E_<n>.mat puts `_` before it, a word
 # character, so a leading \b never fires there — the exact bug this skill's own notes warn about,
 # reintroduced here and caught by a critic. Match the prefixed form directly, and cover generic
 # participant/subject labels too.
-CODE  = re.compile(r"(?:^|[^A-Za-z0-9])(?:MSTE_AC_)?sub_[EN]_\d+|(?:^|[^A-Za-z0-9])(?:MSTE_AC_)?sub_\d+Placebo"
+CODE  = re.compile(r"(?:^|[^A-Za-z0-9])sub_[EN]_\d+|(?:^|[^A-Za-z0-9])sub_\d+Placebo"
                    r"|\bNoExperto\d+|\bExperto\d+"
                    r"|\b(?:participant|subject|Participant|Subject)\s*#?\d{1,3}\b", re.I)
 STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T?\d{0,2}:?\d{0,2}|\d{2}:\d{2}:\d{2}")
 # Positive controls are deliberately OUT OF RANGE (id 999, year 1900) so that a control can never be
 # mistaken for real data, and can never itself trip the gate it is validating.
-for probe in ("MSTE_AC_sub_E_999.mat", "MSTE_AC_sub_999Placebo.mat", "sub_N_999",
+for probe in ("ABC_XY_sub_E_999.mat", "ABC_XY_sub_999Placebo.mat", "sub_N_999",
               "Experto999", "participant 999"):
     if not CODE.search(probe):
         print(f"  FAIL: the code detector does not fire on {probe!r}"); sys.exit(1)
@@ -557,7 +557,7 @@ if not STAMP.search("1900-01-01T00:00:00"):
 if CODE.search("subtract the substring from subsequent submissions"):
     print("  FAIL: the code detector fires on ordinary prose"); sys.exit(1)
 # density self-test: a synthetic listing must trip, a synthetic prose page must not
-_listing = "\n".join(f"MSTE_AC_sub_E_{900+i}.mat  0.01" for i in range(20))
+_listing = "\n".join(f"ABC_XY_sub_E_{900+i}.mat  0.01" for i in range(20))
 _prose   = "\n".join(["ordinary sentence about the analysis."]*200 + ["we regenerated sub_N_999"])
 def _dens(s):
     L=[x for x in s.split("\n")]; h=sum(1 for x in L if CODE.search(x))
@@ -596,7 +596,7 @@ PY
 [ $? -ne 0 ] && viol=1
 
 # 3b. OPAQUE PER-ROW IDENTIFIERS, in any format. Check 3 above knows only the code shapes of the
-# audits it was written for. On the Kritzler audit a deposit keyed by Qualtrics response ids put
+# audits it was written for. On audit A12 a deposit keyed by Qualtrics response ids put
 # 5,546 of them across nine staged files and check 3 passed, because none of them looks like
 # anything it was taught. That is the scope failure this skill warns about, committed by the skill.
 #

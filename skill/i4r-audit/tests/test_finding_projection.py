@@ -47,7 +47,7 @@ class FindingProjectionIntegrationTest(unittest.TestCase):
 
     def test_apply_refuses_when_no_row_is_approved(self) -> None:
         # Before critique every row is unapproved. Applying would have replaced the drafted Appendix A
-        # with an empty table and stripped every claim tag (first production audit, round 1).
+        # with an empty table and stripped every claim tag (audit A34, round 1).
         unapproved = copy.deepcopy(self.row)
         unapproved["coordinator_approved"] = False
         unapproved["status"] = "draft"

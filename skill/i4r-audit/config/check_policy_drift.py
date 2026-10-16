@@ -282,7 +282,7 @@ def check_policy_shape(policy: dict, errors: list[str]) -> None:
     }
     if policy["phase_1"].get("repair") != expected_repair:
         errors.append("Phase-1 focused-repair byte-freeze contract drifted")
-    # 2.6.4, the post-fan-out verifier (Neudorfer F13-F15). It is the family-A confirmation for rows
+    # 2.6.4, the post-fan-out verifier (audit A23, F13-F15). It is the family-A confirmation for rows
     # no Phase-1 auditor raised, so it must stay on the auditors' route and family: a verifier on
     # the critics' family would let one family confirm a row twice.
     verifier = policy["models"].get("post_fan_out_verifier")

@@ -3,8 +3,8 @@
  "source": "i4r-audit 2.7.7, reference/ (copied verbatim on 2026-10-09; the baseline prompt tells the agent which pipeline-process instructions in them to ignore)",
  "files": {
   "checklist.md": {
-   "sha256": "ca70f64bbe97110cac59813a1675ee98c4be80b2c5e06f78a5b4c67eef45bf98",
-   "bytes": 7404,
+   "sha256": "1228406f712c307bf3769e8334f434ef5a608ffa07206e6be8b7d7c3eff81a79",
+   "bytes": 7341,
    "source_path": "reference/checklist.md"
   },
   "brief_template.md": {
@@ -13,8 +13,8 @@
    "source_path": "reference/brief_template.md"
   },
   "report_structure.md": {
-   "sha256": "f419473e4b9be7c31cee4023fa011871334524915071deedc8fffa19f17d794b",
-   "bytes": 12845,
+   "sha256": "a39365522639260332ce92d33e8921e6bf4a90c113f2fbbe75f1baa7a37fc578",
+   "bytes": 12851,
    "source_path": "reference/report_structure.md"
   },
   "SCHEME.md": {

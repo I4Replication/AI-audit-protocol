@@ -1,7 +1,7 @@
 """2.7.4: a deposit file whose name reads as knitr inline R code no longer breaks the verification notebook.
 
-The Röthlin audit (2026-10-04) deposited a file named "r code OSF.docx". make_verification_notebook.sh wrote every
-deposit file name in one-backtick code spans in the notebook's deposit inventory, and knitr reads `r code OSF.docx` as
+Audit A16 (2026-10-04) deposited a file whose name opens with "r " (say "r code notes.docx"). make_verification_notebook.sh wrote every
+deposit file name in one-backtick code spans in the notebook's deposit inventory, and knitr reads `r code notes.docx` as
 inline R code (`r expr`), so run_snippets.sh and the release render stopped with "Failed to parse the inline R code".
 Escaping the generated notebook by hand did not help: stage_release.sh regenerates the notebook and requires byte
 identity. The generator now pads such a name in a double-backtick span, which renders the same text and is not inline
@@ -92,7 +92,7 @@ class InlineRFileName(unittest.TestCase):
     def test_the_harness_knits_and_passes(self) -> None:
         run = subprocess.run(["bash", str(RUN_SNIPPETS), str(self.audit)], text=True, capture_output=True,
                              timeout=600, env=self.env)
-        # before the fix knitr evaluated `r code.docx` ("object 'code.docx' not found"; for "r code OSF.docx" a parse
+        # before the fix knitr evaluated `r code.docx` ("object 'code.docx' not found"; for "r code notes.docx" a parse
         # error) and the knit stopped at the inventory line, so run_snippets exited 2 with no ledger
         self.assertNotIn("inline_exec", run.stdout + run.stderr)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)

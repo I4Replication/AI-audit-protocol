@@ -6,7 +6,7 @@ then inert and seatbelt denies every Bash read and write under the audit root, w
 denyRead/denyWrite protections for ``paper/``, ``pkg/`` and ``run.json`` go inert at the same
 moment.  The Write tool separately refuses such a path outright.
 
-A paper folder named "Can automatic reactions mirror exercise dependence?" spent 5,443,051
+A paper folder whose name ended in "?" spent 5,443,051
 tokens and $6.43 across five roles and produced no report.  Nothing caught it: the preflight
 receipt writes through Python rather than through the sandbox, and the capability probe proved
 only that the *Write* tool worked -- the one filesystem path that still succeeds when the rules
@@ -36,7 +36,7 @@ class SandboxRuleExpressibility(unittest.TestCase):
     """The guard itself, including its negative controls."""
 
     def test_safe_punctuation_is_not_treated_as_a_metacharacter(self) -> None:
-        # Paper 1's audit root contained a colon and spaces and worked. If this test ever
+        # Audit A34's root contained a colon and spaces and worked. If this test ever
         # starts failing, the guard has become a blanket ban on punctuation and will reject
         # ordinary journal-article directory names.
         for name in ("Paper: A Study (2026)", "Smith & Jones ~ final!", "a b c"):
@@ -52,10 +52,10 @@ class SandboxRuleExpressibility(unittest.TestCase):
     def test_the_remedy_names_the_character_and_the_path(self) -> None:
         with self.assertRaises(phase1_runtime.Phase1Error) as caught:
             phase1_runtime.assert_sandbox_expressible(
-                ["/audits/dependence?/phase1"], pathlib.Path("/audits/dependence?")
+                ["/audits/question?/phase1"], pathlib.Path("/audits/question?")
             )
         message = str(caught.exception)
-        self.assertIn("dependence?", message)
+        self.assertIn("question?", message)
         self.assertIn("I4R_PAPER_DIR", message)
         self.assertIn("Forbidden:", message)
 
@@ -82,7 +82,7 @@ class Phase1SandboxSettingsRejectGlobRoots(unittest.TestCase):
         self.assertEqual([e for e in entries if set("?*[]{}\\") & set(e)], [])
 
     def test_each_glob_metacharacter_in_the_audit_root_is_refused_at_emission(self) -> None:
-        for name in ("dependence?", "star*name", "bracket[1]", "brace{x}"):
+        for name in ("question?", "star*name", "bracket[1]", "brace{x}"):
             with self.subTest(name=name):
                 root, phase_root, snapshot, packet, output = self.paths(name)
                 with self.assertRaises(phase1_runtime.Phase1Error):
@@ -93,7 +93,7 @@ class Phase1SandboxSettingsRejectGlobRoots(unittest.TestCase):
         # a rule that is well-formed JSON but matches nothing.
         root, phase_root, snapshot, packet, output = self.paths("clean")
         settings = phase1_runtime.sandbox_settings(root, phase_root, snapshot, packet, output)
-        settings["sandbox"]["filesystem"]["allowWrite"] = ["/audits/dependence?/out"]
+        settings["sandbox"]["filesystem"]["allowWrite"] = ["/audits/question?/out"]
         with self.assertRaises(phase1_runtime.Phase1Error):
             phase1_runtime.validate_sandbox_contract(settings, snapshot, packet, output, root)
 
@@ -110,7 +110,7 @@ class CoordinatorSandboxSettingsRejectGlobRoots(unittest.TestCase):
         self.assertEqual(settings["sandbox"]["network"]["deniedDomains"], ["*"])
 
     def test_glob_root_is_refused(self) -> None:
-        root = pathlib.Path("/audits/Can automatic reactions mirror exercise dependence?")
+        root = pathlib.Path("/audits/A paper title that ends in a question mark?")
         attempt = root / "coordinator/invocations/aa/attempt_01_bb"
         # The class run_coordinator raises, resolved through it: several suites swap sys.modules entries during
         # discovery, so the module-level phase1_runtime can be another copy than the one run_coordinator imported.

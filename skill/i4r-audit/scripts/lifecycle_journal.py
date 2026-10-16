@@ -57,7 +57,7 @@ def _attempt_ceiling_source() -> str:
 def max_attempts_per_role() -> int:
     """Accepted inference starts allowed per role and round.
 
-    The protocol default is 3. On the first production audit every exhausted budget was
+    The protocol default is 3. On audit A34 every exhausted budget was
     consumed by harness defects rather than by the role failing at its task, so the ceiling
     is an operator setting: ``I4R_MAX_ATTEMPTS=<n>`` raises or lowers it for a run. It is
     read at call time so a long-running driver and a later resume agree.
@@ -467,7 +467,7 @@ def _round_result_payload(events: list[dict[str, Any]], payload: dict[str, Any])
     time), which is right for legacy audits that have no round_integrated event. On an audit that
     does, a round_result logged afterwards -- as the docs instruct -- silently replaced the
     journaled time, and the settled cache, which binds it, then failed in make_diff_packet with
-    "Round-1 completion/integration/consistency gate is invalid" (the seventh production audit).
+    "Round-1 completion/integration/consistency gate is invalid" (audit A28).
     Only appends are checked, so replaying an existing journal projects exactly as before.
     """
     number = payload.get("round")
@@ -759,7 +759,7 @@ def prepare_round(
 
     A round may be re-prepared with ``supersede=True`` while it has not been integrated or
     ended: the new plan becomes the one an authorization binds to, and the earlier plan stays
-    in the hash chain. The first production audit lost a fully valid four-critic round because
+    in the hash chain. Audit A34 lost a fully valid four-critic round because
     a driver fix changed the plan and the only recourse was refusal.
     """
     if not isinstance(round_number, int) or round_number < 1:
@@ -2057,7 +2057,7 @@ def project_invocations(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if "status" in changes and changes["status"] != record.get("status"):
                 # The row's original terminal status is the fact about what the call did.
                 # Keep the first one across repeated corrections: a superseded failure must
-                # stay countable as a failure. Two rows on the first production audit went
+                # stay countable as a failure. Two rows on audit A34 went
                 # failed -> legacy_record, and run_metrics then reported 7 failures, not 9.
                 record.setdefault("superseded_status", record.get("status"))
             record.update(copy.deepcopy(changes))

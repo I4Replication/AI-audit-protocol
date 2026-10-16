@@ -329,9 +329,9 @@ class Metadata21LifecycleTests(unittest.TestCase):
         self.assertEqual(durations["idle_seconds"], 60)
 
 
-class FessiMigrationProjectionTests(unittest.TestCase):
-    def test_fessi_projection_retains_38_rows_and_corrects_only_forward(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="i4r-fessi-migrate-") as directory:
+class RegressionMigrationProjectionTests(unittest.TestCase):
+    def test_regression_projection_retains_38_rows_and_corrects_only_forward(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="i4r-regression-migrate-") as directory:
             root, pdf = test_document_release.audit_fixture(
                 pathlib.Path(directory), body_pages=14, back_pages=3, preview=True,
             )
@@ -358,8 +358,8 @@ class FessiMigrationProjectionTests(unittest.TestCase):
             for index in range(38):
                 row = copy.deepcopy(template)
                 row.update({
-                    "invocation_id": f"inv-fessi-{index:02d}", "role": f"legacy-role-{index:02d}",
-                    # the Fessi audit ran on Terra; the migration's served-identity rule is Terra-specific by design
+                    "invocation_id": f"inv-regression-{index:02d}", "role": f"legacy-role-{index:02d}",
+                    # audit A01 ran on Terra; the migration's served-identity rule is Terra-specific by design
                     "requested_model": "gpt-5.6-terra", "observed_model": "gpt-5.6-terra",
                     "observed_model_ids": ["gpt-5.6-terra"], "model_family": "gpt",
                     "model_source": "observed", "provider": "openai", "reasoning_effort": "high",
@@ -369,7 +369,7 @@ class FessiMigrationProjectionTests(unittest.TestCase):
                 json.dumps(row, sort_keys=True) + "\n" for row in rows
             ))
             result = migrate_metadata_2_1.migrate(
-                root, fessi=True, expected_invocations=38,
+                root, regression=True, expected_invocations=38,
             )
             self.assertEqual(result["provider_calls_during_migration"], 0)
             self.assertFalse(result["round_1_rerun"])
@@ -397,7 +397,7 @@ class FessiMigrationProjectionTests(unittest.TestCase):
             ))
 
             critic = {
-                **reservation("inv-fessi-round2", "critic_completeness"),
+                **reservation("inv-regression-round2", "critic_completeness"),
                 "role_class": "critic", "round": 2, "provider": "openai",
                 "requested_model": "gpt-5.6-terra", "reasoning_effort": "high",
             }
@@ -406,12 +406,12 @@ class FessiMigrationProjectionTests(unittest.TestCase):
             before = lifecycle_journal.load_events(root)
             self.assertFalse(any(
                 event["type"] == "provider_request"
-                and event["payload"].get("invocation_id") == "inv-fessi-round2"
+                and event["payload"].get("invocation_id") == "inv-regression-round2"
                 for event in before
             ))
 
             plan = {
-                "purpose": "Fessi Round-2 delta critique", "provider": "openai",
+                "purpose": "Regression Round-2 delta critique", "provider": "openai",
                 "model_route": "gpt-5.6-terra/high",
                 "data_classes": ["report", "claims", "evidence"],
                 "policy_sha256": "d" * 64,
@@ -427,19 +427,19 @@ class FessiMigrationProjectionTests(unittest.TestCase):
             authorization["expires_at"] = "2099-01-01T00:00:00Z"
             lifecycle_journal.authorize_round(root, 2, authorization)
             lifecycle_journal.reserve_invocation(root, critic)
-            lifecycle_journal.mark_provider_request(root, "inv-fessi-round2")
+            lifecycle_journal.mark_provider_request(root, "inv-regression-round2")
             after = lifecycle_journal.load_events(root)
             request_index = next(
                 index for index, event in enumerate(after)
                 if event["type"] == "provider_request"
-                and event["payload"].get("invocation_id") == "inv-fessi-round2"
+                and event["payload"].get("invocation_id") == "inv-regression-round2"
             )
             self.assertEqual(after[request_index - 1]["type"], "round_start")
 
-    def test_fessi_diagnostic_name_without_manifest_is_not_trusted(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="i4r-fessi-name-only-") as directory:
+    def test_regression_diagnostic_name_without_manifest_is_not_trusted(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="i4r-regression-name-only-") as directory:
             root = pathlib.Path(directory)
-            path = root / "report/fessi-max14.pdf"
+            path = root / "report/regression-max14.pdf"
             path.parent.mkdir(parents=True)
             path.write_bytes(b"not a manifest-bound PDF")
             self.assertEqual(migrate_metadata_2_1.diagnostic_artifacts(root), [])

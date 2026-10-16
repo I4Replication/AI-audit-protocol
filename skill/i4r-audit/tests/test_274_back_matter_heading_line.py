@@ -2,8 +2,8 @@
 
 publish_completed.sh recounts the flattened publication's PDF with document_release.recount_candidate(), which takes
 the first page whose first rendered line is a back-matter heading as the start of the back matter. The test used to
-look only at the line's first word. On the MacIntyre 2026 audit (20261005-audit-312023cc), body page 8 opened
-mid-sentence with "appendix output and pkg/FS_during.xlsx". The recount put the boundary on page 8 against the
+look only at the line's first word. On audit A18, body page 8 opened
+mid-sentence with "appendix output and pkg/data/sessions.xlsx". The recount put the boundary on page 8 against the
 manifest's page 10 and refused the publish. build_docx.sh, stage_release.sh and finalize_run.sh, which locate the
 boundary from the report's own heading, had all accepted the document. The whole rendered line must now be the
 heading: "Data and Code Availability", "References", or "Appendix" with an optional label and title
@@ -36,7 +36,7 @@ HEADINGS = [
     "  Data  and   Code Availability ",
 ]
 BODY_LINES = [
-    "appendix output and pkg/FS_during.xlsx. Impact. Wording only. Remedy. Describe condition",
+    "appendix output and pkg/data/sessions.xlsx. Impact. Wording only. Remedy. Describe condition",
     "References to the appendix follow in Section 13.",
     "references.",
     "Appendix A lists every finding with its section.",
@@ -81,7 +81,7 @@ class Recount(unittest.TestCase):
     def test_body_page_opening_with_appendix_mid_sentence(self) -> None:
         pages = [
             "A comment on the article\nAbstract\nThe deposit reproduces the models.",
-            "appendix output and pkg/FS_during.xlsx. Impact. Wording only. Remedy. Describe condition\nterms.",
+            "appendix output and pkg/data/sessions.xlsx. Impact. Wording only. Remedy. Describe condition\nterms.",
             "Data and Code Availability\nAll values come from the deposited files.",
             "References\nBrodeur, A. (2026).",
         ]

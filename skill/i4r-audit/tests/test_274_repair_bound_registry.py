@@ -3,7 +3,7 @@
 ``run_phase1.try_focused_repair`` runs the repair in ``phase1/roles/<role>/<input_sha256>/repair_<uuid>/``,
 beside the failed sample's ``attempt_NN_<uuid>/``, and the quorum binds the repair's invocation.
 ``build_draft_registry.py`` searched ``*/attempt_*/status.json`` only, so the first audit to complete a role
-that way (20260930-audit-0ccfcb4e, auditor_code_methods) stopped before the coordinator with
+that way (audit A15, auditor_code_methods) stopped before the coordinator with
 "FATAL: no bound result.json".
 
 Nothing here is written by hand: the real Phase-1 runner runs the fake CLI's ``repairable_output`` scenario

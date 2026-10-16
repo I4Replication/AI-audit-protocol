@@ -115,7 +115,7 @@ acquire_lock () {
       #
       # The window is real and narrow: mkdir succeeds, then the owner dies before `printf > pid`
       # and `date > ts` land. A kill, a full disk, or a synced-folder stall does it. It happened on
-      # the first audit run out of a Dropbox directory and cost that run its model_assignments.
+      # an early audit run out of a Dropbox directory and cost that run its model_assignments.
       #
       # Fall back on the DIRECTORY's own mtime, which the filesystem records whether or not the
       # owner ever got to write anything into it.

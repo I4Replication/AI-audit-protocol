@@ -323,7 +323,7 @@ w("| File | Loader |")
 w("|---|---|")
 def md_code(text):
     # A one-backtick span that opens with "r " or "r#" is knitr inline R code (`r expr`): a deposit file named
-    # "r code OSF.docx" was evaluated as R and stopped the knit with "Failed to parse the inline R code". A padded
+    # "r code notes.docx" was evaluated as R and stopped the knit with "Failed to parse the inline R code". A padded
     # double-backtick span renders the same code text and is not inline code; every other name keeps one backtick.
     return f"`` {text} ``" if re.match(r"r[ #]", text) else f"`{text}`"
 for rel, ext, loader, size in deposit:

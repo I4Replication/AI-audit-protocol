@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """2.6.4: post-fan-out verifier invocation records, the journal, and finalisation.
 
-The Neudorfer audit (20260923-audit-3309cfcf) excluded three article-text findings (F13-F15) that
+Audit A23 excluded three article-text findings (F13-F15) that
 every critic had confirmed. They had been raised after fan-out, and before 2.6.4 a family-A
 confirmation could come only from the Phase-1 auditor that raised a row. The hand-made records
 tried as a workaround were refused one gate after another: role_class ``other`` by make_settled,
@@ -17,7 +17,7 @@ journal is touched. Every verifier call a test journals is made by
 does (real lifecycle API, frozen packet, validated promoted tree, the runner's receipt): since
 2.6.4 every consumer re-admits a verifier record through ``run_verifier.readmit_record``, so a
 hand-written receipt or output tree is refused, and so is the hand record
-``verifier_fixtures.forge_hand_record`` makes (the Neudorfer ``make_record.py`` shape).
+``verifier_fixtures.forge_hand_record`` makes (the A23 ``make_record.py`` shape).
 
 The 2.6.4 review's records findings are pinned here too, each by building the state on disk and
 running the real scripts:
@@ -120,7 +120,7 @@ def legacy_terminal_record(invocation_id: str, role: str, role_class: str, round
                            output: str | None, output_sha256: str | None, started_at: str,
                            ended_at: str, route: dict[str, Any] = SONNET, status: str = "completed",
                            input_hash: str = "f" * 64) -> dict[str, Any]:
-    """A terminal row for a NON-runner call: the Neudorfer out-of-protocol shapes (role_class
+    """A terminal row for a NON-runner call: the A23 out-of-protocol shapes (role_class
     other/auditor) and the refused inputs of the journal guards. Never admitted as a verifier."""
     return {
         "invocation_id": invocation_id, "role": role, "role_class": role_class,
@@ -261,7 +261,7 @@ class VerifierRecordsTest(_AuditCase):
         self.assertEqual(publish.returncode, 0, publish.stdout + publish.stderr)
 
     def test_confirmed_verifier_promotes_a_row_raised_after_fan_out(self) -> None:
-        """The whole Neudorfer path: a coordinator-raised row confirmed by the verifier (family A)
+        """The whole A23 path: a coordinator-raised row confirmed by the verifier (family A)
         and a critic (family B) is promoted, released, and counts no human verification."""
         recorded: dict[str, Any] = {}
 
@@ -351,7 +351,7 @@ class VerifierRecordsTest(_AuditCase):
         self.assertTrue(self.compliance(audit)["compliance_pass"], self.compliance(audit)["violations"])
 
     def test_verifier_recorded_as_an_auditor_is_still_an_extra_auditor(self) -> None:
-        with self.subTest("round 2, the Neudorfer auditor_operator_verification shape"):
+        with self.subTest("round 2, the A23 auditor_operator_verification shape"):
             audit = make_audit(self.root / "round-2")
             output = "work/coordinator/verifier_r2/output/verification_result.json"
             write(audit / output, json.dumps({"verifications": [
@@ -544,7 +544,7 @@ class VerifierRecordsTest(_AuditCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(set(self.compliance(audit)) - set(COMPLIANCE_KEYS_263), VERIFIER_KEYS)
 
-    def test_neudorfer_legacy_record_shape_still_finalizes_clean(self) -> None:
+    def test_legacy_hand_record_shape_still_finalizes_clean(self) -> None:
         audit = make_audit(self.root)
         output = audit / "work/coordinator/verifier_r2/output/verification_result.json"
         write(output, json.dumps({"verifications": [
@@ -577,8 +577,8 @@ class VerifierRecordsTest(_AuditCase):
         self.assertTrue(compliance["compliance_pass"], compliance["violations"])
         self.assertEqual(list(compliance), COMPLIANCE_KEYS_263)
         summary = subprocess.run(["python3", str(SUMMARIZE), str(audit), "--check",
-                                  "--json", str(self.root / "neudorfer.json"),
-                                  "--markdown", str(self.root / "neudorfer.md")],
+                                  "--json", str(self.root / "legacy.json"),
+                                  "--markdown", str(self.root / "legacy.md")],
                                  text=True, capture_output=True, timeout=60, env=self.environment)
         self.assertEqual(summary.returncode, 0, summary.stdout + summary.stderr)
 

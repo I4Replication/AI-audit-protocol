@@ -1,6 +1,6 @@
 """The role prompt must name every rule the output validator enforces.
 
-Nine separate Phase-1 failures on the first production audit came from a single defect
+Nine separate Phase-1 failures on audit A34 came from a single defect
 class: phase1_runtime validated a rule that the role prompt described only in prose or
 not at all. Fake-runner tests cannot catch this because the fakes emit validator-perfect
 output. This test pins the prompt to the validator's vocabulary instead.
@@ -27,7 +27,7 @@ def rendered_contract(inventory_path: str) -> str:
 
     The contract used to live in prompts/common.txt, which is rendered only into critic prompts.
     The targeted adjudicator is graded by the same validator and was shown none of it, which is
-    how round 2 of the second production audit died. It now lives in prompts/contract.txt and is
+    how round 2 of audit A38 died. It now lives in prompts/contract.txt and is
     rendered into both, with {{INVENTORY}} bound to that role's snapshot layout.
     """
     text = (SKILL / "prompts/contract.txt").read_text(encoding="utf-8")
@@ -133,7 +133,7 @@ class RolePromptNamesValidatorRules(unittest.TestCase):
 
 
 class CoordinatorPromptStatesTheConclusionChangingRule(unittest.TestCase):
-    """The seventh production audit lost a 49-minute coordinator call to this: three Sonnet auditors
+    """Audit A28 lost a 49-minute coordinator call to this: three Sonnet auditors
     agreed a finding was conclusion-changing, the draft summary said "set it only with two
     independent confirmations", the coordinator set changes_conclusion=true, and the validator
     rejected the whole output because confirmations must span two MODEL FAMILIES -- which no
@@ -147,7 +147,7 @@ class CoordinatorPromptStatesTheConclusionChangingRule(unittest.TestCase):
         self.assertIn("two model families", text)
         self.assertIn("round 1 supplies the second family", text)
         # 2.6.2: and the candidate status goes in ADJUDICATION.md, never in the projected claim text
-        # (the seventh audit's F1 claim still read "a candidate ... requires a second model family"
+        # (audit A28's F1 claim still read "a candidate ... requires a second model family"
         # in Appendix A after both families had confirmed it).
         self.assertIn("in ADJUDICATION.md only, never in the row's claim text", text)
 
@@ -191,12 +191,12 @@ class CoordinatorPromptNamesValidatorHeadings(unittest.TestCase):
         for citation in ("AI-Games", "AI-vertical"):
             self.assertIn(citation, text)
         # The validator demands these markers; the prompt must supply the reference text itself,
-        # otherwise a careful model refuses to invent a citation (attempt 2 of the first audit).
+        # otherwise a careful model refuses to invent a citation (attempt 2 of audit A34).
         self.assertIn("10.1073/pnas.2524747123", text)
         self.assertIn("osf.io/dkfzt", text)
         self.assertIn("[]{#ref-AI-Games}", text)
         self.assertIn("[]{#ref-AI-vertical}", text)
-        # check_consistency.sh's process-narration detector; attempt 2 of the first audit tripped
+        # check_consistency.sh's process-narration detector; attempt 2 of audit A34 tripped
         # "earlier draft" by paraphrasing a drafting rule into the public report.
         for banned in ("earlier draft", "round 1", "our critics", "we initially"):
             self.assertIn(banned, text, banned)
@@ -258,7 +258,7 @@ class VerifierPromptNamesValidatorRules(unittest.TestCase):
     paid attempt of a three-start budget. run_verifier.VERIFIER_RULES maps every rule the verifier
     validator can reject on to the prompt phrase(s) that state it; _reject() refuses an
     unregistered rule. These tests render the real prompt, drive the real validator into every
-    rule on disk, and fail if a rejection is unregistered or unstated. (In the Neudorfer audit the
+    rule on disk, and fail if a rejection is unregistered or unstated. (In audit A23 the
     hand-made verifier had no contract at all: CLAIMS.md asked for JSON on stdout and nothing
     checked it.)"""
 

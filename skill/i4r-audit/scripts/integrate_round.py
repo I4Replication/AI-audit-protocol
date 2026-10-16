@@ -11,7 +11,7 @@ included), the verdicts by role, the conflicts critics declared, and the verific
 each included row could bind. ``apply`` then writes the registry, the response notes and the
 adjudication block from that same plan, so the three never disagree.
 
-Why this is a script and not coordinator improvisation: on the first production audit the
+Why this is a script and not coordinator improvisation: on audit A34 the
 integration was ad-hoc code that did not survive the session. Four recording defects followed from
 it — tested negatives and declared conflicts missing from the response notes, coordinator approval
 reported as False for rows that were approved, and settled facts bound to records whose verdicts

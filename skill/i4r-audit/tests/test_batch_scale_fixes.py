@@ -153,7 +153,7 @@ class ReapingIsOwnerScopedAndEvidenceBased(unittest.TestCase):
     def test_a_conflicted_copy_is_held_not_deleted(self) -> None:
         """It is the evidence claim() uses to arbitrate a race; deleting one destroys that."""
         claim = self.claim("raced", age_days=60, journal_age_days=60,
-                           name="raced (Bruno's conflicted copy 2026-08-02).json")
+                           name="raced (alice's conflicted copy 2026-08-02).json")
         result = self.reap("--force")
         self.assertTrue(claim.exists(), result.stdout)
         self.assertIn("CONFLICT COPY", result.stdout)

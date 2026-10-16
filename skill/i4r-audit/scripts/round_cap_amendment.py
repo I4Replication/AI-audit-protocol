@@ -258,7 +258,7 @@ def published_set_in_place(audit: pathlib.Path, release_dir: str) -> list[pathli
 def paper_source(audit: pathlib.Path) -> tuple[str | None, str | None]:
     """(journal, paper) from the audit's paper_source.json, written at intake: the paper's TRUE folder name in data/,
     comments/ and metadata/. The runs/ folder drops ?*[]{}\\ from it (new_audit.sh), so a name derived from the audit's
-    own path is wrong for such a paper (Ziv's '?'); publish_completed.sh and status.py read this file for that reason."""
+    own path is wrong for such a paper (A22's '?'); publish_completed.sh and status.py read this file for that reason."""
     try:
         source = json.loads((pathlib.Path(audit) / "paper_source.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):

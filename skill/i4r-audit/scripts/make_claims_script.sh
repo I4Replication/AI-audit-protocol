@@ -200,8 +200,8 @@ hdr_lines = [
   MK + " " + "="*92, ""]
 # Audit-written R checks call the verification notebook's contract (expect() before check(),
 # read_deposit(), the audit's _prelude.R helpers). A replicator runs this file on its own, so an
-# R claims file that inlines any snippet carries a standalone copy of that contract. (The first
-# production audit shipped a claims_script.R whose every helper was undefined.)
+# R claims file that inlines any snippet carries a standalone copy of that contract. (Audit
+# A34 shipped a claims_script.R whose every helper was undefined.)
 uses_snippet = any(v.startswith("snippet:") for v in cmap.values()) or any(f.get("verification_script") for f in finds)
 harness = []
 if EXT == "R" and uses_snippet:

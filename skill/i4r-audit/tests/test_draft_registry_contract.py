@@ -75,7 +75,7 @@ class DraftRowsAssertNothing(unittest.TestCase):
 class DepositPathsAreMaskedNotDropped(unittest.TestCase):
     """A finding about a hardcoded path necessarily quotes one.
 
-    The second production audit's deposit opened with ``setwd("C:/Users/<user>/...")`` and
+    Audit A38's deposit opened with ``setwd("C:/Users/<user>/...")`` and
     ``setwd("/Users/<user>/...")``. The code-and-methods role correctly reported that as a
     portability defect, and its REPORT.md was clean -- the auditor described the paths without
     quoting them, as the role contract requires. ``result.json`` is not scanned for absolute
@@ -92,8 +92,8 @@ class DepositPathsAreMaskedNotDropped(unittest.TestCase):
         # rejected the unmasked text. Masking only the account segment did NOT satisfy it,
         # because LOCAL_PATH matches /Users/<anything-not-a-slash>.
         for raw in (
-            'setwd("C:/' + 'Users/4821/switchdrive/SHARED_FOLDERS")',
-            'setwd("/' + 'Users/authorx/switchdrive/Name/Folder")',
+            'setwd("C:/' + 'Users/7350/CloudDrive/Shared")',
+            'setwd("/' + 'Users/authorx/CloudDrive/Name/Folder")',
             "/" + "home/anna/analysis/x.R",
         ):
             with self.subTest(raw=raw):
@@ -102,21 +102,21 @@ class DepositPathsAreMaskedNotDropped(unittest.TestCase):
                 self.assertIsNone(run_coordinator.LOCAL_PATH.search(masked), masked)
 
     def test_the_finding_survives_the_masking(self) -> None:
-        masked = self.mask('scripts open with setwd("C:/' + 'Users/4821/switchdrive/X")')
+        masked = self.mask('scripts open with setwd("C:/' + 'Users/7350/CloudDrive/X")')
         self.assertIn("setwd(", masked)
-        self.assertIn("switchdrive/X", masked)
+        self.assertIn("CloudDrive/X", masked)
         self.assertIn("<windows-user-dir>", masked)
-        self.assertNotIn("4821", masked)
+        self.assertNotIn("7350", masked)
 
     def test_text_without_a_home_path_is_untouched(self) -> None:
-        for text in ("no path here", "~/switchdrive/Name/Folder", "pkg/analysis.R"):
+        for text in ("no path here", "~/CloudDrive/Name/Folder", "pkg/analysis.R"):
             with self.subTest(text=text):
                 self.assertEqual(self.mask(text), text)
 
     def test_masking_reaches_nested_finding_structures(self) -> None:
-        finding = {"claim": "x", "evidence": [{"result": "at C:/" + "Users/4821/y"}]}
+        finding = {"claim": "x", "evidence": [{"result": "at C:/" + "Users/7350/y"}]}
         masked = build_draft_registry.mask_home_accounts(finding)
-        self.assertNotIn("4821", str(masked))
+        self.assertNotIn("7350", str(masked))
         self.assertIn("<windows-user-dir>", masked["evidence"][0]["result"])
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Append-only migration of a historical audit to metadata 2.1.
 
-The Fessi regression mode preserves every invocation, leaves Round 1 untouched,
+The regression mode (audit A01) preserves every invocation, leaves Round 1 untouched,
 corrects the false Round-2 start to awaiting authorization, keeps Terra served
 identity unverified, and marks max-14 document artifacts diagnostic-only.
 """
@@ -51,13 +51,13 @@ def _terra_requested(record: dict[str, Any]) -> bool:
     return "terra" in str(record.get("requested_model") or "").lower()
 
 
-def migrate_invocations(rows: list[dict[str, Any]], *, fessi: bool) -> list[dict[str, Any]]:
+def migrate_invocations(rows: list[dict[str, Any]], *, regression: bool) -> list[dict[str, Any]]:
     result = []
     attempt_counts: dict[tuple[Any, Any], int] = defaultdict(int)
     for source in rows:
         row = normalize_invocation(source)
         row.pop("journal_event", None)
-        if fessi and _terra_requested(row):
+        if regression and _terra_requested(row):
             row["served_model"] = None
             row["observed_model"] = None
             row.pop("observed_model_ids", None)
@@ -196,7 +196,7 @@ def diagnostic_artifacts(root: pathlib.Path) -> list[dict[str, str]]:
     return result
 
 
-def corrected_fessi_rounds(base: dict[str, Any]) -> list[dict[str, Any]]:
+def corrected_regression_rounds(base: dict[str, Any]) -> list[dict[str, Any]]:
     rounds = copy.deepcopy(base.get("rounds") or [])
     replacement = lifecycle_journal._empty_round(2)
     replaced = False
@@ -211,7 +211,7 @@ def corrected_fessi_rounds(base: dict[str, Any]) -> list[dict[str, Any]]:
     return rounds
 
 
-def migrate(root: pathlib.Path, *, fessi: bool, expected_invocations: int | None) -> dict[str, Any]:
+def migrate(root: pathlib.Path, *, regression: bool, expected_invocations: int | None) -> dict[str, Any]:
     root = root.resolve()
     run_path = root / lifecycle_journal.RUN_NAME
     original_run = read_json(run_path)
@@ -221,7 +221,7 @@ def migrate(root: pathlib.Path, *, fessi: bool, expected_invocations: int | None
             f"expected {expected_invocations} invocation records, found {len(source_rows)}"
         )
     normalized = normalize_run(original_run)
-    rows = migrate_invocations(source_rows, fessi=fessi)
+    rows = migrate_invocations(source_rows, regression=regression)
     base = copy.deepcopy(normalized)
     base["invocations"] = []
     base["events"] = []
@@ -249,7 +249,7 @@ def migrate(root: pathlib.Path, *, fessi: bool, expected_invocations: int | None
         elif original_run.get("schema_version") == lifecycle_journal.SCHEMA_VERSION:
             raise ValueError("audit already has a metadata-2.1 canonical journal")
         specs.extend(invocation_specs(rows))
-        if fessi:
+        if regression:
             # Round 1 is intentionally not rerun or synthesized. Only the false
             # Round-2 start and release disposition receive corrective events.
             # No synthetic round_prepared event is created: a future run must
@@ -259,7 +259,7 @@ def migrate(root: pathlib.Path, *, fessi: bool, expected_invocations: int | None
                 {
                     "type": "metadata_correction",
                     "payload": {"set": {
-                        "rounds": corrected_fessi_rounds(base),
+                        "rounds": corrected_regression_rounds(base),
                         "diagnostic_artifacts": diagnostics,
                     }, "reason": "remove the false Round-2 start; no provider dispatch occurred"},
                     "source": "migrate_metadata_2_1.py",
@@ -286,7 +286,7 @@ def migrate(root: pathlib.Path, *, fessi: bool, expected_invocations: int | None
     return {
         "schema_version": lifecycle_journal.SCHEMA_VERSION,
         "invocations_projected": len(projected_rows), "provider_calls_during_migration": 0,
-        "round_1_rerun": False, "round_2_state": "awaiting_authorization" if fessi else None,
+        "round_1_rerun": False, "round_2_state": "awaiting_authorization" if regression else None,
         **lifecycle_journal.watermark(events),
     }
 
@@ -294,14 +294,14 @@ def migrate(root: pathlib.Path, *, fessi: bool, expected_invocations: int | None
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audit_dir", type=pathlib.Path)
-    parser.add_argument("--fessi-regression", action="store_true")
+    parser.add_argument("--regression", action="store_true")
     parser.add_argument("--expected-invocations", type=int)
     args = parser.parse_args(argv)
     expected = args.expected_invocations
-    if args.fessi_regression and expected is None:
+    if args.regression and expected is None:
         expected = 38
     try:
-        result = migrate(args.audit_dir, fessi=args.fessi_regression, expected_invocations=expected)
+        result = migrate(args.audit_dir, regression=args.regression, expected_invocations=expected)
     except (OSError, ValueError, json.JSONDecodeError, lifecycle_journal.JournalError) as exc:
         print(f"migration failed: {exc}", file=sys.stderr)
         return 2

@@ -39,14 +39,14 @@ does not impute speed, token, recall, or precision results. `--require-complete`
 unmeasured case. `--require-gates` fails unless all accuracy, safety, telemetry, token, and wall-clock
 release gates pass.
 
-The principal Fessi regression fixture can be checked without a provider call:
+The principal regression fixture (audit A01) can be checked without a provider call:
 
 ```bash
-python3 scripts/benchmark_optimization.py tests/fixtures/fessi-benchmark-replay.json \
-  --output-json /tmp/fessi-benchmark-result.json --require-gates
+python3 scripts/benchmark_optimization.py tests/fixtures/regression-benchmark-replay.json \
+  --output-json /tmp/regression-benchmark-result.json --require-gates
 ```
 
-This command intentionally exits nonzero. Fessi is a seeded/projected regression case: the historical
+This command intentionally exits nonzero. It is a seeded/projected regression case: the historical
 baseline is retained, but `optimized` is `null` until a completed optimized audit has canonical,
 hash-bound artifacts. Its status is therefore `indeterminate`; it cannot be used to claim a measured
 token or wall-clock reduction.

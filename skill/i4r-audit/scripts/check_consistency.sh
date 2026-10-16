@@ -17,15 +17,15 @@ echo "== 1. disclosure sweep =="
 # Test co-occurrence on the same LINE, and self-test the pattern before trusting a clean result.
 python3 - "$R" <<'PYSWEEP'
 import sys, re, pathlib, collections
-# \b fails against an underscore: `_` is a word character, so \bMSTE_AC_P12\b never fires
+# \b fails against an underscore: `_` is a word character, so \bABC_XY_P12\b never fires
 # on the very identifier form this hunts. The shipped positive control used a form WITHOUT a
 # leading underscore run, so it passed while the detector was blind — a positive control
 # validated against the wrong form certifies a blind detector. Use explicit lookarounds.
 CODE = re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,3}_?P\d+(?![A-Za-z0-9])|(?<![A-Za-z0-9])P\d{1,3}(?![A-Za-z0-9])")
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}|\d{1,2}\.\d{1,2}\.\d{4}")
 CLOCK = re.compile(r"\d{2}:\d{2}:\d{2}")
-probe = "SA_P1,0,09/05/2022,118,74"
-probe2 = "MSTE_AC_P12,2022-01-01"   # the underscore form that defeated the old \b anchors
+probe = "XY_P1,0,04/03/2021,101,62"
+probe2 = "ABC_XY_P12,2021-01-01"   # the underscore form that defeated the old \b anchors
 if not (CODE.search(probe) and DATE.search(probe) and CODE.search(probe2) and DATE.search(probe2)):
     print("  FAIL: the disclosure detector does not fire on a known-present instance"); sys.exit(1)
 bad = 0
@@ -52,14 +52,14 @@ abst = s[a:a+b.start()] if b else s[a:a+6000]
 body = s.replace(abst, "")
 claims = sys.argv[2]
 # Scan the WHOLE document, not only the abstract. Checking the abstract alone was a real bug:
-# in the Granger-causality audit a claim the audit had explicitly retracted survived in a body
+# in one audit a claim the audit had explicitly retracted survived in a body
 # section, this check passed clean, and two independent critics found it. A retired claim is
 # wrong wherever it sits; the abstract is only where it is most visible.
 if claims and pathlib.Path(claims).exists():
     bad = 0
     lines = s.split("\n")
     # Normalise before matching. Exact substring matching let a retired claim through once:
-    # the file said "53 of the 71 player identifiers" and the draft said "53 of 71 player
+    # the file said "12 of the 40 record identifiers" and the draft said "12 of 40 record
     # identifiers" — the same withdrawn claim, one article apart. A withdrawn claim is withdrawn
     # in all its phrasings, so strip articles, punctuation and case before comparing.
     import re as _re

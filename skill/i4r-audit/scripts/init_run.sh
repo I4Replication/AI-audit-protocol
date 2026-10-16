@@ -139,7 +139,7 @@ derive_protocol_version () {
   if [ -n "$h" ]; then echo "unversioned-skill-$h"; else echo "unknown"; fi
 }
 # The discipline tree carries the canonical skill at <tree>/skill/i4r-audit-unified/i4r-audit
-# and every machine syncs it, yet the seventh production audit was run from a copy three minor
+# and every machine syncs it, yet audit A28 was run from a copy three minor
 # versions behind (2.2.0 against 2.4.10) and another from a copy with no VERSION at all. Each
 # recorded its own stale stamp faithfully and then hit defects fixed months earlier. When the
 # tree the audit sits in holds a canonical VERSION, the running copy must match it.

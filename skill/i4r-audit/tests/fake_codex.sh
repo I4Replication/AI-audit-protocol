@@ -299,8 +299,8 @@ elif role == "targeted_adjudicator":
                 "confidence": "CONFIRMED",
                 "evidence": {
                     # An uninventoried path: real in the snapshot, absent from the frozen
-                    # inventory. This is exactly what killed round 2 of the second production
-                    # audit, and it is how this scenario fails ONLY the adjudicator.
+                    # inventory. This is exactly what killed round 2 of audit
+                    # A38, and it is how this scenario fails ONLY the adjudicator.
                     "artifact_refs": [
                         {"path": "source/EVIDENCE_HASHES.json", "sha256": "0" * 64}
                     ] if scenario == "adjudicator_invalid"

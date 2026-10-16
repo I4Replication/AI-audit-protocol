@@ -177,7 +177,7 @@ def validated_settled_facts(
     rounds = run.get("rounds") if isinstance(run, dict) else None
     # A settled fact may cite a reviewer call from any INTEGRATED round, matching make_settled.sh.
     # Restricting it to rounds 0-1 forced later rounds' literal confirmations of corrected claims
-    # to stay unbound, which is how the first audit promoted two facts on OVERSTATED-derived records.
+    # to stay unbound, which is how audit A34 promoted two facts on OVERSTATED-derived records.
     integrated_rounds = {0, 1}
     for _row in (rounds or []):
         if isinstance(_row, dict) and isinstance(_row.get("round"), int) and _row.get("state") == "integrated":
@@ -998,7 +998,7 @@ def main() -> int:
             # 2.6.9: round {args.round}'s own frozen packet was built from exactly these bytes, and its critics were
             # routed by it. Those bytes are authoritative for rebuilding that packet (e.g. to regenerate the last
             # round's receipt when a published audit is re-filed), even when they no longer compare equal to the
-            # backup: a renumber by a version that kept no history (Schütz: F19 back to F4 after round 4, only the
+            # backup: a renumber by a version that kept no history (audit A20: F19 back to F4 after round 4, only the
             # draft map in id_map.json) leaves nothing to translate the backup with, and the frozen binding forbids
             # any replacement, so a refusal here had no working remedy (its printed restore was a no-op).
             current = hashlib.sha256(raw[before_findings]).hexdigest()

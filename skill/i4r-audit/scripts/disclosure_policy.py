@@ -44,7 +44,7 @@ Both are errors only for audits initialised at skill 2.6.9 or later (``run.json`
 messages as warnings, so an audit in flight is not refused mid-way and a published audit can still be
 re-finalized to re-file a corrected document. That includes audits initialised on the live 2.6.8
 release: its SKILL.md and prompts still told the operator to pause for a disclosure decision, so its
-audits (the food-insecurity SJMSS audit, published with governance.pii_present true, empty
+audits (audit A27, published with governance.pii_present true, empty
 disclosure.flags and statement, and five flagged comment findings) were never asked for the
 comment-level fields these checks require.
 

@@ -19,7 +19,7 @@ no provider call:
   finalized audit.
 * ``AmendMidRound`` -- amending while a round is prepared or started and unfinished is refused with the rerun cost
   (the completed reviews its relaunch would pay for again) unless --accept-rerun-cost.
-* ``ZivNeudorferRunbook`` -- INSTALL.md's runbook blocks, executed verbatim on a fixture tree whose data/,
+* ``PublishedCapRunbook`` -- INSTALL.md's runbook blocks, executed verbatim on a fixture tree whose data/,
   comments/ and metadata/ folders keep a '?' that the runs/ folder dropped.
 """
 from __future__ import annotations
@@ -352,14 +352,14 @@ class AmendMidRound(Fixtures):
         self.assertEqual(self.state(audit), before)
 
 
-class ZivNeudorferRunbook(Fixtures):
+class PublishedCapRunbook(Fixtures):
     """INSTALL.md's published-audit runbook, its blocks executed verbatim (only the tree root and the audit folder,
     the two placeholders, are substituted)."""
 
     @staticmethod
     def blocks() -> list[str]:
         text = INSTALL.read_text(encoding="utf-8")
-        start = text.index("### Ziv and Neudorfer: published audits that stopped at their cap")
+        start = text.index("### Audits A22 and A23: published audits that stopped at their cap")
         end = text.index("\n## ", start)
         return re.findall(r"```bash\n(.*?)```", text[start:end], flags=re.S)
 

@@ -1850,7 +1850,7 @@
           ]
         },
         "remedy_description": {
-          "description": "The specific remedy, e.g. 'set n_init=10 in cluster.py line 88 and regenerate Table 3'.",
+          "description": "The specific remedy, e.g. 'set the documented default in model.py line 40 and regenerate Table 2'.",
           "type": [
             "string",
             "null"
@@ -1911,7 +1911,7 @@
           }
         },
         "package_locus": {
-          "description": "OPTIONAL. Where in the replication package the defect lives, package-relative: 'code/03_model.R:88', 'data/wave2.csv column session_date'. Distinct from `locus`, which names the pipeline STAGE (cleaning, estimation, reporting); this names the file. Makes 'which file was wrong' queryable across the registry instead of readable only in prose. CAUTION: a path can itself be a quasi-identifier -- deposits routinely key filenames by participant (MSTE_AC_sub_E_5.mat) -- so every locus must be reviewed before this record appears in any published subset. finalize_run.sh warns when a locus looks like it contains a participant code; the warning is a prompt to look, not a licence to trust its silence. Prefer a directory and a column name over a per-participant filename wherever the finding survives the loss of precision.",
+          "description": "OPTIONAL. Where in the replication package the defect lives, package-relative: 'code/03_model.R:88', 'data/wave2.csv column session_date'. Distinct from `locus`, which names the pipeline STAGE (cleaning, estimation, reporting); this names the file. Makes 'which file was wrong' queryable across the registry instead of readable only in prose. CAUTION: a path can itself be a quasi-identifier -- deposits routinely key filenames by participant (sub_07_session2.mat) -- so every locus must be reviewed before this record appears in any published subset. finalize_run.sh warns when a locus looks like it contains a participant code; the warning is a prompt to look, not a licence to trust its silence. Prefer a directory and a column name over a per-participant filename wherever the finding survives the loss of precision.",
           "type": "array",
           "items": {
             "description": "One package-relative location, optionally with a line number or column name.",

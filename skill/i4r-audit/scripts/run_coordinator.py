@@ -1303,7 +1303,7 @@ def redact_private_paths(message: str, *roots: pathlib.Path) -> str:
     """Replace absolute audit paths in a message with audit-relative form.
 
     Error strings are journaled and projected into run.json, which is later a provider-visible
-    input and a release artefact. The first production audit's third coordinator attempt
+    input and a release artefact. Audit A34's third coordinator attempt
     journaled ``... must be a regular non-symlink file: /Users/<account>/...`` and the live
     projection then failed the provider-safety check. Redact before journaling, never after.
     """

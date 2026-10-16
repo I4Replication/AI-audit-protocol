@@ -100,8 +100,8 @@ _PLACEHOLDER = re.compile(
 # The same identifier shapes used by the release gate are also applied to text
 # extracted from PDF/DOCX, which otherwise bypasses the ordinary text walk.
 _CODE = re.compile(
-    r"(?:^|[^A-Za-z0-9])(?:MSTE_AC_)?sub_[EN]_\d+"
-    r"|(?:^|[^A-Za-z0-9])(?:MSTE_AC_)?sub_\d+Placebo"
+    r"(?:^|[^A-Za-z0-9])sub_[EN]_\d+"
+    r"|(?:^|[^A-Za-z0-9])sub_\d+Placebo"
     r"|\bNoExperto\d+|\bExperto\d+"
     r"|\b(?:participant|subject)\s*#?\d{1,3}\b",
     re.I,

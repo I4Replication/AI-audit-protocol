@@ -209,8 +209,8 @@ class Phase1RunnerTests(unittest.TestCase):
         self.assertEqual(status["requested_session_id"], requested)
 
     def test_sandbox_denial_is_recorded_not_fatal(self) -> None:
-        # A denial means the sandbox refused a command and the model recovered. On the first
-        # production audit the runner treated it as an authorization failure and discarded
+        # A denial means the sandbox refused a command and the model recovered. On audit
+        # A34 the runner treated it as an authorization failure and discarded
         # five complete, schema-valid reports. It must complete the role and leave a receipt.
         result = self.run_runner("denials")
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -317,7 +317,7 @@ class Phase1RunnerTests(unittest.TestCase):
         # In production this shape spent 5.4M tokens across five roles and produced no report.
         # The fake CLI never emulates seatbelt, so before the guard existed this whole fan-out
         # ran green on this exact folder name -- the run must now stop in preflight instead.
-        root = self.make_audit("Can automatic reactions mirror exercise dependence?")
+        root = self.make_audit("A paper title that ends in a question mark?")
         state = self.base / "globroot-state.jsonl"
         result = self.run_runner(root=root, state=state)
         self.assertEqual(result.returncode, 3, result.stderr + result.stdout)
@@ -327,7 +327,7 @@ class Phase1RunnerTests(unittest.TestCase):
         self.assertEqual(status["auditor_inferences_started"], 0)
 
     def test_audit_root_with_safe_punctuation_is_not_rejected(self) -> None:
-        # Negative control: paper 1's root held a colon and spaces and ran fine. The guard must
+        # Negative control: audit A34's root held a colon and spaces and ran fine. The guard must
         # not become a blanket ban on punctuation in journal-article directory names.
         root = self.make_audit("Journal: A Study (2026) ~ final!")
         state = self.base / "safe-punct-state.jsonl"

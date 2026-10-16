@@ -99,7 +99,7 @@ class AttemptCeilingReachesTheLedger(unittest.TestCase):
 class SupersededStatusSurvivesACorrection(unittest.TestCase):
     """A superseded failure stopped being countable as a failure.
 
-    Re-projecting the first production audit showed 13 rows relabelled, 3 of them from `failed`:
+    Re-projecting audit A34 showed 13 rows relabelled, 3 of them from `failed`:
     ten calls had failed while calls_by_status reported seven.
     """
 

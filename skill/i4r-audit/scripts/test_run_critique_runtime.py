@@ -908,7 +908,7 @@ def command_route(args: argparse.Namespace) -> int:
     # Every route lists its roles in the canonical ROLES order. The deterministic claim merge orders its roles that
     # way, and the round projection compares the two lists. A CRITICS override written as "completeness fairness"
     # used to pass routing and both critics, then fail the projection with "claim merge identity or role quorum
-    # differs" (MacIntyre 2026 audit, round 2).
+    # differs" (audit A18, round 2).
     roles = [role for role in ROLES if role in roles]
     claim_assignments = {role: [] for role in roles}
     specialists = [role for role in roles if role != "completeness"]
@@ -976,7 +976,7 @@ def constrain_evidence_bindings(schema: dict[str, Any], inventory: dict[str, Any
     (lookarounds are outside the provider subset), so any string was emittable. The model then
     cited a path that is real in its own snapshot but absent from its inventory, and
     verify_evidence_bindings killed the whole response for one bad ref out of ten -- which is how
-    round 2 of the second production audit lost its targeted adjudication.
+    round 2 of audit A38 lost its targeted adjudication.
 
     Both one-off recovery scripts already do this (retry_completeness_once.constrain_bindings,
     retry_targeted_adjudication_once.constrain_bindings); production never did. Constraining here
@@ -1296,8 +1296,8 @@ def command_snapshot(args: argparse.Namespace) -> int:
         # source tree, the round, model, effort, roles, audit and the critic output contract.
         # It deliberately excludes the driver, helper and validator code hashes. Those are
         # recorded in MANIFEST.json as telemetry, but binding them into the identity meant every
-        # bug fix to the runtime orphaned an authorized round and its valid cached reviews; the
-        # first production audit lost a complete four-critic round that way.
+        # bug fix to the runtime orphaned an authorized round and its valid cached reviews;
+        # audit A34 lost a complete four-critic round that way.
         identity_parts = round_identity_parts({
             "provider_schema_generation_version": PROVIDER_SCHEMA_GENERATION_VERSION,
             "round": args.round, "model": args.model, "effort": args.effort,
@@ -3588,8 +3588,8 @@ def adjudication_triggers(
                 "detail": "conclusion-changing canonical claim has a disputed critic verdict",
             })
         # A MERGED or EXCLUDED row is not a live claim: its evidence obligation belongs to the row it
-        # was merged into (or it is a tested negative), and critics are never routed to it. On the
-        # seventh production audit two conclusion-narrowing rows merged into F1 raised this trigger
+        # was merged into (or it is a tested negative), and critics are never routed to it. On
+        # audit A28 two conclusion-narrowing rows merged into F1 raised this trigger
         # in round 3 -- a round the critics were correctly not asked to cover them in.
         disposition = (canonical.get("ledger_disposition") or {}).get("status")
         # A later round re-reviews only the changed claims (its DIFF_MANIFEST scope). An unchanged

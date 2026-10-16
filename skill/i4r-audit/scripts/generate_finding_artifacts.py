@@ -454,9 +454,9 @@ def check_claims_join(claim_numbers: list[int], expected_numbers: list[int]) -> 
     A PERMUTATION check, not an ordering one. make_claims_script.sh emits every claim it can
     execute in order and then an explicit no-code tail for claims verified by inspection --
     which SKILL.md states as the required shape. Demanding strict ascending order contradicted
-    that and failed any audit carrying a judgement or unverifiable claim; the first production
-    audit's own claims script is [1,2,3,5,6,7,8,10,11,12,13,14,16,17,4,9,15]. Ordering here is
-    presentational.
+    that and failed any audit carrying a judgement or unverifiable claim; a real claims script
+    lists its executable claims in order and then the claims verified by inspection. Ordering here
+    is presentational.
     """
     if sorted(claim_numbers) == expected_numbers:
         return
@@ -582,7 +582,7 @@ def apply_transaction(root: pathlib.Path, registry: pathlib.Path, rendered: dict
                                    text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             if child.returncode:
                 # Surface the child's own diagnostics; a bare CalledProcessError hid the cause of
-                # the first production audit's projection rollback.
+                # one audit's projection rollback.
                 tail = "\n".join((child.stdout or "").strip().splitlines()[-12:])
                 raise RuntimeError(f"{helper_script} exited {child.returncode}:\n{tail}")
         claim_files = [path for path in root.glob("claims_script.*") if path.is_file()]

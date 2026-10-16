@@ -606,7 +606,7 @@ def main() -> int:
     repair_scenario = scenario == "repairable_output" or scenario.startswith("repair_mutate_")
     is_repair = "Perform one format-only repair" in prompt
     # Only the role's first sample is broken; a fresh attempt after a rejected repair is valid,
-    # as it was on every such case in the first production audit.
+    # as it was on every such case in audit A34.
     if repair_scenario and role == target and not is_repair and count == 1:
         broken = "result_report_hash"
     mutation = scenario.removeprefix("repair_mutate_") if (
@@ -652,7 +652,7 @@ def main() -> int:
         state_event("end", role=role, returncode=0)
         return 0
     if scenario == "result_absolute_path" and role == target:
-        # The exact shape from the second production audit: REPORT.md stays clean because the
+        # The exact shape from audit A38: REPORT.md stays clean because the
         # auditor described the deposit's hardcoded setwd() paths without quoting them, while
         # the structured finding carries the literal path.
         valid_role_output(cwd, role, packet_path)
@@ -660,7 +660,7 @@ def main() -> int:
         fields = result["scientific_fields"]
         if fields.get("findings"):
             fields["findings"][0]["claim"] = (
-                "the script hardcodes " + "C:/" + "Users/4821/switchdrive/SHARED_FOLDERS"
+                "the script hardcodes " + "C:/" + "Users/7350/CloudDrive/Shared"
             )
         (cwd / "result.json").write_text(json.dumps(result), encoding="utf-8")
         print(json.dumps(envelope("complete"), separators=(",", ":")))

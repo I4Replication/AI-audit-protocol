@@ -6,7 +6,7 @@
 A registry row is promotable only with confirmations from two model families. Before 2.6.4 the
 family-A (Claude) confirmation could come only from the Phase-1 auditor whose report raised the
 row, so a finding first raised after fan-out -- by the operator, the coordinator or a critic --
-could never be promoted. In the Neudorfer audit (20260923-audit-3309cfcf) three true article-text
+could never be promoted. In audit A23 three true article-text
 findings (F13-F15) were excluded for exactly that reason, after hand-made verification records
 were refused by make_settled (role_class other) and then by finalize (a record relabelled as an
 auditor counted as a sixth auditor).
@@ -729,8 +729,8 @@ class BatchPlan:
                 unique.append(path)
         # Only what can be read now. The CLI's macOS sandbox writes, for every denied path, an
         # unlink and a create rule for the path and each of its ancestors, each carrying a
-        # 160-byte message, into a profile passed on the command line of EVERY Bash call. On the
-        # tenth production audit (a 406-character, 16-level working directory) the 47 denials
+        # 160-byte message, into a profile passed on the command line of EVERY Bash call. On
+        # audit A21 (a 406-character, 16-level working directory) the 47 denials
         # overflowed ARG_MAX: every command failed with E2BIG, the verifier worked 45 minutes
         # without a shell and timed out. A path that does not exist, or an empty directory, holds
         # nothing to read when the attempt starts, and no other writer runs during a verifier call.
@@ -1451,7 +1451,7 @@ def readmit_record(audit: pathlib.Path, source: dict[str, Any], receipt: dict[st
     hypothesis checks, so every gate that counts a verifier verdict (collect_verdicts: the
     runner's refusal, integrate_round, make_settled, make_diff_packet, finalize) re-proves it.
     Four files that hash to what a receipt says prove nothing by themselves -- anyone can write
-    all four, and the Neudorfer make_record.py route did. This requires what only the runner
+    all four, and the A23 make_record.py route did. This requires what only the runner
     produces: its exact receipt (RECEIPT_KEYS) bound to this call; the snapshot phase1/quorum.json
     binds (the manifest self-checked, the raw deposit not re-hashed); the frozen packet under
     phase1/role_packets/<snapshot>/<role>/<packet_sha256>/, closed by its manifest and hashing,

@@ -16,8 +16,8 @@ audit keeps the timeout it froze for its whole life, and the runtime admits exac
 Why 5,400 (2026-09-30, the first Sonnet 5.5/max audits):
 
 - the Sonnet 5 auditors this cap was set for finished in 8 to 34 minutes;
-- Sonnet 5.5/max auditors on a teammate's audit finished in about 20 to 35 minutes, but on the Goepp et al.
-  audit (20260930-audit-2b59fd0d) one role finished in 41 minutes (344,821 output tokens, USD 7.07) and the
+- Sonnet 5.5/max auditors on a teammate's audit finished in about 20 to 35 minutes, but on
+  audit A19 one role finished in 41 minutes (344,821 output tokens, USD 7.07) and the
   other four were still writing REPORT.md and result.json when 2,700 s stopped them, on two dispatches;
 - 5,400 s is twice the old cap. The USD 15 per-call budget is unchanged and still bounds cost: at the observed
   rate of about USD 0.17 a minute it is reached at roughly 85 to 90 minutes, so the two limits bind at about

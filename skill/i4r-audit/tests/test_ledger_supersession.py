@@ -3,8 +3,8 @@
 Roles promote to a fixed canonical path (report/02_data_integrity.md). When a role
 completes twice, attempt 2 overwrites attempt 1's bytes at that path. The ledger is
 append-only, so attempt 1's completed row stays in the file with the old hash. Re-verifying
-it against the file on disk rejected an entirely correct ledger on the first production
-audit and blocked the coordinator. read_ledger must verify bytes only for the latest
+it against the file on disk rejected an entirely correct ledger on audit
+A34 and blocked the coordinator. read_ledger must verify bytes only for the latest
 completed row per artifact; record_invocation.validate_record must accept the flag.
 """
 from __future__ import annotations

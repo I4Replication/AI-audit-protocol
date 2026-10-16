@@ -246,7 +246,7 @@ def verifier_compliance(
     * every registry verification that cites a verifier call as a confirmation must pass
       verifier_contract.confirmation_problem for that row's current claim text (scope).
 
-    The Neudorfer rows (operator_verifier, auditor_operator_verification) carry role_class other
+    The A23 rows (operator_verifier, auditor_operator_verification) carry role_class other
     and auditor, so nothing here ever reads them.
     """
     if not any(verifier_contract.is_verifier(row) for row in invocations):

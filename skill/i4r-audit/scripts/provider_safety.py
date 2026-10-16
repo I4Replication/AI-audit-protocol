@@ -5,9 +5,9 @@ Two stages used to disagree about what a participant code is. ``run_coordinator.
 provider input containing a code-shaped token (``SUBJ_P12``, or a ``P12`` that opens a data row),
 while Phase-1 output admission (``phase1_runtime.check_output_hygiene``) only refused an
 identifier printed beside a date. So Phase 1 accepted, and paid for, reports that the coordinator
-was then bound to refuse. On the video-speed audit (20260926-audit-8fcff20d) all five auditors
-quoted the deposit's SPSS column names ``INT_P05`` and ``DUR_P15`` (intention and duration
-ratings, positive crowd noise, 0.5 s and 1.5 s), which match the code shape. The reports are
+was then bound to refuse. On audit A20 all five auditors
+quoted two of the deposit's SPSS column names (rating variables),
+which match the code shape. The reports are
 hash-bound to their invocation records, and the coordinator refused them before any provider
 call. The audit could not continue.
 
@@ -26,8 +26,8 @@ This module is the single definition both stages now call:
   is read that way when at least three of its non-empty header cells are code-shaped or begin
   with a code-shaped token followed by a separator (``P01_SD``, ``SUBJ_P01_L``), and those make
   up more than half of its non-empty header cells. Real variable dictionaries are far below that
-  line: 8 of 138 SPSS variables in the video-speed deposit, 12 of 162 to 534 columns in the
-  perfectionism deposits. The test is a heuristic: a table with fewer than three such headers,
+  line: 8 of 138 SPSS variables in the A20 deposit, 12 of 162 to 534 columns in two
+  other deposits. The test is a heuristic: a table with fewer than three such headers,
   or with more ordinary columns than participant columns, has its headers read as names.
 * Every other file is read for data values, and the exemption fails closed: if any of them
   cannot be scanned in full, no token is exempt.

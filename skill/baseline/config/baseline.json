@@ -62,6 +62,6 @@
    "5m": 2.5,
    "1h": 4.0
   },
-  "note": "Sonnet 5.5 cache-write prices, USD per million tokens: one price list (input 2, 5-minute write 2.50, 1-hour write 4.00, cache read 0.20, output 10) fits the baseline's and the full run's envelopes for 20261009-audit-114a0825 with zero residual (2026-10-10). Used only to put both sides on a 1-hour cache price in summarize_baseline.py."
+  "note": "Sonnet 5.5 cache-write prices, USD per million tokens: one price list (input 2, 5-minute write 2.50, 1-hour write 4.00, cache read 0.20, output 10) fits the baseline's and the full run's envelopes for audit A44 with zero residual (2026-10-10). Used only to put both sides on a 1-hour cache price in summarize_baseline.py."
  }
 }

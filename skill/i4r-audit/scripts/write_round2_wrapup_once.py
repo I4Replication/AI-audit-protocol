@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the hash-bound Round-2 scope note for the active Fessi audit."""
+"""Write the hash-bound Round-2 scope note for one earlier audit (A01)."""
 from __future__ import annotations
 
 import argparse

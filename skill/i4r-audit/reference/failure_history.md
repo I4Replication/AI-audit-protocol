@@ -20,9 +20,9 @@ which is why it is useless as a probe of sandbox health. Shell redirection is no
 the permission matcher at all, so a check that needs Bash to produce a file must use a command
 that writes directly (`cp`, `mkdir`) rather than `>`.
 
-## A directory name disarmed the sandbox (Quossi audit, 2026-09)
+## A directory name disarmed the sandbox (audit A38, 2026-09)
 
-The audit root ended in `dependence?`. The CLI reads `sandbox.filesystem` entries as glob
+The audit root ended in `?`. The CLI reads `sandbox.filesystem` entries as glob
 patterns, so every rule containing that `?` compiled to a pattern matching nothing.
 
 | Symptom | Established cause | Required response |
@@ -34,15 +34,15 @@ patterns, so every rule containing that `?` compiled to a pattern matching nothi
 | Absolute `/Users/<account>/...` path in `phase1/status.json` | The role-failure path writes `str(exc)` directly, bypassing `make_terminal_record` where `redact_private_paths` is applied | Redact at the `failures[role]` assignment |
 
 Measured character set: `?`, `*`, `[`, `]`, `{`, `}` and `\\` break the rules; space, `:`, `~`,
-`(`, `)` and `!` are safe. Paper 1's root contained a colon and spaces and ran normally.
+`(`, `)` and `!` are safe. Audit A34's root contained a colon and spaces and ran normally.
 
 The general lesson is that a check which does not run through the mechanism it certifies will
 report success on a broken mechanism. Both the preflight receipt and the probe asserted sandbox
 health through the one code path that bypasses the sandbox.
 
-## Contract stated in prose, enforced by a validator (Brimmell audit, 2026-08/09)
+## Contract stated in prose, enforced by a validator (audit A34, 2026-08/09)
 
-Nine of the first production audit's Phase-1 failures shared one cause: `phase1_runtime.py`
+Nine of audit A34's Phase-1 failures shared one cause: `phase1_runtime.py`
 rejected a rule that the role prompt described loosely or not at all. The fake-runner tests could
 not see it because the fakes emit validator-perfect output. Symptom, cause and response:
 
@@ -61,7 +61,7 @@ not see it because the fakes emit validator-perfect output. Symptom, cause and r
 | Coordinator succeeded (45 turns, 35 min) and reported four complete files, but `output.partial` was empty and the attempt failed `schema` | The model wrote to the attempt directory, one level up; the CLI's Write tool ignores the sandbox filesystem rules, so only cwd and prose steered it | Attempt root is read-only during the call; prompt names the working directory; `recover_misplaced_coordinator_outputs.py` relocates and revalidates without a provider call |
 | `--apply requires report/REPORT_final.md and comment.json` on a fresh audit | Nothing in the skill created the comment.json skeleton the projection injects findings into | `scripts/init_comment.py` writes the schema-valid skeleton from run.json plus a facts file |
 | Pre-Terra `--apply` would rewrite `REPORT_final.md` with an empty Appendix A and strip every claim tag | Projections come from coordinator-approved rows only, and no row is approved before Round 1 integration | `--apply` refuses with zero approved rows; preview without `--apply` until integration approves one |
-| Coordinator refused at turn 33 after 36 min: `safety measures that flagged this message for a cybersecurity topic` | The provider's own real-time content-safety classifier, not a skill gate; the audit's finding that 38 of 131 rows have a unique demographic combination reads like re-identification analysis | Classified `provider_safety_refusal`, never retried with identical content. Write privacy findings as data-stewardship counts and banding remedies, never as a procedure for identifying a person; the coordinator prompt now says so. The skill cannot and must not disable the provider classifier |
+| Coordinator refused at turn 33 after 36 min: `safety measures that flagged this message for a cybersecurity topic` | The provider's own real-time content-safety classifier, not a skill gate; the audit's finding that dozens of rows have a unique demographic combination reads like re-identification analysis | Classified `provider_safety_refusal`, never retried with identical content. Write privacy findings as data-stewardship counts and banding remedies, never as a procedure for identifying a person; the coordinator prompt now says so. The skill cannot and must not disable the provider classifier |
 
 Rule: when a validator gains a requirement, the prompt gains the same sentence, and a test asserts
 the prompt contains it. A green fake-provider suite proves nothing about this class.
@@ -164,9 +164,9 @@ Re-derive every number that enters the comment,
 verify the remedy as a claim, and use a second structurally different route when the coordinator and
 an auditor disagree.
 
-## Bookkeeping gates that discarded valid work (first production audit, 2026-09)
+## Bookkeeping gates that discarded valid work (audit A34, 2026-09)
 
-The Brimmell et al. (2025) audit lost no model output to a model failing at its task. It lost a
+Audit A34 lost no model output to a model failing at its task. It lost a
 complete four-critic round, two complete fourth-attempt reviews, five Phase-1 reports and about $70
 of provider spend to harness bookkeeping: a round identity that bound the driver's own hash, a
 tie-break between two valid same-input reviews treated as fatal, permanent-failure markers that
@@ -183,7 +183,7 @@ passed on a fresh sample once the driver stopped discarding attempts.
 
 ## A synced folder re-applied a directory mode to a frozen snapshot (2026-09-24 and 2026-09-27)
 
-On the ninth production audit the Dropbox File Provider reset a freshly frozen critique snapshot's
+On audit A20 the Dropbox File Provider reset a freshly frozen critique snapshot's
 `source` directory to mode 0700 seconds after the freeze, during the model probe. Every file stayed
 0444 and every hash matched. The only immutability check ran after each paid call, raised a plain
 error on the write bit, and the driver read that as a schema-invalid response: every critic was
@@ -208,7 +208,7 @@ old snapshots stay admissible), and `recover_coordinator.py` does so when the va
 
 ## A literal round cap, and a finalized audit that could keep running (2.6.9)
 
-Two audits (Ziv, Neudorfer) stopped `cap_with_unresolved` after round 5 with one changed section never
+Two audits (A22, A23) stopped `cap_with_unresolved` after round 5 with one changed section never
 re-reviewed, and the programme decided to allow seven rounds. Raising `critique.round_cap` in the
 policy changed nothing for them. Each audit's snapshot froze 5 at init. The driver refused round 6
 from a literal that never read the snapshot, and the post-delta receipt schema admitted rounds 2-5
@@ -223,7 +223,7 @@ bytes, a `policy_amendment` event). A new round on a finalized audit needs a jou
 
 ## Release and metadata failures
 
-### Fessi regression incident (frozen 2026-08)
+### Regression incident of audit A01 (frozen 2026-08)
 
 The principal optimization fixture recorded a lower bound of 118,249,574 tokens. Failed attempts
 accounted for 47,973,272; five rejected Phase-1 sessions alone accounted for 45,853,590. Claude cache

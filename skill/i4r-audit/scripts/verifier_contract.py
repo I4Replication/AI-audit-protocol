@@ -3,8 +3,8 @@
 
 A registry row can be promoted only with confirmations from two model families. Before 2.6.4 the
 family-A confirmation could come only from the Phase-1 auditor whose report raised the row, so a
-finding first raised by the operator, the coordinator or a critic could never be promoted. In the
-Neudorfer audit (20260923-audit-3309cfcf) three article-text findings that every critic had
+finding first raised by the operator, the coordinator or a critic could never be promoted. In
+audit A23 three article-text findings that every critic had
 confirmed were excluded for exactly that reason, after hand-made verification records had been
 refused one gate after another.
 
@@ -246,7 +246,7 @@ def verify_record(audit: pathlib.Path, invocation: dict[str, Any],
 
     Beyond the record fields this requires the runner's completion receipt, which binds the
     invocation id, the result, report and evidence-manifest hashes and the hypotheses it was run
-    on. A hand-made ledger row (the Neudorfer make_record.py shape) has no receipt, no evidence
+    on. A hand-made ledger row (the A23 make_record.py shape) has no receipt, no evidence
     manifest and no hash-bound result, and fails here.
     """
     source = resolve_replay(invocation, by_id)

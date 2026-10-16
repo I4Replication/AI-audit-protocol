@@ -1,6 +1,6 @@
 """Provider failures must be classified so the retry policy and the operator see the truth.
 
-Two misclassifications cost real money on the first production audit: a dropped connection
+Two misclassifications cost real money on audit A34: a dropped connection
 labelled ``permanent`` (no retry, attempt burned) and a provider content-safety refusal
 labelled ``permanent`` (indistinguishable from a bug, no mitigation shown). Both now have
 their own class, and this test pins the real error strings that were observed.
@@ -95,7 +95,7 @@ class ProviderErrorClassification(unittest.TestCase):
 
 
 class JournaledErrorRedaction(unittest.TestCase):
-    # Attempt 3 of the first audit journaled an absolute path inside its error string; the
+    # Attempt 3 of audit A34 journaled an absolute path inside its error string; the
     # run.json projection then failed the provider-safety check as a live coordinator input.
     def test_account_name_with_a_space_is_redacted_whole(self) -> None:
         # `/Users/<Anna Smith>/...` redacted to `<private-path> Smith/...`: the surname survived

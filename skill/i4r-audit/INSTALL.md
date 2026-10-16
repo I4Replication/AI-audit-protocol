@@ -11,7 +11,7 @@ their capability probe and the post-fan-out verifier of a new audit (an audit in
 2.7.2 keeps Sonnet 5.5/max, and one initialised before 2.7.0 keeps Sonnet 5/max, each frozen in its own
 snapshot); GPT-6.1 Sol/high for a new audit's ordinary external critics and the cached model probe,
 and GPT-6.1 Sol/max for its triggered targeted adjudication (an audit initialised before 2.7.0 keeps
-the critic route it froze the same way: GPT-5.6 Terra, or GPT-6 Sol for the one audit initialised
+the critic route it froze the same way: GPT-5.6 Terra, or GPT-6 Sol for an audit initialised
 on 2.6.0). The default audit uses five Claude subagents, four
 round-1 critics, two dynamically routed round-2 critics, and no verifier call. Add later-round specialists only when conclusion-changing or
 disclosure-critical corrections span multiple domains.
@@ -49,10 +49,10 @@ Nothing to do for an audit that is running. 2.7.7 changes no frozen value, promp
 - **A Phase-1 role refused with "links a participant identifier to a date/time"** (rule `participant_date`). Claim the
   paper again if its reservation was released when it was parked (`bash scripts/reserve_paper.sh claim
   data/<Journal>/<Paper>`), then rerun `python3 scripts/run_phase1.py "$AUDIT_DIR"`. Accepted roles are reused; a role
-  that spent its attempts needs a higher ceiling, e.g. `I4R_MAX_ATTEMPTS=7` for the tennis audit (e24acd26), whose
-  code-and-methods role used six. The sleep audit (d1fa93d5) was parked before Phase 1 and starts it as usual.
+  that spent its attempts needs a higher ceiling, e.g. `I4R_MAX_ATTEMPTS=7` for audit A03, whose
+  code-and-methods role used six. Audit A02 was parked before Phase 1 and starts it as usual.
 - **Finalize stopped at 0c with "run critique rounds are not unique and contiguous"** because a round-0 consistency
-  check made a round 0 (Effort intensity, 82c35f72). Re-project, then finalize and publish as the stop note says:
+  check made a round 0 (audit A04). Re-project, then finalize and publish as the stop note says:
 
   ```bash
   python3 ~/.claude/skills/i4r-audit/scripts/lifecycle_journal.py project "$AUDIT_DIR"
@@ -65,7 +65,7 @@ Nothing to do for an audit that is running. 2.7.7 changes no frozen value, promp
   verification notebook, then the last round's packet and post-delta receipt); and `build_docx.sh`. Finalize then
   completed and listed the journal events the audit never logged (phase pairs, the delivery), which are logged as it
   says before staging and finalizing again. None of these steps calls a provider.
-- **Any other audit with a round-0 row** (Athlete burnout, a24422cf, paused in round 1): every logged event
+- **Any other audit with a round-0 row** (audit A05, paused in round 1): every logged event
   re-projects `run.json`, so the row goes with the next one; `project` as above removes it at once.
 
 ## Upgrading in-flight audits to 2.7.6
@@ -77,17 +77,17 @@ could not continue:
   a critique record, Phase-1 report, work record or evidence script (`<user-dir>` for the account segment,
   `[e-mail address]` for an address the byline and the article do not print), lists each file in
   `RELEASE_PATH_NEUTRALISATION.txt`, and leaves the audit's files untouched. The comment's own outputs still refuse.
-  Audits 70b8eac5 and 803f98f9: restage into a fresh directory.
+  Audits A06 and A07: restage into a fresh directory.
 - **Logged text.** `log_event.sh` and the `lifecycle_journal.py append-*` commands refuse text holding an e-mail
   address, a private absolute path or a participant-code token, because `run.json` is provider-visible and published.
   Text already journaled is masked in `run.json` by a later event, with the journal untouched:
   `bash scripts/log_event.sh text_redaction seq=<n> field=<text|notes|note|detail|description|recipient> reason='<why>'`
   (`seq` is the event's seq in `run.events.jsonl`). The coordinator's refusal now names this remedy.
 - **Event types.** The append commands refuse a type outside the lifecycle-event schema. `environment`, the
-  pre-2.7.4 hand-logged type, is now a `run.schema.json` event type the projection ignores, so the Social norms
-  audit (`runs/`, 20260922-audit-89065d92) can finalize; a new `environment` event is still refused.
+  pre-2.7.4 hand-logged type, is now a `run.schema.json` event type the projection ignores, so audit
+  A09 (`runs/`) can finalize; a new `environment` event is still refused.
 - **Phase-1 preflight on knitted HTML.** The e-mail detector is linear, so a deposit with large self-contained HTML
-  no longer exceeds the 60 s pre-dispatch deadline (Beyond Rubik: resume Phase 1).
+  no longer exceeds the 60 s pre-dispatch deadline (audit A08: resume Phase 1).
 - **new_audit.sh** ignores hidden folders and `__MACOSX` when it picks the package, refuses a folder holding both
   sub-folders and loose files (it names the `--package` choices), and refuses an empty package. Start Claude Code
   at the tree root, never in a paper folder (CHEATSHEET).
@@ -166,8 +166,8 @@ Nothing to do. Every audit initialised before 2.7.4 keeps its frozen values and 
   more adjudicator call. And `build_docx.sh` changed, so every `document_build_manifest.json` built on 2.7.3 or
   earlier binds a builder this release no longer has: finalize, `stage_release.sh` and `publish_completed.sh` refuse
   the document until you re-run `bash scripts/build_docx.sh "$AUDIT_DIR" <name>` (and the verification notebook if
-  the report changed). Two in-flight audits on 2026-10-01 are affected (20260930-audit-70b8eac5 and
-  20261001-audit-803f98f9); re-filing any published comment also needs the rebuild, which can move its page breaks.
+  the report changed). Two in-flight audits on 2026-10-01 are affected (audits A06 and
+  A07); re-filing any published comment also needs the rebuild, which can move its page breaks.
 - **The capture message** now reads `environment journaled (environment_captured, journal seq N): ...` instead of
   `environment recorded: ...`.
 
@@ -189,8 +189,8 @@ without it: 31 of the 32 audits under `runs/` on 2026-09-30 have none.
 - **Only the capture writes it.** `log_event.sh` and the `lifecycle_journal.py append-*` commands
   refuse `environment_captured`, and the pre-2.7.4 hand-logged type `environment` too. A hand-logged
   `metadata_correction` may not set `environment`. Three journals hold a hand-logged `environment`
-  event from a 2.2.x copy (one under `runs/`, "Social norms and emotion regulation among youth
-  athletes", and two in `old_runs/`). The projection never read that type and still does not. On 2.7.4
+  event from a 2.2.x copy (one under `runs/`, audit
+  A09, and two in `old_runs/`). The projection never read that type and still does not. On 2.7.4
   and 2.7.5 their finalize stopped at schema validation on it; 2.7.6 makes `environment` a `run.schema.json`
   event type, so it no longer does.
 - **finalize says what it finds**, right after it validates `run.json`: `ok: run.json carries the
@@ -278,8 +278,8 @@ timeout from 2,700 to 5,400 seconds (CHANGELOG, 2.7.2).
   pre-inference requests; one with an empty workspace is closed uncharged, as before. The rows a
   2.7.1 recovery already wrote are not rewritten.
 - **Why 5,400 s.** The Sonnet 5 auditors the 2,700 s cap was set for finished in 8 to 34 minutes.
-  On 2026-09-30 a teammate's Sonnet 5.5/max auditors finished in about 20 to 35 minutes, but on the
-  Goepp et al. audit one role took 41 minutes (344,821 output tokens, USD 7.07) and the other four
+  On 2026-09-30 a teammate's Sonnet 5.5/max auditors finished in about 20 to 35 minutes, but on
+  audit A19 one role took 41 minutes (344,821 output tokens, USD 7.07) and the other four
   were still writing `REPORT.md` and `result.json` when 2,700 s stopped them, twice. 5,400 s is
   twice the old cap; the USD 15 budget is unchanged and, at about USD 0.17 a minute, binds near the
   same point.
@@ -415,7 +415,7 @@ audit in any phase can take the upgrade. A published audit needs nothing.
   `init_run.sh` freezes `gpt-6.1-sol` for the critics and the critique model probe (effort high)
   and for the targeted adjudicator (effort max), and the critique driver dispatches
   `codex exec ... -m gpt-6.1-sol`. An audit initialised on 2.6.1 to 2.6.10, or before 2.6.0, froze
-  `gpt-5.6-terra`; the one audit initialised on 2.6.0 froze `gpt-6-sol`. `run_critique.sh` reads the
+  `gpt-5.6-terra`; an audit initialised on 2.6.0 froze `gpt-6-sol`. `run_critique.sh` reads the
   route from the audit's snapshot, so each finishes on its own route with the same snapshots, probe
   keys and receipts as on 2.6.10 (2.6.0 and 2.6.1 moved the route the same way); finishing it needs
   an account that can still use that model. A new audit needs the ChatGPT app's Codex CLI at 0.159.0
@@ -444,7 +444,7 @@ audit in any phase can take the upgrade. A published audit needs nothing.
   account with Sol (add `MAX_TRIES=<n>` once a role's attempts are used up); completed roles replay
   from the cache. Since 2.7.5 no audit moves off the shipped critic route, so finishing on the current route,
   from an account with Sol, is the answer; a new audit would pay for Phase 1 again.
-- **The 2.6.0 audit keeps dispatching `gpt-6-sol`.** *Athlete burnout and biomarkers* has been
+- **An audit initialised on 2.6.0 keeps dispatching `gpt-6-sol`.** Audit A05 has been
   stopped at its round-1 critique probe since 2026-09-23, when its operator's account refused
   `gpt-6-sol`, and 2.7.0 re-runs that probe on `gpt-6-sol`. No review has completed, so if the
   account still cannot use it, its operator re-pins it to the shipped route,
@@ -602,8 +602,8 @@ when the upgrade lands inside it:
   *Deposits containing personal data*) are errors when `run.json` `protocol_version` is 2.6.9 or
   later (`disclosure_policy.ENFORCED_FROM`), or when a 2.6.9 skill reopened the audit. An audit
   initialised on the live 2.6.8, whose SKILL.md and prompts still told the operator to pause for a
-  disclosure decision, gets them as warnings, like every older audit. So the food-insecurity SJMSS
-  audit (published on 2.6.8 with `governance.pii_present` true, five flagged comment findings, and
+  disclosure decision, gets them as warnings, like every older audit. So audit
+  A27 (published on 2.6.8 with `governance.pii_present` true, five flagged comment findings, and
   empty `disclosure.flags` and `disclosure.statement` with urgency `none`) re-finalizes with a
   warning, and the in-flight 2.6.8 audits are not refused at finalize for unsettled disclosure rows
   or comment-level fields. Settle them anyway: the warning names each one. `gate_set_version` and `toolkit.scripts_sha256` differ for audits initialised on 2.6.9,
@@ -618,7 +618,7 @@ when the upgrade lands inside it:
 |---|---|
 | Core workflow | `bash`, Python 3 with `jsonschema`, `jq` |
 | Claude coordination and auditors | Claude Code CLI signed in to an account with Sonnet 5.5, which new audits spawn by its full id (`--model claude-sonnet-5-5`); finishing an audit initialised before 2.7.0 also needs Sonnet 5, which it spawns as `--model sonnet`. A subscription (OAuth/keychain) login works; the runners use `--safe-mode`, not `--bare`, because bare mode refuses OAuth and keychain credentials. `ANTHROPIC_API_KEY` also works. |
-| External critics | Codex CLI 0.159.0 or newer, signed in to an account that offers GPT-6.1 Sol (`gpt-6.1-sol`), which new audits' critics and adjudicator run; 0.158.0-alpha.2.1 was refused it. An audit initialised before 2.7.0 runs the critic model it froze: `gpt-5.6-terra`, or `gpt-6-sol` for the one audit initialised on 2.6.0. `scripts/codex_cli.py` picks the newest working copy among the ChatGPT desktop app's bundled CLI (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex` since the app update of 2026-09-28, earlier `Contents/Resources/codex`) and every `codex` on `PATH`; `python3 scripts/codex_cli.py --explain` shows the candidates and the choice. Set `CODEX` to choose one. Since 2.7.5 `new_audit.sh` checks the account before an audit starts (`scripts/check_critic_access.py`; *Upgrading in-flight audits to 2.7.5*) |
+| External critics | Codex CLI 0.159.0 or newer, signed in to an account that offers GPT-6.1 Sol (`gpt-6.1-sol`), which new audits' critics and adjudicator run; 0.158.0-alpha.2.1 was refused it. An audit initialised before 2.7.0 runs the critic model it froze: `gpt-5.6-terra`, or `gpt-6-sol` for an audit initialised on 2.6.0. `scripts/codex_cli.py` picks the newest working copy among the ChatGPT desktop app's bundled CLI (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex` since the app update of 2026-09-28, earlier `Contents/Resources/codex`) and every `codex` on `PATH`; `python3 scripts/codex_cli.py --explain` shows the candidates and the choice. Set `CODEX` to choose one. Since 2.7.5 `new_audit.sh` checks the account before an audit starts (`scripts/check_critic_access.py`; *Upgrading in-flight audits to 2.7.5*) |
 | Statistical/package inspection | Python readers required by the deposit; commonly pandas, scipy, statsmodels, openpyxl, pyreadstat |
 | Verification notebook | R, `rmarkdown`, and format readers such as `haven`, `readxl`, `jsonlite`, or `jmvReadWrite` |
 | DOCX/PDF build and visual gates | `pandoc`; LibreOffice (`soffice`, required, no substitute renderer is accepted); Poppler **21.06 or newer** — the release privacy gate calls `pdfinfo -custom`, which older Poppler rejects |
@@ -641,7 +641,7 @@ mark is not (14 of this tree's 171 papers). `setup_workspace.sh` refuses such an
 intake and Phase 1 refuses it again in preflight, before any provider call.
 
 You do not have to rename the paper folder. `new_audit.sh` drops those characters from the RUN
-folder name (`runs/<journal>/Can automatic reactions mirror exercise dependence/audit`) and passes
+folder name (`runs/<journal>/A paper title that ends in a question mark/audit`) and passes
 the true paper folder as `I4R_PAPER_DIR`, so the reservation is claimed under the paper's true name
 and intake records the true `<journal>/<paper>` in `paper_source.json`, which `publish_completed.sh`
 treats as authoritative. Calling `setup_workspace.sh` directly works the same way, but skips
@@ -649,9 +649,9 @@ treats as authoritative. Calling `setup_workspace.sh` directly works the same wa
 refuses:
 
 ```bash
-I4R_PAPER_DIR="data/<journal>/Can automatic reactions mirror exercise dependence?" \
+I4R_PAPER_DIR="data/<journal>/A paper title that ends in a question mark?" \
   bash scripts/setup_workspace.sh \
-    "runs/<journal>/Can automatic reactions mirror exercise dependence/audit" \
+    "runs/<journal>/A paper title that ends in a question mark/audit" \
     "<paper.pdf>" "<package.zip>"
 ```
 
@@ -1271,8 +1271,8 @@ written before it are never hit again and may be removed.
 
 **Re-filing a published comment with the corrected Appendix.** The report text does not change, so
 no critique round runs and no reopen is needed, but a rebuild and a restage alone are not enough.
-The full chain, proven end to end on scratch copies of the Schütz audit (published on 2.6.7) and
-the food-insecurity SJMSS audit (published on the live 2.6.8), with no provider call:
+The full chain, proven end to end on scratch copies of audit A20 (published on 2.6.7) and
+audit A27 (published on the live 2.6.8), with no provider call:
 
 1. Move the filed set under `old_runs/` and claim the paper again (*Correcting a published
    comment*, steps 1 and 2).
@@ -1295,7 +1295,7 @@ the food-insecurity SJMSS audit (published on the live 2.6.8), with no provider 
    `stage_release.sh` prints the exact command), then `python3 scripts/run_post_delta_gates.py
    "$AUDIT_DIR" --round N --report "$AUDIT_DIR/report/REPORT_final.md"`. The rebuilt packet was
    byte-identical to the published one on both audits. A step-1 registry copy that an old version
-   renumbered without keeping a history (Schütz, round 4) no longer matches integrate_round's
+   renumbered without keeping a history (audit A20, round 4) no longer matches integrate_round's
    backup. From 2.6.9 it is accepted when it holds exactly the bytes the round's own frozen packet
    was built from: `make_diff_packet.py` prints a note, and never a restore that would copy the same
    bytes over themselves. `python3 scripts/validate_round_projections.py "$AUDIT_DIR"
@@ -1305,8 +1305,8 @@ the food-insecurity SJMSS audit (published on the live 2.6.8), with no provider 
 7. Re-log the delivery (`bash scripts/log_event.sh delivery artifact_path=report/<output-name>.pdf
    recipient='<recipient>'`) and then `phase_end phase=release`.
 8. `I4R_REFINALIZE_PUBLISHED=1 bash scripts/finalize_run.sh "$AUDIT_DIR" --stopping-reason <its
-   stop>`. An audit initialised before 2.6.9 gets the disclosure checks as warnings (the
-   food-insecurity audit warns that its comment-level `disclosure.flags` and `statement` are empty).
+   stop>`. An audit initialised before 2.6.9 gets the disclosure checks as warnings (audit
+   A27 warns that its comment-level `disclosure.flags` and `statement` are empty).
 9. `bash scripts/publish_completed.sh "$AUDIT_DIR"`.
 
 ## Correcting a published comment
@@ -1473,8 +1473,8 @@ section:
    claim ids and the two rounds left. The round snapshot freezes this text into every critic prompt.
 4. Build, prepare, gate and run round 6 exactly as round 2 in SKILL.md, with `--round 6` and round 5's
    step-1 copies (`critique/round_5/REPORT_BEFORE_INTEGRATION.md` and
-   `FINDINGS_BEFORE_INTEGRATION.jsonl`). Where round 5 was integrated without them (IJSEP social
-   norms and PSE intergroup criticism), make them first, as in *Correcting a published comment*,
+   `FINDINGS_BEFORE_INTEGRATION.jsonl`). Where round 5 was integrated without them (audits A09
+   and A25), make them first, as in *Correcting a published comment*,
    step 3. The first `make_diff_packet.py --round 6` stops and prints two `cp` commands. The report
    comes from the snapshot pinned by round 5's `CURRENT_INVOCATION`. The findings come from
    `integrate_round.py`'s pre-integration backup where one exists; neither audit named above has a
@@ -1487,24 +1487,22 @@ section:
    (`validate_round_projections.py` names the list it expects), then release and finalize as usual.
    Use `converged` after a clean round, or `cap_with_unresolved` only after round 7.
 
-### Ziv and Neudorfer: published audits that stopped at their cap
+### Audits A22 and A23: published audits that stopped at their cap
 
 Both stopped `cap_with_unresolved` after five rounds, with one section changed after its last review.
 Both are published. Every step below writes to the live tree and is the owner's decision. Rounds 6 and
 7 are paid provider calls. Rehearse the steps on a copy of the audit first. Scratch copies of both
 audits, driven with the fake Codex CLI, prepared, gated and completed round 6 this way.
 
-| | Ziv | Neudorfer |
+| | A22 | A23 |
 |---|---|---|
-| audit id | `20260926-audit-d5de4cbe` | `20260923-audit-3309cfcf` |
-| journal | Psychology of Sport and Exercise | Scandinavian Journal of Medicine & Science in Sports |
-| initialised on | 2.6.4 | 2.6.3 (on a WSL machine) |
+| initialised on | 2.6.4 | 2.6.3 |
 | unreviewed at the close | Section 2 | the Abstract |
 | round-6 critics (probe) | stats, fairness, completeness | stats, data, fairness, completeness |
 
 Two names are in play. `P` is the `runs/` folder name, used only for `runs/` and `old_runs/`.
 `PD` is the paper's true name from the audit's `paper_source.json`, used for `data/`, `comments/`
-and `metadata/`. `new_audit.sh` drops `?*[]{}\` from the `runs/` folder name, so for Ziv the two
+and `metadata/`. `new_audit.sh` drops `?*[]{}\` from the `runs/` folder name, so for A22 the two
 differ: its `data/`, `comments/` and `metadata/` folders keep a `?` that its `runs/` folder does not.
 Every script is called from the installed skill, `S`, because the tree root has no `scripts/`. From
 the tree root (the folder holding `data/`, `runs/`, `comments/`, `metadata/`, `old_runs/` and
@@ -1532,11 +1530,11 @@ PD=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["paper"])' 
    A="old_runs/$J/$P.published-$(date -u +%Y%m%dT%H%M%SZ)"; mkdir -p "$A"
    mv "comments/$J/$PD" "$A/comments"; mv "metadata/$J/$PD" "$A/metadata"
    mv "runs/$J/$P/release" "$A/release"
-   find "runs/$J/$P" -maxdepth 1 -name 'release.rejected-*' -exec mv {} "$A/" \;   # Ziv has one
+   find "runs/$J/$P" -maxdepth 1 -name 'release.rejected-*' -exec mv {} "$A/" \;   # A22 has one
    bash "$S/scripts/reserve_paper.sh" claim "data/$J/$PD"
    ```
 
-3. Neudorfer only: `chmod -R a-w "$AUDIT_DIR/pkg"`. The synced folder gave its package back its write
+3. A23 only: `chmod -R a-w "$AUDIT_DIR/pkg"`. The synced folder gave its package back its write
    bits, and the archive-gate replay of the round 2-5 receipts refuses a writable `pkg/`.
 4. Raise the cap and reopen. Dry run first:
 
@@ -1552,7 +1550,7 @@ PD=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["paper"])' 
    records it and the `old_runs/` folder in the journal.
 5. `python3 "$S/scripts/generate_finding_artifacts.py" "$AUDIT_DIR" --apply`. Only `verification.Rmd`
    and `work/finding_projections.manifest.json` change.
-6. Rewrite `WRAPUP.txt`. Ziv's calls five rounds the hard cap, and Neudorfer's calls round 5 the
+6. Rewrite `WRAPUP.txt`. A22's calls five rounds the hard cap, and A23's calls round 5 the
    last. Replace it with round 6 of cap 7 (amended from 5), the unreviewed section, its dependent
    claims, and the two rounds left.
 7. Round 6, from round 5's step-1 copies (both audits have them):
@@ -1574,13 +1572,13 @@ PD=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["paper"])' 
    If round 6 made a correction, or left a BLOCKING or conclusion-critical item, run round 7 the same
    way with `--round 7` and round 6's step-1 copies.
 8. Log `review_scope` with the ordered union of every packet's `changed_claim_ids`. Then log
-   `phase_end phase=critique at=<last round's end>` and `phase_start phase=release`. For Neudorfer
+   `phase_end phase=critique at=<last round's end>` and `phase_start phase=release`. For A23
    this also repairs its journal, which records the critique phase ending after release started.
 9. Rebuild the release set as in SKILL.md's release block: `build_docx.sh` (both document manifests
-   are stale), the notebook, `run_verification.sh` (Neudorfer: on this machine), the claims script,
+   are stale), the notebook, `run_verification.sh` (A23: on this machine), the claims script,
    `report/REPORT_v<N+1>.md`, then `stage_release.sh` into a directory that does not exist yet. Log
    the delivery and `phase_end phase=release`.
-10. Ziv's `comment.json` records `governance.pii_present: true` with empty `disclosure.flags` and
+10. A22's `comment.json` records `governance.pii_present: true` with empty `disclosure.flags` and
     `disclosure.statement`. Reopened under 2.6.9, that is an error, so report each exposure there by
     kind, file, column and count, never by value (*Deposits containing personal data*).
 11. Finalize and publish:
@@ -1598,11 +1596,11 @@ version, its release folder and the `old_runs/` folder the filed set was moved t
 listed, 6 and 7 bound to the amended snapshot, and `compliance.policy_amendments_valid` is true. The registry keeps both versions, and the old published
 set stays under `old_runs/`.
 
-The 2.6.9 assessment also found three unfinalized audits with round 5 integrated: Frontiers pelvic
-kinematics (on 2.6.4), IJSEP social norms (2.2.0) and PSE intergroup criticism (2.6.3). They follow
+The 2.6.9 assessment also found three unfinalized audits with round 5 integrated: A24
+(on 2.6.4), A09 (2.2.0) and A25 (2.6.3). They follow
 *An unfinalized audit that stopped after round 5* above: no reopen and nothing to move aside. Only
-Frontiers has round 5's step-1 copies, so the other two make them first (step 4). A fourth, PSE effort
-intensity (2.6.3), stopped after round 4. It needs no amendment yet: round 5 is inside its cap of 5.
+A24 has round 5's step-1 copies, so the other two make them first (step 4). A fourth, A04
+(2.6.3), stopped after round 4. It needs no amendment yet: round 5 is inside its cap of 5.
 It is amended only if round 5 leaves something that needs rounds 6-7, and only once round 5 is
 integrated. Check each audit with `status.py` first.
 
@@ -1616,7 +1614,7 @@ So a report that would stop the coordinator is re-sampled in Phase 1 instead.
 
 A token with that shape is admitted only when it is a column header or dictionary name in one of
 the deposit's data files and never a data value anywhere in the deposit. Examples are an SPSS
-column `INT_P05`, or a CSV header `DUR_P15` whose identifier column holds other values. It is not
+column `INT_P05`, or a CSV header `LEN_P15` whose identifier column holds other values. It is not
 admitted from a file or sheet that looks like one column per participant. If any non-code,
 non-document file cannot be scanned for values, nothing is admitted. That includes an SPSS, Stata
 or Excel file its reader rejects, a file whose bytes hide their text (Parquet, Feather, zstd, raw
@@ -1640,7 +1638,7 @@ refused whatever the deposit says, as `check_consistency.sh` refuses it.
 A row is promoted only with confirmations from two model families. The Claude-family (family-A)
 confirmation of a Phase-1 finding comes from the auditor whose report raised it. A finding first
 raised later — by the operator, by the coordinator, or as a critic's new issue — has no such
-auditor. Before 2.6.4 it could never be promoted. In the Neudorfer audit three true article-text
+auditor. Before 2.6.4 it could never be promoted. In audit A23 three true article-text
 findings (F13–F15) were excluded for that reason, after hand-made verification records had been
 refused by `make_settled.sh` and then by finalize. The packaged verifier closes that gap without
 weakening the two-family rule. Its contract is `post_fan_out_verification` in
@@ -1717,8 +1715,8 @@ fixed list, each attempt's denials are computed when its settings are written
 
 Only a path that exists and is not an empty directory is denied (2.6.6). The CLI's macOS sandbox
 writes, for every denied path, an unlink and a create rule for the path and each of its ancestor
-directories into a profile passed on the command line of every Bash call. On the tenth production
-audit, whose working directory is 406 characters and 16 levels deep, the 47 denials 2.6.5 wrote
+directories into a profile passed on the command line of every Bash call. On audit
+A21, whose working directory is 406 characters and 16 levels deep, the 47 denials 2.6.5 wrote
 overflowed the 1 MiB exec limit: every command failed with E2BIG, and the verifier worked 45
 minutes without a shell before its timeout. The trimmed list for that audit is 21 denials and
 about 1,015,000 bytes of command line; the auditors' 10 are about 911,000. A very long audit path
@@ -1897,7 +1895,7 @@ defensible verifier route and the runner refuses. Nothing else changes for such 
 verifier row its outputs are byte-identical to 2.6.3, apart from the two general fixes listed in
 the 2.6.4 CHANGELOG (a Phase-1 start above three under a raised `I4R_MAX_ATTEMPTS`, and a critic-path
 record that started in the same second as a critic re-pin). Legacy hand-made verification rows are
-unaffected: the Neudorfer `operator_verifier` and `auditor_operator_verification` rows, corrected
+unaffected: the A23 `operator_verifier` and `auditor_operator_verification` rows, corrected
 to `legacy_record`, have role class `other` or `auditor`, and every verifier check keys on
 `role_class` `verifier`, never on a name.
 

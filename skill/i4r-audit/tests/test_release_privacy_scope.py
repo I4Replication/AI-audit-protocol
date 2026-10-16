@@ -227,7 +227,7 @@ class AuditPathNeutralisation(unittest.TestCase):
         """2.6.2: an auditor split the audit path across string literals, so only the tree root
         (ours) appeared whole; the release blocked on the operator's own account name."""
         with tempfile.TemporaryDirectory() as tmp:
-            tree = f"{HOME}/Dropbox/Sport_exercise_psych"
+            tree = f"{HOME}/Dropbox/Discipline_tree"
             release = self._release(tmp)
             script = release / "work" / "a1_reproduction" / "checks.py"
             script.write_text('RAW = Path(\n    "' + tree + '/runs/"\n    "Journal/Paper/"\n    "audit/phase1/snapshots/abc/raw"\n)\n'

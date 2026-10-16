@@ -124,7 +124,7 @@ canonical reports whose completed provider invocation hashes match that quorum.
 ## Post-fan-out verifier (2.6.4)
 
 A finding first raised after fan-out (by the operator, the coordinator or a critic) has no Phase-1
-auditor to supply its family-A confirmation. In the Neudorfer audit three true findings (F13-F15)
+auditor to supply its family-A confirmation. In audit A23 three true findings (F13-F15)
 were excluded for that reason after hand-made verification records were refused by make_settled
 and finalize. `scripts/run_verifier.py` is the packaged family-A role for such rows. It runs one
 blind call per batch on the auditors' Claude route, under this same runtime contract, and

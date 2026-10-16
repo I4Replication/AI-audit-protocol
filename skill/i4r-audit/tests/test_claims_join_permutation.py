@@ -7,9 +7,9 @@ the extracted claim numbers against ``list(range(1, N+1))`` with ``!=``, so any 
 single judgement or unverifiable claim failed the post-delta checklist gate with
 "claims script does not join findings exactly".
 
-It was latent until an audit produced a non-code claim. The dart-throwing audit has exactly one (a
-raster schematic with no OCR layer, read by eye) and hit it at `[1..20, 22, 23, 24, 21]`. The first
-production audit's own claims script is `[1,2,3,5,6,7,8,10,11,12,13,14,16,17,4,9,15]` and would
+It was latent until an audit produced a non-code claim. Audit A37 has exactly one (a
+raster schematic with no OCR layer, read by eye) and hit it at `[1..20, 22, 23, 24, 21]`. Audit
+A34's own claims script is `[1,2,3,5,6,7,8,10,11,12,13,14,16,17,4,9,15]` and would
 have failed the same gate had it run.
 
 The property that actually matters is a bijection: every finding claimed exactly once, no claim
@@ -54,7 +54,7 @@ class ClaimsJoinIsAPermutationCheck(unittest.TestCase):
         self.accepts([1, 2, 3, 4], 4)
 
     def test_the_documented_no_code_tail_is_accepted(self) -> None:
-        # The first production audit's real ordering, and the dart-throwing audit's.
+        # Audit A34's real ordering, and audit A37's.
         self.accepts([1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 14, 16, 17, 4, 9, 15], 17)
         self.accepts([*range(1, 21), 22, 23, 24, 21], 24)
 

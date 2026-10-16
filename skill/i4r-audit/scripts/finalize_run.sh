@@ -39,8 +39,8 @@ HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 DEFAULT_SCHEMAS="$HERE/../schemas"
 # The registry default used to be $HERE/../../registry -- the registry INSIDE the skill checkout,
 # not the programme registry the discipline tree keeps at its root. An operator who ran finalize
-# without --registry got a green "filed into the registry" and a row nobody would ever read; the
-# third production audit filed there silently and had to be re-filed. The programme registry is now
+# without --registry got a green "filed into the registry" and a row nobody would ever read;
+# audit A37 filed there silently and had to be re-filed. The programme registry is now
 # derived from the audit directory the same way reserve_paper.sh derives the reservations root, and
 # resolve_registry() below reports which one it picked so a mis-file cannot be silent again.
 SKILL_LOCAL_REGISTRY="$HERE/../../registry"
@@ -382,7 +382,7 @@ if "max_attempts_per_role_operator_ceiling" not in _critique_policy:
 if stop: R["stopping_reason"] = stop
 if detail: R["stopping_reason_detail"] = detail
 # Finalization is the close, but the close is a fact about the RUN, not about when finalize
-# happened to be executed. Re-closing at the current time misdated the first audit's second
+# happened to be executed. Re-closing at the current time misdated audit A34's second
 # finalization in the other direction: comment.timing.audit_date derives from ended_at, and
 # days_elapsed derives from audit_date, so every re-finalize silently inflated the field the
 # meta-paper plots against everything else. The shipped EXAMPLE pair proves it -- its recorded
@@ -702,7 +702,7 @@ R["package"] = pkg or None
 # ---- records retained: auto-filled when nothing was logged, and any entry that CONTRADICTS the
 # filesystem is corrected. A deliberate record ("destroyed", with a reason) for an artifact that is
 # genuinely absent is never overwritten; an entry claiming an artifact was never created while the
-# artifact is present on disk is simply false, and the first audit filed exactly that.
+# artifact is present on disk is simply false, and audit A34 filed exactly that.
 _existing = {row.get("artifact"): row for row in (R.get("records_retained") or [])
              if isinstance(row, dict)}
 if True:
@@ -1509,7 +1509,7 @@ IDPAT = re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,3}_?P\d+(?![A-Za-z0-9])"
                    r"|(?<![A-Za-z0-9])P\d{1,3}(?![A-Za-z0-9])"
                    r"|sub_[A-Z]_\d+|sub_\d+"
                    r"|(?:participant|subject)[ _]?\d{1,3}", re.I)
-_pos = ["MSTE_AC_sub_E_999.mat", "data/P999.csv", "sub_999", "participant 999", "CYC_P999"]
+_pos = ["ABC_XY_sub_E_999.mat", "data/P999.csv", "sub_999", "participant 999", "CYC_P999"]
 _neg = ["code/03_model.R:88", "data/wave2.csv column session_date", "subsequent submissions"]
 if not all(IDPAT.search(s) for s in _pos):
     errors.append("the package_locus identifier detector fails a known-present control; "
@@ -1561,7 +1561,7 @@ if not t.get("audit_start_date") and R.get("started_at"):
     t["audit_start_date"] = R["started_at"][:10]
 if R.get("ended_at"):
     # The schema defines audit_date as the date of run.json ended_at; derive it, never carry a
-    # hand-set value forward (the first audit shipped a date one day early).
+    # hand-set value forward (audit A34 shipped a date one day early).
     t["audit_date"] = R["ended_at"][:10]
 pub, aud = d(t.get("publication_date")), d(t.get("audit_date"))
 t["days_elapsed"] = (aud - pub).days if (pub and aud) else None
@@ -2059,7 +2059,7 @@ PYPUB
     REGISTRY="$(resolve_registry "$DIRN")"
     if [ "$NOREG" -eq 0 ]; then
       if [ "$REGISTRY" = "$SKILL_LOCAL_REGISTRY" ]; then
-        # Announcing the fallback was not enough: the seventh production audit, run from a stale
+        # Announcing the fallback was not enough: audit A28, run from a stale
         # skill copy on another machine, filed here anyway and had to be re-filed and its
         # Completed-reports set moved aside by hand. A row in the skill checkout is never the
         # programme's record, so outside a fixture this is a refusal, not a note.
@@ -3372,7 +3372,7 @@ PYROUTE
   # 2.6.4, the post-fan-out verifier. With no role_class verifier row the compliance object keeps
   # its 2.6.3 keys. A round-0 verifier call recorded exactly as the runner records it (with its
   # completion receipt) is listed apart from the five auditors and passes; the same call without
-  # the receipt is not admitted and fails compliance; and a hand-made record (the Neudorfer
+  # the receipt is not admitted and fails compliance; and a hand-made record (the A23
   # make_record.py shape, receipt included) is refused as not the runner's admitted output.
   n=$(python3 -c 'import json,sys
 c=json.load(open(sys.argv[1]))["compliance"]; print(sorted(set(c) & {"verifier_calls","verifiers_ok"}))' "$T/g/run.json" 2>/dev/null)
@@ -3388,7 +3388,7 @@ sys.path[:0] = [str(scripts.parent), str(scripts)]
 # Every consumer re-admits a verifier record through scripts/run_verifier.py (readmit_record), so a
 # hand-written receipt and output tree are refused. tests/verifier_fixtures.py records the call
 # exactly as the runner does (real lifecycle API, frozen packet, validated tree, runner receipt);
-# forge_hand_record is the Neudorfer make_record.py shape, which must now be refused.
+# forge_hand_record is the A23 make_record.py shape, which must now be refused.
 from tests import verifier_fixtures
 claim = "The abstract reports 24 participants; the participant table lists 22."
 started, ended = "2026-01-01T11:10:00Z", "2026-01-01T11:14:00Z"
@@ -3427,7 +3427,7 @@ print("%s/%s/%s/%s" % (c["compliance_pass"], c.get("verifiers_ok"), len(c.get("v
     fi
   done
 
-  # NEGATIVE CONTROL: the seventh production audit ran finalize with the release phase still
+  # NEGATIVE CONTROL: audit A28 ran finalize with the release phase still
   # open. compliance_pass was false and the operator had to work out why. The violation must
   # name the phase and the command that closes it.
   rm -rf "$T/g-open"; cp -R "$T/g" "$T/g-open"

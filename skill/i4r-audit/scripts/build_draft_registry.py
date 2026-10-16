@@ -100,7 +100,7 @@ def bound_result(
     (<input_sha256>/*/status.json): attempt_NN_<uuid> for a sample, repair_<uuid> for the focused
     output repair (run_phase1.try_focused_repair) that completes a role whose sample failed only
     structurally -- the quorum then binds the repair's invocation. Until 2.7.4 only attempt_* was
-    searched, so the first audit to complete a role by repair (20260930-audit-0ccfcb4e,
+    searched, so the first audit to complete a role by repair (audit A15,
     auditor_code_methods) stopped here with "no bound result.json". Exactly one directory may carry
     the id, and when Phase 1 recorded the promoted result's digest the file must still hash to it."""
     role_root = root / "phase1" / "roles" / role
@@ -159,8 +159,8 @@ def heuristic_remedy_class(remedy: str) -> str:
     return "not_fixable"
 
 
-# A finding about a hardcoded path necessarily quotes one. The deposit for the second production
-# audit opened with setwd("C:/Users/<user>/...") and setwd("/Users/<user>/..."), and the
+# A finding about a hardcoded path necessarily quotes one. The deposit for audit
+# A38 opened with setwd("C:/Users/<user>/...") and setwd("/Users/<user>/..."), and the
 # code-and-methods role correctly reported that as a portability defect. The role's REPORT.md is
 # scanned for absolute paths and was clean -- the auditor described the paths without quoting
 # them -- but result.json is not scanned, so the literal path reached the draft registry and the
@@ -182,7 +182,7 @@ UNIX_HOME_PREFIX = re.compile(r"(?i)/(?:" + "Us" + r"ers|home)/[^/\s'\"),:;]+/?"
 def mask_home_accounts(value):
     """Replace home-directory prefixes in deposit text copied into a draft row.
 
-    A finding about a hardcoded path necessarily quotes one. The second production audit's
+    A finding about a hardcoded path necessarily quotes one. Audit A38's
     deposit opened with setwd("C:/Users/<user>/...") and setwd("/Users/<user>/..."), and the
     code-and-methods role correctly reported that as a portability defect. The role's REPORT.md
     is scanned for absolute paths and was clean -- the auditor described them without quoting --

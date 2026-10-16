@@ -1,8 +1,8 @@
 """The participant-code rule shared by Phase-1 admission and the coordinator (2.6.5).
 
 Every test builds its deposit on disk and runs the real functions; nothing here greps source.
-The video-speed audit (20260926-audit-8fcff20d) was lost to the rule this pins: its SPSS column
-names INT_P05 and DUR_P15 have the participant-code shape, the coordinator refused the five
+Audit A20 was lost to the rule this pins: two of its SPSS column
+names have the participant-code shape, the coordinator refused the five
 Phase-1 reports that quoted them, and Phase 1 had already admitted and paid for those reports.
 """
 from __future__ import annotations
@@ -178,9 +178,9 @@ class DepositTest(unittest.TestCase):
 # ---------------------------------------------------------------------------- the vocabulary
 class DepositVocabularyTests(DepositTest):
     def test_csv_header_names_are_exempt_and_identifier_values_are_not(self) -> None:
-        (self.pkg / "data.csv").write_text("id,INT_P05,DUR_P15\nSUBJ_P12,3.2,1.1\nSUBJ_P13,2.9,1.4\n")
+        (self.pkg / "data.csv").write_text("id,INT_P05,LEN_P15\nSUBJ_P12,3.2,1.1\nSUBJ_P13,2.9,1.4\n")
         vocabulary = self.vocabulary()
-        self.assertEqual(vocabulary.exempt, frozenset({"INT_P05", "DUR_P15"}))
+        self.assertEqual(vocabulary.exempt, frozenset({"INT_P05", "LEN_P15"}))
         self.assertIn("SUBJ_P12", vocabulary.values)
 
     def test_a_header_that_is_also_a_data_value_is_not_exempt(self) -> None:
@@ -218,7 +218,7 @@ class DepositVocabularyTests(DepositTest):
         self.assertEqual(vocabulary.exempt, frozenset())
 
     def test_semicolon_tables_are_read_and_prose_is_not(self) -> None:
-        (self.pkg / "data.txt").write_text("INT_P05;INT_N05\n1;2\n3;4\n")
+        (self.pkg / "data.txt").write_text("INT_P05;RAT_N05\n1;2\n3;4\n")
         (self.pkg / "README.txt").write_text(
             "Column INT_P20 holds ratings, and row SUBJ_P12 was excluded before sharing.\n"
             "See the syntax for details.\n"
@@ -230,12 +230,12 @@ class DepositVocabularyTests(DepositTest):
         self.assertEqual(self.vocabulary().names, frozenset())
 
     def test_spss_dictionary_short_and_long_names(self) -> None:
-        write_sav(self.pkg / "study.sav", [("VP", 8), ("INT_P05", 0), ("DURLONGP", 0)],
+        write_sav(self.pkg / "study.sav", [("VP", 8), ("INT_P05", 0), ("LENLONGP", 0)],
                   [["A01", 3, 2], ["A02", 4, 1]],
-                  long_names={"VP": "VP", "INT_P05": "INT_P05", "DURLONGP": "DUR_P15"})
+                  long_names={"VP": "VP", "INT_P05": "INT_P05", "LENLONGP": "LEN_P15"})
         vocabulary = self.vocabulary()
         self.assertEqual(vocabulary.unreadable, ())
-        self.assertEqual(vocabulary.exempt, frozenset({"INT_P05", "DUR_P15"}))
+        self.assertEqual(vocabulary.exempt, frozenset({"INT_P05", "LEN_P15"}))
 
     def test_spss_bytecode_value_split_across_a_command_block_is_still_found(self) -> None:
         # Seven compressible numbers then a 16-byte string: the string's two cells straddle the
@@ -284,8 +284,8 @@ class DepositVocabularyTests(DepositTest):
         path = self.pkg / "data.csv"
         path.write_text("id,INT_P05\n1,2\n")
         self.assertEqual(self.vocabulary().exempt, frozenset({"INT_P05"}))
-        path.write_text("id,INT_P05,DUR_P15\n1,2,3\n")
-        self.assertEqual(self.vocabulary().exempt, frozenset({"INT_P05", "DUR_P15"}))
+        path.write_text("id,INT_P05,LEN_P15\n1,2,3\n")
+        self.assertEqual(self.vocabulary().exempt, frozenset({"INT_P05", "LEN_P15"}))
 
 
 # ------------------------------------------------------------------------------- the matcher
@@ -308,7 +308,7 @@ class FirstParticipantCodeTests(unittest.TestCase):
     def test_the_patterns_are_the_coordinators_historical_ones(self) -> None:
         self.assertIs(run_coordinator.RAW_PARTICIPANT_CODE, provider_safety.RAW_PARTICIPANT_CODE)
         self.assertIs(run_coordinator.ROW_PARTICIPANT_CODE, provider_safety.ROW_PARTICIPANT_CODE)
-        for text in ("SA_P1 was seen", "Unsafe row: SA_P1,2022-05-09,118,74", "\nP7,1.5\n"):
+        for text in ("XY_P1 was seen", "Unsafe row: XY_P1,2021-03-04,101,62", "\nP7,1.5\n"):
             self.assertTrue(provider_safety.has_participant_code(text), text)
         for text in ("TLI equals 0.9546", "Table P1 of the appendix", "item_p05 lower case"):
             self.assertFalse(provider_safety.has_participant_code(text), text)
@@ -316,11 +316,11 @@ class FirstParticipantCodeTests(unittest.TestCase):
 
 # ------------------------------------------------------------------- both stages, same verdict
 class BothStagesAgreeTests(DepositTest):
-    REPORT = "## Findings\nThe INT_P05 and DUR_P15 means reproduce.\n"
+    REPORT = "## Findings\nThe INT_P05 and LEN_P15 means reproduce.\n"
 
     def setUp(self) -> None:
         super().setUp()
-        (self.pkg / "study.csv").write_text("id,INT_P05,DUR_P15\nSUBJ_P12,3.2,1.1\n")
+        (self.pkg / "study.csv").write_text("id,INT_P05,LEN_P15\nSUBJ_P12,3.2,1.1\n")
 
     def phase_one(self, report: str, result: dict | None = None, *, exempt=None) -> str | None:
         exemptions = self.vocabulary().exempt if exempt is None else exempt
@@ -368,7 +368,7 @@ class BothStagesAgreeTests(DepositTest):
         (snapshot / "raw").mkdir(parents=True)
         (snapshot / "raw" / "pkg").symlink_to(self.pkg, target_is_directory=True)
         self.assertEqual(phase1_runtime.snapshot_deposit_exemptions(snapshot),
-                         frozenset({"INT_P05", "DUR_P15"}))
+                         frozenset({"INT_P05", "LEN_P15"}))
 
     def test_code_beside_a_date_keeps_the_2_6_4_rule_in_both_output_checks(self) -> None:
         # The exemption covers the bare-token scan only. A code-shaped token beside a date is still
@@ -393,8 +393,8 @@ class ParticipantColumnTests(DepositTest):
         self.assertEqual(self.vocabulary().exempt, frozenset())
 
     def test_two_code_shaped_variables_are_still_a_dictionary(self) -> None:
-        (self.pkg / "study.csv").write_text("id,INT_P05,DUR_P15\n1,3.2,1.1\n")
-        self.assertEqual(self.vocabulary().exempt, frozenset({"INT_P05", "DUR_P15"}))
+        (self.pkg / "study.csv").write_text("id,INT_P05,LEN_P15\n1,3.2,1.1\n")
+        self.assertEqual(self.vocabulary().exempt, frozenset({"INT_P05", "LEN_P15"}))
 
     def test_blank_header_cells_do_not_dilute_the_share(self) -> None:
         # A merged L/R header exported to CSV leaves one blank cell per participant.
@@ -478,7 +478,7 @@ class ValueBackstopTests(DepositTest):
 
     def test_code_documents_and_media_are_not_values(self) -> None:
         (self.pkg / "analysis.R").write_text("d <- subset(d, id != 'SUBJ_P12'); mean(d$INT_P05)\n")
-        (self.pkg / "README.md").write_text("INT_P05 is the 0.5 s intention rating.\n")
+        (self.pkg / "README.md").write_text("INT_P05 is a rating column.\n")
         (self.pkg / "clip.mp4").write_bytes(b"INT_P05")
         self.assertEqual(self.exempt(), frozenset({"SUBJ_P12", "INT_P05"}))
 
@@ -783,7 +783,7 @@ class OpaqueFormatTests(DepositTest):
         self.assertEqual(vocabulary.exempt, frozenset({"INT_P05"}))
 
     def test_folder_metadata_in_an_archive_is_read_as_before(self) -> None:
-        # The video-speed deposit zips its stimuli with Finder metadata beside the clips.
+        # The A20 deposit zips its stimuli with Finder metadata beside the clips.
         noise = random.Random(9).randbytes(512)
         archive = zip_bytes({
             "clips/.DS_Store": b"\x00\x00\x00\x01Bud1" + noise,

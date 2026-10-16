@@ -8,7 +8,7 @@ confirmations, the row carries an explicit ``settled`` object::
 
     {"approved": true, "valid_for_report_hash": "<sha256 of report/REPORT_final.md>"}
 
-On the first production audit that object was never written, so the cache promoted zero facts and a
+On audit A34 that object was never written, so the cache promoted zero facts and a
 critique round consumed no settled facts. This helper writes it for every row that already meets
 the promotion rule (INCLUDED, status confirmed/verified/accepted, coordinator_approved) and clears it
 on every other row, validates every row with ``validate_v2.validate_finding_row``, and writes

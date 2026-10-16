@@ -131,7 +131,7 @@ export PATH="$HOME/miniconda3/envs/i4rdoc/bin:$HOME/.local/bin:$PATH"</div>
       <td>Coordinator and the five auditors. Each audit keeps the model frozen in its snapshot: a new one spawns <code>claude-sonnet-5-5</code></td></tr>
   <tr><td>ChatGPT desktop app, <b>updated</b> (its Codex CLI 0.159.0 or newer), logged in, workspace <b>with credits</b> and GPT&#8209;6.1&nbsp;Sol</td>
       <td>chatgpt.com/download &mdash; the Codex CLI ships inside the app; nothing extra to install. The skill finds the newest working copy itself, wherever the app puts it (<code>python3 scripts/codex_cli.py --explain</code> shows its version)</td>
-      <td>Critics on GPT&#8209;6.1&nbsp;Sol/high, adjudication on Sol/max (an audit started before 2.7.0 keeps the critic route it froze: GPT&nbsp;5.6&nbsp;Terra, or GPT&#8209;6&nbsp;Sol for the one 2.6.0 audit). <b>No credits = no critique</b>; the critique model probe catches it, or a CLI or account without Sol, before spending. The probe runs on an audit's first round and after a CLI update, not per account: run every round of a Sol audit from an account that has Sol</td></tr>
+      <td>Critics on GPT&#8209;6.1&nbsp;Sol/high, adjudication on Sol/max (an audit started before 2.7.0 keeps the critic route it froze: GPT&nbsp;5.6&nbsp;Terra, or GPT&#8209;6&nbsp;Sol for an audit started on 2.6.0). <b>No credits = no critique</b>; the critique model probe catches it, or a CLI or account without Sol, before spending. The probe runs on an audit's first round and after a CLI update, not per account: run every round of a Sol audit from an account that has Sol</td></tr>
   <tr><td><b>jq</b></td><td>ships with macOS at <code>/usr/bin/jq</code></td>
       <td><b>Hard.</b> Every journal append and all of finalize shell out to it. Never mentioned on the old sheet</td></tr>
   <tr><td><b>Poppler &ge; 21.06</b> (<code>pdfinfo</code>, <code>pdftotext</code>)</td>
@@ -209,13 +209,13 @@ Always pass an <b>absolute</b> paper path &mdash; a relative one writes the clai
 shared board cannot see it.</p>
 <div class="term"><div class="tbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">Terminal — the board, 2026-09-08 (real output, operator names replaced)</span></div>
 <pre><span class="p">$</span> bash scripts/reserve_paper.sh list "$TREE"
-<span class="wl">  STALE  you@your-mac                 11d  Frontiers_..._A_3-day_step_taper</span>
-         you@your-mac                  5d  International_..._Can_automatic_r
+<span class="wl">  STALE  you@your-mac                 11d  Journal_A_..._Title_of_paper_A01</span>
+         you@your-mac                  5d  Journal_B_..._Title_of_paper_A38
 <span class="cm">  ... 3 more, all STALE, all on other machines</span>
 
 <span class="p">$</span> bash scripts/reserve_paper.sh reap "$TREE"      <span class="cm"># dry run — read-only</span>
-  <span class="wl">WOULD REAP  11d claim (journal idle 11d): A 3-day step taper enhances explosive</span>
-  OTHER     12d claim by ana@lab-imac: Designing a small-sided game
+  <span class="wl">WOULD REAP  11d claim (journal idle 11d): Title of paper A01</span>
+  OTHER     12d claim by them@their-mac: Title of paper A39
 <span class="ok">1 reapable, 4 held  (re-run with --force to release)</span></pre></div>
 <p><b>The printed lines never sum to the held count.</b> Above, three <code>OTHER</code> lines are printed but
 <b>four</b> are held &mdash; the fourth is the 5-day claim, held silently because it is younger than the 7-day stale
@@ -304,13 +304,13 @@ logged as much as 15&nbsp;minutes late.</p>
 <pre><span class="p">$</span> python3 scripts/status.py "$TREE" --stuck
 21 audit(s); 8 need attention
 
-<span class="wl">aborted    idle  21.8d  r4  Measurement of Motivation States for Physical Activity and Seden</span>
-           phase1=None findings=None rounds_run=3 audit_id=20260814-<author>-a206609e
+<span class="wl">aborted    idle  21.8d  r4  Title of paper A40</span>
+           phase1=None findings=None rounds_run=3 audit_id=20260101-audit-00000040
            ! unfinished and idle 21.8d (status=aborted)
            ! aborted
 
-<span class="wl">running    idle  12.6d  r1  The priming Effect and its impact on sport performance and diffi</span>
-           phase1=None findings=None rounds_run=None audit_id=20260826-<author>-b39fbcf9
+<span class="wl">running    idle  12.6d  r1  Title of paper A41</span>
+           phase1=None findings=None rounds_run=None audit_id=20260101-audit-00000041
            ! unfinished and idle 12.6d (status=running)</pre></div>
 <p><code>status.py</code> exits <b>1</b> when anything needs attention, in both text and <code>--json</code> mode, so a
 batch driver can branch on it. It finds audits by marker, so it sees the relocated workspaces under
@@ -333,7 +333,7 @@ recovered and says so.</p>
 <div>
 <p><b>Prevention beats recovery:</b> run <code>caffeinate -i</code> in another tab for any overnight run. A sleeping
 Mac is the documented cause of every stranded attempt in this tree.</p>
-<p><b><code>renumber_findings.py</code></b> converts role-scoped ids (<code>REP-f1_d421…</code>, <code>TXT-TVD-F2</code>,
+<p><b><code>renumber_findings.py</code></b> converts role-scoped ids (<code>REP-f1_d100…</code>, <code>TXT-TVD-F2</code>,
 <code>P1</code>/<code>TN1</code>) to the contiguous <code>F1..FN</code> the projection requires. It <i>reorders</i> as
 well as renames &mdash; numbering follows marker order in the report. Run it <b>once, right after
 <code>run_coordinator.py</code> and before round 1</b>: critic verdicts join by id, so renumbering after a round

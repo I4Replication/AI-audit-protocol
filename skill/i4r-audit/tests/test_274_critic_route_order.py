@@ -2,8 +2,8 @@
 
 The deterministic claim merge (build_claim_merge in scripts/test_run_critique_runtime.py) orders its roles as ROLES
 does: stats, data, fairness, completeness. The round projection then compares that list with the routed roles, as a
-list. The route command kept a CRITICS override in the order it was written. On the MacIntyre 2026 audit
-(20261005-audit-312023cc), round 2 run with CRITICS="completeness fairness" dispatched both critics, which completed,
+list. The route command kept a CRITICS override in the order it was written. On audit
+A18, round 2 run with CRITICS="completeness fairness" dispatched both critics, which completed,
 and then failed the projection with "claim merge identity or role quorum differs". The rerun in canonical order changed
 the round's input hash, so both critics ran again. The route now writes canonical order whatever order the override
 gives.

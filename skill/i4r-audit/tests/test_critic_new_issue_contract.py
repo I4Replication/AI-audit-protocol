@@ -10,7 +10,7 @@ permitted value -- and the validator then rejected exactly what it had been forc
 The two rules contradicted each other, and no prompt wording could bridge them: a constrained
 decoder cannot emit a value the schema excludes.
 
-Measured on the second production audit's round 2, across all twelve critic attempts, the
+Measured on audit A38's round 2, across all twelve critic attempts, the
 correlation was perfect: every attempt that raised zero new issues passed, and every attempt that
 raised one or more failed. Round 1 had survived only because all four critics happened to raise
 none. The round lost quorum twice, and a prompt fix in between changed nothing.

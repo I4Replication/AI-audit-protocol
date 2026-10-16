@@ -183,18 +183,18 @@ PARTICIPANT_ID = re.compile(r"(?i)(?<![A-Za-z0-9])(?:participant|subject|subj|pi
 EMAIL = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
 DATE = re.compile(r"\b(?:19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}:\d{2}(?::\d{2})?\b")
 # 2.7.7: the participant/date admission rule (check_output_hygiene) needs an identifier and a real date or clock time.
-# PARTICIPANT_ID matches the plain word ("participants", "subject to") and DATE any d:dd, so a sleep study's mean
-# bedtime (23:23) or a condition named by a ratio (20:80) on a line that says "participants" was refused as a
+# PARTICIPANT_ID matches the plain word ("participants", "subject to") and DATE any d:dd, so a study's mean
+# bedtime (22:40) or a condition named by a ratio (30:70) on a line that says "participants" was refused as a
 # participant linked to a time: one audit was parked before Phase 1 and one role failed all six attempts. Both patterns
 # above stay as they are, because the privacy scan counts with them and those counts are Phase-1 evidence.
 # An identifier is what follows the label: a token holding a digit ("participant 12", "subject07", "Subj. 12", "#12",
 # "sub-01", also in backticks, quotes or bold), a label word and a code ("Participant ID 12", "whose ID is 12",
-# "participant_id != 'S07'"), one to four capitals that are not a statistic ("Participant A", "JMK", "TEN-07"; not
+# "participant_id != 'S07'"), one to four capitals that are not a statistic ("Participant A", "JMK", "PX-07"; not
 # "SD", "RPE", "TST"; "Participant F" unless a sign follows, as in "Participant N = 24"), or a list of codes
 # ("participants 12 and 14", "Subjects `S03` and `S07`"). A lowercase word, a range or a count is not one ("participants
 # were", "participants 18 to 30 years old", "subjects 1-24", "57 participants"), nor is a capitalised word
 # ("Participant Characteristics"), so a named pseudonym ("Participant Anna") is admitted. A time is a clock time
-# (hour 0-24, minutes 00-59), also after an ISO date's T, so ratios such as 20:80 and 50:50 are not times.
+# (hour 0-24, minutes 00-59), also after an ISO date's T, so ratios such as 30:70 and 50:50 are not times.
 _ID_SEP = "[-_ \u00a0]"
 _ID_Q = "[*`\"'\u2018\u2019\u201c\u201d]{0,2}"   # markdown, backticks and quotes around a code
 _ID_CODE = r"#?(?:[A-Za-z]{1,8}[-_.])?(?=[A-Za-z0-9]{0,15}\d)[A-Za-z0-9]{1,16}(?![A-Za-z0-9])"
@@ -1449,8 +1449,8 @@ def make_role_packet(role: str, manifest: dict[str, Any], policy: dict[str, Any]
 # "Glob patterns are not allowed in write operations".  The denyRead/denyWrite rules go inert
 # at the same moment, so the stated protection of paper/, pkg/ and run.json stops existing too.
 # Measured against the real CLI: "?", "*", "[", "]", "{", "}" and "\" all break; space, ":",
-# "~", "(", ")" and "!" are safe.  A paper folder named "Can automatic reactions mirror
-# exercise dependence?" spent 5,443,051 tokens and $6.43 across five roles and produced no
+# "~", "(", ")" and "!" are safe.  A paper folder whose name ended
+# in "?" spent 5,443,051 tokens and $6.43 across five roles and produced no
 # report at all, because nothing in the pipeline could see that the sandbox was inert.
 SANDBOX_RULE_METACHARACTERS = "?*[]{}\\"
 
@@ -1851,7 +1851,7 @@ FINDING_ELEMENTS = ("evidence", "benign", "impact", "remedy")
 def findings_elements_missing(finding_text: str) -> list[str]:
     """The four required elements a Findings section does not name.
 
-    Extracted so the rule can be tested directly. On the sixth production audit one role lost two
+    Extracted so the rule can be tested directly. On audit A30 one role lost two
     of its three attempts to this check: its reports carried *Benign explanations tested*, *Impact*
     and *Remedy* labels and substantive evidence, but never the word "evidence" inside the
     Findings section, and the message said only that the four elements were "omitted". The prompt
@@ -1943,7 +1943,7 @@ def check_output_hygiene(
         raise OutputValidationError(
             "role report leaks a private absolute path (not focused-repairable: the repair "
             "contract freezes REPORT.md byte-for-byte)", rule="report_absolute_path")
-    # result.json was never scanned, only REPORT.md. On the second production audit the
+    # result.json was never scanned, only REPORT.md. On audit A38 the
     # code-and-methods role kept its report clean -- it described the deposit's hardcoded
     # setwd() paths without quoting them -- but wrote the literal path into the structured
     # finding, which is what feeds the draft registry. The coordinator's provider-safety gate

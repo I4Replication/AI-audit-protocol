@@ -4,8 +4,8 @@
     python3 scripts/init_comment.py "$AUDIT_DIR" --facts work/comment_facts.json
 
 ``generate_finding_artifacts.py --apply`` refuses to run without ``comment.json`` (it injects the
-finding rows into an existing record), but nothing in the skill created that record: the first
-production audit's round-1 chain stopped at its first step for that reason. This tool writes the
+finding rows into an existing record), but nothing in the skill created that record: audit
+A34's round-1 chain stopped at its first step for that reason. This tool writes the
 non-finding skeleton once. Identity comes from ``run.json``; paper- and package-level facts come
 from a small JSON file the coordinator fills in from the article and the Phase-1 reports. Fields
 the facts file does not supply are null wherever the schema allows null, and derived rollups start

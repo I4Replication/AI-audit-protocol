@@ -58,11 +58,11 @@ class StatusSweepTest(unittest.TestCase):
 
     def test_relocated_workspace_is_found_and_named_for_its_paper(self) -> None:
         """.work/audits/<name> is where a paper with '?' in its title has to run."""
-        self.make_audit(self.tree / ".work" / "audits" / "IJSEP_gymnastics_autonomy_support")
+        self.make_audit(self.tree / ".work" / "audits" / "Journal_B_relocated_paper")
         result = run(self.tree, "--json")
         rows = json.loads(result.stdout)
         self.assertEqual(len(rows), 1, result.stdout)
-        self.assertEqual(rows[0]["paper"], "IJSEP_gymnastics_autonomy_support")
+        self.assertEqual(rows[0]["paper"], "Journal_B_relocated_paper")
         self.assertTrue(rows[0]["relocated"])
 
     def test_json_exits_nonzero_when_something_needs_attention(self) -> None:
@@ -147,15 +147,15 @@ class StatusSweepTest(unittest.TestCase):
 
     def test_a_relocated_workspace_claims_nothing_without_paper_source(self) -> None:
         """Its parent is a holding directory; guessing from that name would attach the wrong claim."""
-        audit = self.make_audit(self.tree / ".work" / "audits" / "IJSEP_gymnastics")
+        audit = self.make_audit(self.tree / ".work" / "audits" / "Journal_B_relocated")
         self.reserve(self.tree / "x", name="audits.json")
         row = json.loads(run(self.tree, "--json").stdout)[0]
         self.assertTrue(row["relocated"])
         self.assertIsNone(row["reservation_age_days"])
         # ...but it does resolve once intake has recorded the true paper name.
         (audit / "paper_source.json").write_text(json.dumps(
-            {"journal": "IJSEP", "paper": "Gymnastics autonomy support"}), encoding="utf-8")
-        self.reserve(self.tree / "IJSEP" / "Gymnastics autonomy support")  # status matches journal AND paper
+            {"journal": "Journal B", "paper": "Relocated paper"}), encoding="utf-8")
+        self.reserve(self.tree / "Journal B" / "Relocated paper")  # status matches journal AND paper
         row = json.loads(run(self.tree, "--json").stdout)[0]
         self.assertIsNotNone(row["reservation_age_days"])
 

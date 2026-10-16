@@ -9,33 +9,33 @@ as it is.
 - **`validate_v2.py run` accepts events masked by `text_redaction` (post-release fix, 2026-10-09).** The 2.7.6
   redaction masks a free-text field as `[redacted]` in the `run.json` projection, but the validator re-hashed that
   masked copy, so finalize refused every audit that used a redaction ("run.events[N].event_hash: does not hash the
-  canonical event"; first seen on audit e33490ba). An event that a later `text_redaction` names, and whose field
+  canonical event"; first seen on audit A01). An event that a later `text_redaction` names, and whose field
   reads `[redacted]`, is now checked by hash-chain continuity (the next event's `previous_hash`) instead of
   re-hashing; the append-only journal itself is unchanged and stays fully hash-verifiable.
 
-- **Phase-1 admission no longer reads "participants ... 23:23" as a participant linked to a time.** The
+- **Phase-1 admission no longer reads "participants ... 22:40" as a participant linked to a time.** The
   `participant_date` rule refused a role report line holding the word participant(s) or subject(s) followed by any
-  word, together with any one- or two-digit number, a colon and two digits. A sleep study reports bedtimes (a mean of
-  23:23) and a tennis study names its conditions by ratios (20:80, 50:50). The sleep audit (d1fa93d5) was parked
-  before Phase 1 rather than spend attempts on it, and the tennis audit's code-and-methods role (e24acd26) failed all
+  word, together with any one- or two-digit number, a colon and two digits. The paper of audit A02 reports bedtimes (a mean clock
+  time) and that of audit A03 names its conditions by ratios (such as 30:70 and 50:50). Audit A02 was parked
+  before Phase 1 rather than spend attempts on it, and audit A03's code-and-methods role failed all
   six. The rule now needs an identifier and a date or a clock time. An identifier is what follows the label: a token
   holding a digit (`participant 12`, `subject07`, `Subj. 12`, `#12`, `sub-01`, also in backticks, quotes or bold), a
   label word and a code (`Participant ID 12`, `whose ID is 12`, `participant_id != 'S07'`), one to four capitals that
   are not a statistic (`Participant A`, `JMK`; not `SD`, `RPE`, `TST`), or a list of codes (`participants 12 and 14`,
   ``Subjects `S03` and `S07` ``). A lowercase word, a range or a count is not one (`participants were`, `participants
   18 to 30 years old`, `subjects 1-24`), nor is a capitalised word, so a named pseudonym (`Participant Anna`) is
-  admitted. A time is a clock time (hour 0-24, minutes 00-59, also after an ISO date's `T`), so 20:80 and 50:50 are
+  admitted. A time is a clock time (hour 0-24, minutes 00-59, also after an ISO date's `T`), so 30:70 and 50:50 are
   not times. The rule also requires the 2.7.6 pattern pair, so no line admitted before is refused now, and
   re-admitting an earlier verifier record is unaffected. Over the 537 Phase-1 reports on disk, 2.7.6 refused 28 lines
-  in 9 reports and 2.7.7 refuses 1 (a participant code beside a date); all six refused tennis reports pass. Three
+  in 9 reports and 2.7.7 refuses 1 (a participant code beside a date); all six refused reports of audit A03 pass. Three
   review rounds shaped the identifier forms, and every separator run is bounded, so a long line is checked in linear
   time. The privacy scan keeps the 2.7.6 patterns, because its counts are Phase-1 evidence. The comment's consistency
   gate looks for code-shaped identifiers and is unchanged.
 - **A consistency check before round 1 no longer makes a round.** Operators logged a consistency check run before the
   first round as `round=0` (the `<n-or-0>` SKILL gives model and token events), and the projection turned every
   `check_consistency` gate into a round row, so `run.json` gained a round 0. Finalize (0c,
-  `validate_round_projections.py`) requires rounds 1..N, and the append-only journal can never drop the row: Effort
-  intensity (82c35f72), converged and staged, could not finalize, and Athlete burnout (a24422cf) would have stopped
+  `validate_round_projections.py`) requires rounds 1..N, and the append-only journal can never drop the row: audit
+  A04, converged and staged, could not finalize, and audit A05 would have stopped
   there too. A round-0 gate now stays in `compliance.gates_run` and makes no row. `lifecycle_journal.py project`
   re-projects an existing audit's `run.json` from its unchanged journal.
 - **Docs: the install command** (a docs revision of 2026-10-08 that was never shared, first shipped here). On a Mac
@@ -52,8 +52,8 @@ receipt or snapshot byte, so every in-flight audit picks the fixes up as it is.
 
 - **Staging masks home paths and e-mail addresses in records nobody can reword (check 3d).** Check 4 refused any
   home path, and any address the byline and the article do not print, even inside a critic's output or a Phase-1
-  evidence script, which are model output or hash-bound. "Reword it" had no remedy, so audits 70b8eac5 and
-  803f98f9 could never stage. As check 3c does for deposit values, `stage_release.sh` now rewrites the STAGED copy
+  evidence script, which are model output or hash-bound. "Reword it" had no remedy, so audits A06 and
+  A07 could never stage. As check 3c does for deposit values, `stage_release.sh` now rewrites the STAGED copy
   of such a record (`check_deposit_values.record_file`): `<user-dir>` for the account segment, `[e-mail address]`
   for the address. Each file is listed in `RELEASE_PATH_NEUTRALISATION.txt`, with counts and never a value. The
   audit's files are untouched, and the comment's own outputs still refuse. The step is
@@ -69,14 +69,14 @@ receipt or snapshot byte, so every in-flight audit picks the fixes up as it is.
   `recipient='I4R editorial queue'`.
 - **A linear e-mail detector (`scripts/email_scan.py`).** The unbounded pattern backtracked quadratically on long
   runs of address characters: 7 s for 80k characters, 61 s for one 289 KB knitted HTML file. The Phase-1 privacy
-  scan shares a 60 s pre-dispatch deadline, so Beyond Rubik (bb5ba06d) could never dispatch. The scan now runs the
+  scan shares a 60 s pre-dispatch deadline, so audit A08 could never dispatch. The scan now runs the
   same pattern only in a window of 320 characters around each `@`, giving the same matches for any local part up to
   that length (RFC 5321 allows 64). Used by `phase1_runtime.privacy_scan`, check 3d and the journal's text check.
   `check_release_privacy.py` keeps its own scan (it is receipt-bound), and staging ships no deposit file.
 - **Event types.** All three `lifecycle_journal.py append-*` commands refuse a type outside the lifecycle-event
   schema; they accepted any string, so a typo became permanent. `environment`, the pre-2.7.4 hand-logged type, is
   added to `run.schema.json`'s event types (the projection ignores it, and appending one is still refused). The
-  Social norms audit (89065d92), whose journal holds one, can therefore finalize.
+  audit A09, whose journal holds one, can therefore finalize.
 - **`new_audit.sh` picks the right package.** Hidden folders (Claude Code writes `.claude/` into the folder it is
   started in) and `__MACOSX` are never the package. Package folders beside loose files are refused, with every
   `--package` choice named. An empty package is refused before the critic-access call. CHEATSHEET: start Claude Code
@@ -91,8 +91,8 @@ receipt or snapshot byte, so every in-flight audit picks the fixes up as it is.
 Every audit started from now on runs its critique on GPT-6.1 Sol and its Claude roles on Sonnet 5.5, and nothing
 moves it off them. The policy has frozen both for every new audit since 2.7.0, and every audit initialised since
 then has Sonnet 5.5. But from 2026-09-30 to 2026-10-07 at least twelve audits frozen on Sol (thirteen snapshots
-under `runs/`, one a failed copy; among them Passion transfer, Football belongs to the people, Forwards or
-backwards, Gender stereotypes and Autonomy support) ran their critique on `gpt-5.6-terra`. Each was re-pinned by
+under `runs/`, one a failed copy; among them audits A10, A11, A12,
+A13 and A14) ran their critique on `gpt-5.6-terra`. Each was re-pinned by
 `repin_critic_route.py --critic-model gpt-5.6-terra`, several within seconds of init, because the host's Codex CLI
 was signed in with a ChatGPT account that refuses Sol (HTTP 400 "The 'gpt-6.1-sol' model is not
 supported when using Codex with a ChatGPT account"). INSTALL.md documented exactly that re-pin as the remedy.
@@ -167,10 +167,10 @@ supported when using Codex with a ChatGPT account"). INSTALL.md documented exact
 
 ## 2.7.4 — 2026-09-30
 
-Fixes for what the first audit on Sonnet 5.5 and GPT-6.1 Sol (20260930-audit-0ccfcb4e, St-Cyr et al. 2024) ran into, and the environment record a teammate's session rebuilt. Identity-neutral, so for every audit: run.json keeps the measured environment; Sonnet 5.5 spawns get the CLI's full 128,000-token output cap and an overflow is retried once; Phase-1 shells keep their working directory, ending the E2BIG failures on Claude CLI 2.1.206; the draft registry finds a role the output repair completed; snippets can be run in the release notebook's environment; the driver records the report a round reviewed; and back-matter headings carry their own page break. Frozen at init, so for new audits only: a 5,400 s critique ceiling, and later-round specialists that re-review only substantive changes while completeness still reviews every changed finding. Every audit initialised earlier keeps its packets, prompts, receipts and ceilings. Two one-time costs: a relaunched round that reaches adjudication makes one more adjudicator call (the driver's bytes changed), and every document built on 2.7.3 or earlier must be rebuilt with `build_docx.sh` before finalize, staging or re-publication (the builder's bytes changed; see the page-break bullet).
+Fixes for what audit A15, run on Sonnet 5.5 and GPT-6.1 Sol, ran into, and the environment record a teammate's session rebuilt. Identity-neutral, so for every audit: run.json keeps the measured environment; Sonnet 5.5 spawns get the CLI's full 128,000-token output cap and an overflow is retried once; Phase-1 shells keep their working directory, ending the E2BIG failures on Claude CLI 2.1.206; the draft registry finds a role the output repair completed; snippets can be run in the release notebook's environment; the driver records the report a round reviewed; and back-matter headings carry their own page break. Frozen at init, so for new audits only: a 5,400 s critique ceiling, and later-round specialists that re-review only substantive changes while completeness still reviews every changed finding. Every audit initialised earlier keeps its packets, prompts, receipts and ceilings. Two one-time costs: a relaunched round that reaches adjudication makes one more adjudicator call (the driver's bytes changed), and every document built on 2.7.3 or earlier must be rebuilt with `build_docx.sh` before finalize, staging or re-publication (the builder's bytes changed; see the page-break bullet).
 
 - **A deposit file whose name reads as inline R code no longer breaks the notebook (fix of 2026-10-05, no
-  version bump).** The Röthlin audit (20261004-audit-80683f00) deposited a file named `r code OSF.docx`.
+  version bump).** Audit A16's deposit held a file whose name opens with `r ` (called `r code notes.docx` below).
   - *The defect.* `make_verification_notebook.sh` wrote every deposit file name in a one-backtick code span in the
     notebook's deposit inventory, and knitr reads a span that opens with `r ` or `r#` as inline R code. So
     `run_snippets.sh` and `run_verification.sh` stopped at the inventory line, with "Failed to parse the inline R
@@ -178,22 +178,22 @@ Fixes for what the first audit on Sonnet 5.5 and GPT-6.1 Sol (20260930-audit-0cc
   - *Why a hand patch failed.* Escaping the generated `verification.Rmd` by hand cannot pass:
     `generate_finding_artifacts.py`'s verify (run by `stage_release.sh`) regenerates the notebook and requires byte
     identity.
-  - *The fix.* Such a name is now padded in a double-backtick span (`` `` r code OSF.docx `` ``), which renders the
+  - *The fix.* Such a name is now padded in a double-backtick span (`` `` r code notes.docx `` ``), which renders the
     same text and is not inline code. Every other name keeps its one-backtick span, so every existing audit's
-    notebook regenerates byte for byte (the 2.7.2 pin in `tests/test_274_run_snippets.py` still holds, and the Haag
-    audit's notebook regenerates unchanged).
+    notebook regenerates byte for byte (the 2.7.2 pin in `tests/test_274_run_snippets.py` still holds, and audit
+    A17's notebook regenerates unchanged).
   - *The test.* `tests/test_274_inline_r_filename.py` checks the padded cell, the unchanged cells and a passing
     harness knit. On the previous generator its knit test fails with exit 2.
   - *Provenance.* This changes `scripts/make_verification_notebook.sh`, one of the files in `gate_files_digest`, so
     an audit initialised from now on stamps a different `gate_set_version` from the audits initialised on 2.7.4
     before it. No release gate compares the stamp.
-- **Two driver and publish fixes from the MacIntyre audit (fix of 2026-10-05, no version bump).** The audit
-  (20261005-audit-312023cc) worked around both: a rerun of round 2, then a journaled reopen and a fifth round.
+- **Two driver and publish fixes from audit A18 (fix of 2026-10-05, no version bump).** The audit
+  worked around both: a rerun of round 2, then a journaled reopen and a fifth round.
   - *A body page that opens with "appendix" is no longer read as back matter.*
     - The defect: `publish_completed.sh` recounts the publication's PDF with
       `document_release.recount_candidate()`. That treated any page whose first rendered line began with the word
       "appendix" or "references", or the words "data and code availability", as the start of the back matter.
-    - What happened: body page 8 opened mid-sentence with "appendix output and pkg/FS_during.xlsx". The recount put
+    - What happened: body page 8 opened mid-sentence with "appendix output and pkg/data/sessions.xlsx". The recount put
       the boundary on page 8 against the manifest's page 10 and refused the publish ("candidate PDF
       body/back-matter boundary differs from the document manifest"). `build_docx.sh`, `stage_release.sh` and
       `finalize_run.sh` had all accepted the document, because they find the boundary from the report's own heading.
@@ -312,7 +312,7 @@ Fixes for what the first audit on Sonnet 5.5 and GPT-6.1 Sol (20260930-audit-0cc
   only `phase1/roles/<role>/<input>/attempt_*/status.json`, so a role whose sample failed only structurally and was
   completed by `run_phase1.try_focused_repair` (the quorum then binds the repair's invocation, under `repair_<uuid>/`)
   stopped the build with "FATAL: no bound result.json". The first audit to complete a role that way
-  (20260930-audit-0ccfcb4e, `auditor_code_methods`) hit it and was finished with a patched copy. `bound_result` now
+  (A15, `auditor_code_methods`) hit it and was finished with a patched copy. `bound_result` now
   searches every attempt directory (`<input>/*/status.json`, as run_phase1's own recovery does), refuses when more
   than one directory carries the quorum's invocation, and, when Phase 1 recorded the promoted result's digest (the
   completion receipt's `result_sha256`, or a pre-receipt quorum entry's), refuses a `result.json` that no longer
@@ -348,7 +348,7 @@ Fixes for what the first audit on Sonnet 5.5 and GPT-6.1 Sol (20260930-audit-0cc
   working directory is away from the start directory (after a `cd` into `raw/pkg`), it adds that directory's
   `.claude/`, `.mcp.json` and bare-repository deny paths for every level up to the `--add-dir` root, 34 deny paths
   become 52, the profile passes ARG_MAX, and every later command, even `pwd`, fails with E2BIG. Two of the five
-  auditors of 20260930-audit-0ccfcb4e lost their shell that way; one wrote its report from reading the code alone.
+  auditors of audit A15 lost their shell that way; one wrote its report from reading the code alone.
   `run_phase1.run_process` now spawns every Phase-1 call (the probe, the auditors, a repair and the verifier) with
   `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` (`PHASE1_SHELL_ENV`), so the CLI returns its tracked directory to the
   start directory after every call; `cd DIR && cmd` still works within its call. The coordinator (no Bash tool) is
@@ -388,7 +388,7 @@ Fixes for what the first audit on Sonnet 5.5 and GPT-6.1 Sol (20260930-audit-0cc
 - **New audits: later-round specialists re-review only substantive changes; completeness still reviews every changed
   finding.** After an integration nearly every registry row differs from the round before, because binding a round's
   confirmations rewrites `verifications` and approval rewrites `settled`, so every later round sent every finding to
-  every routed critic (the Perfectionism audit's round 3 listed all 17 findings although only Sections 5.1 and 8.4
+  every routed critic (audit A15's round 3 listed every finding although only two sections
   changed). Measured on rounds 3 and later of 27 audits (53 rounds), such bookkeeping-only rows were 82% of the ids;
   in round 2 the round-1 approvals (status, report section and snippet supplied) stay substantive, so round 2 is
   routed as before. They were also
@@ -423,12 +423,12 @@ Fixes for what the first audit on Sonnet 5.5 and GPT-6.1 Sol (20260930-audit-0cc
   - The drift check pins the leaf to a literal, joins it to the module (which must keep the legacy rule live), and
     gains a twentieth planted control, the leaf removed. `init_run.sh` prints the rule and refuses a leftover
     snapshot holding an unknown one.
-  - What existing audits keep: no leaf, so their packets are byte-identical. The Perfectionism round-3 packet,
+  - What existing audits keep: no leaf, so their packets are byte-identical. Audit A15's round-3 packet,
     rebuilt from its preserved before-files by 2.7.3 and by 2.7.4, equals the stored one byte for byte. The runtime
     routes their manifests as before. The runtime's bytes change, which moves the adjudicator target-snapshot address
     as the driver change above does. Test: `tests/test_274_claim_change_rule.py`.
 - **Snippets can be run in the release notebook's own environment before release (`scripts/run_snippets.sh`).** The
-  Perfectionism audit's 17 snippets passed in an operator harness that attached lavaan and psych, but five claims failed
+  17 snippets of audit A15 passed in an operator harness that attached lavaan and psych, but five claims failed
   in `run_verification.sh` ("could not find function sem") because the audit's `_prelude.R` attached neither, which
   cost a release cycle. `run_snippets.sh <audit> [--decisions FILE] [--keep] [CLAIM ...]` runs the chosen snippets (or
   every projected one) through exactly the notebook's setup chunk, `_prelude.R`, `expect()`/`check()` ledger and
@@ -450,7 +450,7 @@ Fixes for what the first audit on Sonnet 5.5 and GPT-6.1 Sol (20260930-audit-0cc
     (it stayed null before). The projection already copied the key; existing journals project byte for byte.
   - *No blank body page.* `build_docx.sh` started each back-matter section (Data and Code Availability, References,
     appendices) with a separate paragraph holding a page-break run. When the body exactly filled a page, that
-    paragraph spilled onto the next page and left it blank, a counted, empty body page (the Perfectionism draft showed
+    paragraph spilled onto the next page and left it blank, a counted, empty body page (the draft of audit A15 showed
     "10/10 body pages" with page 10 empty). The heading itself now carries `pageBreakBefore`: the converter input
     holds a marker paragraph that the post-pandoc step replaces, failing closed if a marker is not followed by a
     Heading1 paragraph. The counting rules, the manifest schema and the page cap are unchanged.
@@ -579,8 +579,8 @@ that already exists keeps 2,700 s and gets the 2.7.1 contract byte for byte.
   until `--recover-stranded` closed it, and that tool books a 2.1 strand as a request the provider never accepted
   (`attempt: null`, `inference_start_status: not_started`). `role_preinference_request_count` refuses a role
   after two such rows, whatever `I4R_MAX_ATTEMPTS` says. So two timeouts stopped a role for good, although both
-  calls had been accepted and had run for the full 45 minutes. It is what stopped the Goepp et al. audit
-  (20260930-audit-2b59fd0d): four of five Sonnet 5.5 auditors, killed at 2,700 s on two dispatches while
+  calls had been accepted and had run for the full 45 minutes. It is what stopped audit
+  A19: four of five Sonnet 5.5 auditors, killed at 2,700 s on two dispatches while
   writing `REPORT.md` and `result.json`, were refused on the third. The verifier shares `run_process` and had
   the same defect.
 - **Terminalized by the runner.** `run_process` now catches `CoordinatorError` too, so a timed-out call reaches
@@ -612,7 +612,7 @@ that already exists keeps 2,700 s and gets the 2.7.1 contract byte for byte.
   Phase-1 runs require the policy-bound 5400-second/$15 limits"). `bounded_timeout` admits up to the largest live
   timeout. `DEFAULT_TIMEOUT_SECONDS` is kept, as the legacy value, for callers that import it.
 - **Why 5,400.** The Sonnet 5 auditors the 2,700 s cap was set for finished in 8 to 34 minutes. On 2026-09-30 a
-  teammate's Sonnet 5.5/max auditors finished in about 20 to 35 minutes; on the Goepp audit one finished in 41
+  teammate's Sonnet 5.5/max auditors finished in about 20 to 35 minutes; on audit A19 one finished in 41
   minutes (344,821 output tokens, USD 7.07) and four were still writing their final files at 45 minutes, twice.
   5,400 s is twice the old cap. The USD 15 per-call budget is unchanged; at about USD 0.17 a minute it binds near
   85 to 90 minutes, so it still bounds cost.
@@ -1154,7 +1154,7 @@ WSL host, where the CLI is a `codex` on `PATH`, had no working default at all.
 
 2.6.9 merges two releases built in parallel on 2.6.7: the QA release 2.6.8 (gating, reservations,
 intake and printed remedies; already live, and its entry below is unchanged), and four fixes
-prompted by the ninth and tenth production audits and by a change in programme policy. A frozen
+prompted by audits A20 and A21 and by a change in programme policy. A frozen
 critique snapshot is now proven intact before every paid call, and harmless mode drift from the
 synced folder is repaired rather than retried: one round had lost twelve paid calls to it. Appendix
 A renders literally, in columns that keep words whole. A replication deposit that holds personal
@@ -1292,7 +1292,7 @@ in-flight audits to 2.6.9*:
 ### The critique round cap is 7, and an existing audit gets it only by a journaled amendment
 
 The programme raised the critique round cap from 5 to 7, for the papers that did not finish cleanly.
-Two published audits (Ziv, Neudorfer) stopped `cap_with_unresolved` after round 5, each with one
+Two published audits (A22, A23) stopped `cap_with_unresolved` after round 5, each with one
 section changed after its last review. Three more sat unfinalized with round 5 integrated, and one
 after round 4. An assessment on
 scratch copies of both published audits, with the fake Codex CLI and no provider call, found that
@@ -1378,13 +1378,13 @@ What changed:
     idle.
   - `status.py` reads a reopen from the journal.
   - `disclosure_policy.enforced` also holds for an audit reopened by a skill at or above 2.6.8. A
-    reopened audit is re-filed under the report-not-block rule: Ziv's empty `disclosure.flags` and
+    reopened audit is re-filed under the report-not-block rule: A22's empty `disclosure.flags` and
     `disclosure.statement` must be completed before it re-finalizes.
 - **Docs.**
   - SKILL.md: 4,492 of 4,500 words.
   - INSTALL.md: the new section *Raising the round cap of an existing audit*, with the six checks,
-    the tools, the runbook for an unfinalized audit, and the exact steps for Ziv and Neudorfer. It
-    names the round-6 critics the probe routed and covers `chmod -R a-w pkg` for Neudorfer, the
+    the tools, the runbook for an unfinalized audit, and the exact steps for A22 and A23. It
+    names the round-6 critics the probe routed and covers `chmod -R a-w pkg` for A23, the
     notebook re-projection, the WRAPUP rewrite and the ordered-union `review_scope`.
   - Also updated: CHEATSHEET.html (and a regenerated `CHEATSHEET.pdf`, 7 pages),
     `reference/adjudication_guide.md`, `reference/failure_history.md` and `scripts/README.md`.
@@ -1403,7 +1403,7 @@ What changed:
 - A finalized audit needs `reopen_audit.py` before any new round.
 
 **Not done.** No real round was run on any real audit, and the live tree was not touched. Continuing
-Ziv and Neudorfer (moving their filed sets, `chmod` on Neudorfer's `pkg/`, and rounds 6-7 at the
+audits A22 and A23 (moving their filed sets, `chmod` on A23's `pkg/`, and rounds 6-7 at the
 provider) is the owner's decision; INSTALL.md gives the steps.
 
 **Tests.** New `tests/test_269_round_cap_amendment.py` (19 tests, the fake Codex CLI, no provider
@@ -1462,17 +1462,17 @@ merge, then fixed:
   them with the new snapshot and its archive as an overlay. `amend_round_cap.py` and
   `reopen_audit.py` refuse before writing anything, in the dry run as in the real run.
 - **The re-claim check reads `paper_source.json`.** The runs/ folder drops `?*[]{}\` from a paper's
-  name, and data/ keeps it. For such a paper (Ziv, and 14 of the 171 papers in data/) the lookup
+  name, and data/ keeps it. For such a paper (A22, and 14 of the 171 papers in data/) the lookup
   found no paper folder, and the re-claim refusal became a printed note. The paper folder is now
   resolved from `paper_source.json` first, as `publish_completed.sh` and `status.py` already do. A
   claim that cannot be confirmed is refused unless `--unconfirmed-claim` is passed.
-- **The Ziv/Neudorfer runbook works as written.**
+- **The A22/A23 runbook works as written.**
   - `P`, the runs/ folder name, is now used for `runs/` and `old_runs/` only. `PD`, read from
     `paper_source.json`, names `data/`, `comments/` and `metadata/`. With `P` there, every step-2
-    command failed for Ziv.
+    command failed for A22.
   - Every script is called as `"$S/scripts/..."` with `S` the installed skill folder, since the
     tree root has no `scripts/`.
-  - Ziv's `release.rejected-*` is moved with a command that works in bash and zsh.
+  - A22's `release.rejected-*` is moved with a command that works in bash and zsh.
 - **One journaled cap.** `round_refusal` (`check-round`, which the driver calls, and `prepare_round`)
   read the cap from the snapshot file alone. A cap edited by hand and re-hashed, with `run.json`
   rebound, passed both. The round was then prepared and authorized and its model probe paid for
@@ -1487,8 +1487,8 @@ merge, then fixed:
   - Hand-logged events of a round being run (`log_event.sh`, the `append-*` commands) now obey the
     same cap and finalized-audit refusal, judged in batch order. Re-logging `round_result` or
     `round_integrated` stays allowed.
-  - The list of unfinalized audits is corrected. Frontiers, IJSEP social norms and PSE intergroup
-    criticism have round 5 integrated, and only Frontiers has its step-1 copies. PSE effort intensity
+  - The list of unfinalized audits is corrected. Audits A24, A09 and A25
+    have round 5 integrated, and only A24 has its step-1 copies. Audit A04
     stopped after round 4 and needs no amendment yet. The runbook for them says how to make the
     missing step-1 copies (`make_diff_packet.py` prints the commands).
   - A reopen keeps the superseded `finalization_receipt.json` read-only as
@@ -1515,13 +1515,13 @@ merge, then fixed:
 - **Upgrade cost: none.** None of the changed scripts is hashed by a post-delta receipt, and none is
   part of a probe key or a round snapshot. The copies of all 22 live journals are clean under the new
   verifier (rule 7 included), and each unfinalized one passes `check-round`.
-- **Rehearsal.** The Ziv and Neudorfer runbooks were re-run end to end on scratch copies of their
+- **Rehearsal.** The A22 and A23 runbooks were re-run end to end on scratch copies of their
   audits and of their `comments/`, `metadata/` and `data/` folders, up to but not including the first
   provider call (the second `run_critique.sh 6`).
 
 ### Frozen snapshots are proven intact before every paid call, and mode drift is repaired
 
-On the ninth production audit (Schütz, 2026-09-27) the Dropbox File Provider reset a freshly frozen
+On audit A20 (2026-09-27) the Dropbox File Provider reset a freshly frozen
 critique snapshot's `source` directory to mode 0700 seconds after the freeze, during the model probe.
 Every file stayed 0444 and every hash matched. The only immutability check,
 `verify_read_only_inventory`, ran after each paid call and raised a plain error on the write bit. The
@@ -1705,7 +1705,7 @@ In `tests/test_run_critique.sh`, `tamper_evidence` (now aimable at any role thro
 `FAKE_INCOMPLETE_ROLE`) costs one call instead of three re-samples, recorded as `environment`, with no
 repair and nothing published. A new section drives the new `FAKE_SNAPSHOT_DRIFT=<role>` knob:
 
-- the ninth audit's shape, a drift during the probe, now completes with every critic at attempt 1;
+- audit A20's shape, a drift during the probe, now completes with every critic at attempt 1;
 - a probe-time content change is refused before any critic claim, and the printed remedy then works;
 - post-call drift and tamper for a critic;
 - drift and tamper of the target snapshot for the adjudicator;
@@ -1726,7 +1726,7 @@ Every comment PDF and DOCX had two defects in the Appendix A findings table.
   table carries the generator's separator shows it: 15 to 57 broken fragments per audit across
   `runs/` and `old_runs/`, and 24 to 57 when the same sources are rebuilt with 2.6.7 today.
 - **Claims were read as markup.** Claim text reached pandoc verbatim, with only `|` escaped. The
-  fifth Schütz finding's formula `F*df1/(F*df1+df2)` printed in italics with its asterisks gone.
+  formula in audit A20's fifth finding, `F*df1/(F*df1+df2)`, printed in italics with its asterisks gone.
   Run through pandoc as they stand, the real Appendix cells give Emph and Quoted inlines in 15 of
   the 17 audits under `runs/`, and Code, Emph, Math, RawInline (text that disappears) and Strong
   in `old_runs/`. A synthetic 2.6.7 build also prints `a<b and c>d` as "ad" and loses the
@@ -1775,7 +1775,7 @@ which changed some of them, after the merge).
     Appendix still pass, and later boundaries do not re-run it.
 - Quotes are escaped as well, so they print straight in the table. The design had left them to
   smart typography, but that dropped the trailing space of a quoted value, and with quotes
-  unescaped the stage refuses one current audit (Ebbecke). Dashes and ellipses stay typographic:
+  unescaped the stage refuses one current audit (A21). Dashes and ellipses stay typographic:
   `--`, `---` and `...` print as an en dash, an em dash and an ellipsis, as in body text, and the
   stage maps them back, so the table is literal for markup but not for those three.
 
@@ -1853,12 +1853,12 @@ Compatibility, checked on scratch copies:
   `--no-cache`. All pass the new stage, every findings cell is plain Str/Space text, and no table
   word is broken.
 - `body_pages`, `first_back_matter_page` and `abstract_ending_page` equal a 2.6.7 rebuild on the
-  same machine for all 34. They also equal the published manifest for 32. The other two (Kovse,
-  Neudorfer) were first built with pandoc 3.7.0.2 and differ in the same way under 2.6.7.
+  same machine for all 34. They also equal the published manifest for 32. The other two (A24,
+  A23) were first built with pandoc 3.7.0.2 and differ in the same way under 2.6.7.
 - Total pages grow by up to two. One audit whose older table had equal-width columns shrinks by
   two. Back matter is uncounted.
-- The literal `F*df1/(F*df1+df2)` appears in the rebuilt Schütz PDF. Run against the published
-  files, the stage refuses the Schütz DOCX (the formula row) and the Redlich PDF (50 broken words).
+- The literal `F*df1/(F*df1+df2)` appears in the rebuilt PDF of audit A20. Run against the published
+  files, the stage refuses the A20 DOCX (the formula row) and the A26 PDF (50 broken words).
 - With the rebalanced widths, all 20 buildable audits under `runs/` and 16 under `old_runs/` were
   rebuilt again with `--no-cache` against the first widths. Every one passes the stage, and
   `body_pages`, `first_back_matter_page` and `abstract_ending_page` are unchanged for all 36. Two
@@ -2053,7 +2053,7 @@ stated basis.
     it refused the 2.6.2 file outright.
   - The withholding pattern matches none of the 176 EXCLUDED reasons in the 41 canonical
     registries, 12 of them on disclosure-flagged rows.
-  - The Ebbecke and Schütz audits re-finalize (rc 0, receipt valid) with this `finalize_run.sh`
+  - Audits A21 and A20 re-finalize (rc 0, receipt valid) with this `finalize_run.sh`
     after the document rebuild that fix B requires. That was measured before 2.6.8's
     published-audit gate: re-filing now follows INSTALL.md, *Correcting a published comment*
     (`I4R_REFINALIZE_PUBLISHED=1`).
@@ -2313,7 +2313,7 @@ test in the new `tests/test_269_release_fixes.py` (14 tests). Every test fails o
 tree, except two negative controls, and every one passes here.
 
 - **A renumbered step-1 copy no longer blocks the last round's receipt** (`make_diff_packet.py`,
-  major). Schütz (published on 2.6.7) had its round-4 step-1 registry renumbered by an old version
+  major). Audit A20 (published on 2.6.7) had its round-4 step-1 registry renumbered by an old version
   that kept no history (F19 back to F4; `work/id_map.json` holds only the draft map, so
   `legacy_renumbered` is false). The copy therefore differed from integrate_round's backup. Round 5's
   frozen packet binds exactly its bytes, so the frozen-binding rule forbade any replacement. The
@@ -2326,8 +2326,8 @@ tree, except two negative controls, and every one passes here.
   and its printed restore now always changes the file. The rebuilt round-5 packet is byte-identical
   to the published one. `make_diff_packet.py` is not among the files the receipt hashes.
 - **Enforcement starts at 2.6.9** (`disclosure_policy.ENFORCED_FROM = (2, 6, 9)`, major). The live
-  2.6.8 shipped without the report-not-block rule, and its prompts still said to pause. The
-  food-insecurity SJMSS audit, initialised and published on it (`pii_present` true, five flagged
+  2.6.8 shipped without the report-not-block rule, and its prompts still said to pause. Audit
+  A27, initialised and published on it (`pii_present` true, five flagged
   comment findings, empty `disclosure.flags` and `statement`, urgency `none`), failed re-finalize
   with a SCHEME ERROR. Every disclosure check in integrate and finalize (comment-level fields, flags
   without a finding, the registry review, the decision review) is now a warning for
@@ -2372,8 +2372,8 @@ tree, except two negative controls, and every one passes here.
   without a basis. Only EXCLUDEing a row, setting it rejected or superseded, or clearing its flag now
   needs a basis. That matches `deferred_rows` and finalize.
 - **INSTALL.md.** *Appendix A rendering and document manifests* gives the full re-file chain for a
-  published audit. The chain was proven end to end on scratch copies of Schütz (2.6.7) and the
-  food-insecurity audit (2.6.8): `chmod -R a-w pkg`, `build_docx.sh`, and for 2.6.7 or earlier the
+  published audit. The chain was proven end to end on scratch copies of audits A20 (2.6.7) and
+  A27 (2.6.8): `chmod -R a-w pkg`, `build_docx.sh`, and for 2.6.7 or earlier the
   notebook, `--apply` and claims script. Then come the last round's packet and gates, staging into a
   fresh directory, delivery and `phase_end`, `I4R_REFINALIZE_PUBLISHED=1` finalize (compliance_pass
   True on both, receipt valid), and publish, which was not run. The section no longer says that
@@ -2441,8 +2441,7 @@ verifier fixtures now follow the stricter gates (contested or answered correctio
 
 ## 2.6.7 — 2026-09-27
 
-The tenth production audit (20260926-audit-3dcf6ec2, *Scandinavian Journal of Medicine & Science in
-Sports*) converged after four critique rounds, passed every release gate and staged a clean release,
+Audit A21 converged after four critique rounds, passed every release gate and staged a clean release,
 and then `finalize_run.sh` refused it: "round 2 critic_completeness: actual claim assessments are not
 assigned". Round 2's completeness critic had assessed exactly its eighteen assigned claims but
 listed F39 before F3.
@@ -2463,8 +2462,7 @@ lists with plain `!=`. So a round the runtime had accepted was refused only at t
 
 ## 2.6.6 — 2026-09-26
 
-The first post-fan-out verifier call of the tenth production audit (20260926-audit-3dcf6ec2,
-*Scandinavian Journal of Medicine & Science in Sports*) ran its full 45 minutes without a working
+The first post-fan-out verifier call of audit A21 ran its full 45 minutes without a working
 shell. It checked what it could by reading files, left the two claims that need model refits
 UNVERIFIABLE, and timed out before the CLI emitted its result. Nothing was admitted. Its report
 named the cause: every Bash call failed with "argument list too long", whatever the command.
@@ -2473,7 +2471,7 @@ The CLI's macOS sandbox writes, for every denied path, an unlink and a create ru
 each of its ancestor directories. Each rule carries a 160-byte message, and the whole profile goes
 on the command line of every Bash call. The size therefore grows with the number of denials, the
 depth and length of the audit path, and the working directory. This audit's paper folder names are
-long (a 52-character journal, a 99-character title), its working directory is 406 characters and 16
+long (a long journal name and a long title), its working directory is 406 characters and 16
 levels deep, and the verifier denied 47 paths. Measured with a shell wrapper and the real settings:
 the auditors' 10 denials make a command line of about 911,000 bytes, each further denial adds about
 8,400, and the exec limit is 1,048,576 including the environment. Earlier verifier runs on audits
@@ -2503,12 +2501,11 @@ denied, and other papers' records not.
 
 ## 2.6.5 — 2026-09-26
 
-The video-speed audit (20260926-audit-8fcff20d, *Psychology of Sport and Exercise*) stopped
+Audit A20 stopped
 after a paid Phase 1. All five auditors completed on their first attempt, and `run_coordinator.py`
 then refused their reports before any provider call:
 "Phase-1 report auditor_reproduction contains a concrete participant-code pattern and is not
-provider-safe". The reports quoted the deposit's SPSS column names `INT_P05`, `INT_N05`, `DUR_P15`
-(intention and duration ratings, positive/negative crowd noise, 0.5 s and 1.5 s), which match the
+provider-safe". The reports quoted SPSS column names of the deposit (rating variables), which match the
 participant-code shape. The reports are hash-bound to their invocation records, and the runner
 had no override, so the audit could not continue. Each change below has a test that builds the
 condition on disk and fails on 2.6.4.
@@ -2519,7 +2516,7 @@ Two stages disagreed about what a participant code is. The coordinator refused a
 provider-visible text with a code-shaped token (`RAW_PARTICIPANT_CODE`, or a `P12` opening a data
 row). Phase-1 output admission (`phase1_runtime.check_output_hygiene`) refused only an identifier
 beside a date, and the auditor prompt said only that. So Phase 1 admitted, and paid for, reports the
-coordinator was bound to refuse. The teammate audit "Athlete burnout and biomarkers" holds three
+coordinator was bound to refuse. The teammate audit A05 holds three
 Phase-1 reports of that kind: they quote real participant values, and the coordinator will refuse
 them on 2.6.4 and 2.6.5 alike.
 
@@ -2574,10 +2571,10 @@ Every consumer applies the same rule:
 The auditor and verifier prompts now state the rule as the shape it is: file names,
 syntax-created variables, labels and quotations included, with the deposit-header exception.
 
-On the video-speed deposit the eight code-shaped names are all SPSS dictionary names, and the
-four refused reports and the draft registry now pass. The old perfectionism audit's
-questionnaire items (`SOP1` to `SPP4`) are admitted the same way. On every other audit under
-`runs/` and `old_runs/` nothing is newly admitted, and the burnout reports stay refused.
+On the A20 deposit the eight code-shaped names are all SPSS dictionary names, and the
+four refused reports and the draft registry now pass. An older audit's
+questionnaire item names are admitted the same way. On every other audit under
+`runs/` and `old_runs/` nothing is newly admitted, and the reports of audit A05 stay refused.
 
 ### Review
 
@@ -2615,7 +2612,7 @@ reproducing. They are fixed now:
   or mostly non-ASCII bytes that are not UTF-8. R serialization (`.rds`, `.RData`, bare or inside
   gzip, bzip2 or xz) is still read, because it stores each string whole, and each candidate name
   is also searched for in it as raw bytes. Folder metadata from macOS and Windows (`.DS_Store`,
-  AppleDouble, `Thumbs.db`, recognised by content) is read as before; the video-speed deposit's
+  AppleDouble, `Thumbs.db`, recognised by content) is read as before; the A20 deposit's
   stimulus zips carry 25 such files. An SPSS, Stata or Excel file inside a zip is now parsed
   too, and its names still count as values.
 - A structured read that failed fell back to the byte scan. A `.zsav` with a wrong trailer offset
@@ -2645,7 +2642,7 @@ Accepted residuals:
 - The participant-column test is a heuristic. A wide table with fewer than three code-shaped
   headers, or where code-shaped headers are not a majority of its non-empty headers (six context
   columns plus `SUBJ_P01` to `SUBJ_P05`, say), has those headers treated as dictionary names.
-  Tightening it would refuse common questionnaire-item layouts (`SOP1` to `SOP4`) again.
+  Tightening it would refuse common questionnaire-item layouts (`EXP1` to `EXP4`) again.
 - `RAW_PARTICIPANT_CODE` is quadratic on pathological runs such as 60,000 characters of
   `AB_AB_...` (about 6 s). That is unchanged from the 2.6.4 coordinator scan, and it now also runs
   at Phase-1 admission.
@@ -2659,7 +2656,7 @@ Accepted residuals:
 The verifier's frozen packet hash covers the SHA-256 of its prompt, and re-admission rebuilds the
 prompt to check it. Every consumer re-admits verifier records: `integrate_round.py`,
 `make_settled.sh`, finalize and publish. Adding the rule to the prompt therefore made every verifier
-record made on 2.6.4 unadmissible. On a copy of the seventh production audit, 2.6.4 re-admitted its
+record made on 2.6.4 unadmissible. On a copy of audit A28, 2.6.4 re-admitted its
 one verifier call and the first 2.6.5 candidate refused it: "the frozen packet and the runner's
 prompt do not hash to the receipt's packet_sha256".
 
@@ -2692,8 +2689,7 @@ other prompt, and pins the 2.6.4 prompt digest.
 
 ## 2.6.4 — 2026-09-25
 
-The Neudorfer audit (20260923-audit-3309cfcf, *Scandinavian Journal of Medicine & Science in
-Sports*) excluded three true article-text findings, F13–F15. The external critics had confirmed all
+Audit A23 excluded three true article-text findings, F13–F15. The external critics had confirmed all
 three in rounds 1–4, but the protocol had no admissible Claude-family confirmation for a finding
 raised after Phase 1. Each change below has a test that builds the condition on disk. A review of
 the release candidate found defects in the first cut of the runner and the gates; where a verifier
@@ -2705,7 +2701,7 @@ A registry row is promoted only with confirmations from two model families. The 
 (family-A) confirmation could come only from the Phase-1 auditor whose report raised the row
 (`integrate_round.py` `build_plan`, and only in round 1). A finding first raised by the operator,
 by the coordinator, or as a critic's new issue therefore had no admissible family-A reviewer. In
-the Neudorfer audit the operator ran separate Sonnet checks of the three claims and built the ledger
+audit A23 the operator ran separate Sonnet checks of the three claims and built the ledger
 rows by hand. Each gate refused them in turn:
 
 - `make_settled.sh` aborted on the first (`role_class other`): "verification invocation is not a
@@ -2990,7 +2986,7 @@ skipped.
   - `VerifierRecordsTest` (9): the call listed apart from the five auditors, a confirmed verifier
     promoting a post-fan-out row, the critic family, a missing receipt, `role_class auditor` (still
     an extra auditor), a round other than 0 refused before any append, the claim scope, the 2.6.3
-    compliance keys without a verifier, and the Neudorfer legacy shape;
+    compliance keys without a verifier, and the A23 legacy shape;
   - `HandMadeRecordsAreRefused` (4): a hand-made record at finalize and cited on a row, and the raw
     CLI and `record_invocation.py` lifecycle routes refused, with `--correct` still working;
   - `CliAppendInvariance` (1, golden): CLI appends without a verifier are byte-identical to 2.6.3;
@@ -3016,7 +3012,7 @@ skipped.
   invalid sample, never a crash.
 - `bash scripts/finalize_run.sh --self-test` gains four verifier controls: a run with no verifier row
   keeps the 2.6.3 compliance keys, a call recorded as the runner records it finalizes clean, the
-  same call without its receipt is not admitted, and a hand-made record (the Neudorfer
+  same call without its receipt is not admitted, and a hand-made record (the A23
   `make_record.py` shape) is refused as not the runner's admitted output. The self-test now imports
   `tests/verifier_fixtures.py`, so it needs `tests/` shipped with the skill, as the package does.
 - Support: `tests/verifier_fixtures.py` (new) records a verifier call exactly as the runner does
@@ -3027,9 +3023,9 @@ skipped.
 
 ## 2.6.3 — 2026-09-23
 
-### David Valenta joins the published byline
+### A fifth author joins the published byline
 
-`reference/house_citations.md` now lists David Valenta as the fifth author of every comment, with the
+`reference/house_citations.md` now lists a fifth author on every comment, with the
 same affiliation as the rest of the team (Institute for Replication, Department of Economics,
 University of Ottawa). Correspondence is unchanged. The byline has no other source in the skill, so
 the coordinator prompt and `front_matter.md` pick it up from this file. The version bump makes
@@ -3037,9 +3033,9 @@ the coordinator prompt and `front_matter.md` pick it up from this file. The vers
 
 ## 2.6.2 — 2026-09-23
 
-Six defects found by the seventh production audit (Lautenbach et al. 2025, *PS&E*), which then
-published on this code: converged after three rounds, `compliance_pass: true`, 12 findings, 59/59
-verification checks, the PDF in `comments/`. Each fix has a test that builds the condition.
+Six defects found by audit A28, which then
+published on this code: converged after three rounds, `compliance_pass: true`, every verification
+check passing, the PDF in `comments/`. Each fix has a test that builds the condition.
 
 ### `integrate_round.py` could not set a finding conclusion-changing
 
@@ -3081,7 +3077,7 @@ EXCLUDED rows are skipped; an INCLUDED row still triggers.
 
 ### Operator note: run each later round's post-delta gates before the next round starts
 
-The round-N receipt binds the round-N packet, i.e. the state at round-N ENTRY. The seventh audit ran
+The round-N receipt binds the round-N packet, i.e. the state at round-N ENTRY. Audit A28 ran
 them only at the end and had to produce the round-2 receipt on a byte-exact replica of the
 round-2-entry state (preserved before-files, journal cut at the packet's position, settled cache
 rebuilt to the recorded hash). Run `run_post_delta_gates.py --round N` right after
@@ -3161,15 +3157,15 @@ new identifier; the SKILL.md policy block was regenerated from the policy.
 
 ## 2.5.1 — 2026-09-22
 
-Three defects surfaced by the 2.5.0 verification run (Lautenbach et al. 2025, *PS&E*), which is
+Three defects surfaced by the 2.5.0 verification run (audit A28), which is
 paused at critique round 1 pending Codex credits; its journal records the mid-run gate changes.
 
 ### A pre-Terra row can never be conclusion-changing, and the coordinator was told otherwise
 
-The coordinator's first attempt on the seventh audit ran 49 minutes and was rejected on one row:
+The coordinator's first attempt on audit A28 ran 49 minutes and was rejected on one row:
 "confirmations must span two known model families". Three Sonnet auditors had independently
-confirmed that the paper's Table 3 contrasts are grand-mean deviations rather than the
-neutral-referenced contrasts the Methods describe, the draft summary said "set changes_conclusion
+confirmed that the paper's contrasts were coded differently from what the Methods
+describe, the draft summary said "set changes_conclusion
 only with two independent confirmations", and the coordinator, having three, set it. The validator's
 actual rule needs two model FAMILIES, and every Phase-1 confirmation is Sonnet, so the flag is
 structurally impossible before round 1 -- a rule enforced in one place and misstated in another.
@@ -3244,7 +3240,7 @@ skill still let happen, and two of the three ran from copies that were not 2.4.1
 
 ### The running skill must match the tree's canonical copy
 
-The published audit (*JASP*, self-talk and mental fatigue) was run on another machine from a
+The published audit A29 was run on another machine from a
 **2.2.0** copy of the skill; a third audit ran on a Linux host from a copy with no VERSION file. Both
 stamped themselves faithfully and then met defects fixed releases earlier: the `mkdir` publish lock
 the synced folder resurrects, a filing into the skill-local registry, a compliance failure with no
@@ -3258,7 +3254,7 @@ cannot enforce this on itself, so the two stale copies still need reinstalling b
 
 ### Filing into the skill-local registry is refused
 
-`finalize_run.sh` announced the skill-local fallback and then took it. On the *JASP* audit the row
+`finalize_run.sh` announced the skill-local fallback and then took it. On audit A29 the row
 landed in the skill checkout, the Completed-reports set was published against it, and both had to
 be re-filed and moved aside by hand (`.superseded-skill-local-registry-filing-…`). When the
 programme registry cannot be derived, finalize now exits 2 naming `--registry <tree>/registry` and
@@ -3291,7 +3287,7 @@ The two items 2.4.9 recorded as observed and left open.
 
 ### The coordinator retries a dropped connection itself
 
-On the Furman run the coordinator's first attempt ran 39 minutes and died on `Connection closed
+On the run of audit A30 the coordinator's first attempt ran 39 minutes and died on `Connection closed
 mid-response`. The runner classified it correctly (transport), recorded the failed attempt, and
 exited 2 — and an unattended pipeline then sat on a stalled audit until someone re-ran the command.
 `run_coordinator.py` now loops in the same invocation on a transport- or transient-class failure:
@@ -3317,8 +3313,8 @@ refusing.
 
 ## 2.4.9 — 2026-09-13
 
-Both fixes come from the first full audit run on 2.4.8 (Furman, Rothman & Mann 2025, *PS&E*;
-published, `compliance_pass: true`, 12 findings, 42/42 verification checks). The run also confirmed
+Both fixes come from audit A30, run in full on 2.4.8 (published,
+`compliance_pass: true`, every verification check passing). The run also confirmed
 in production that the 2.4.8 provenance stamp, the waiter's outcome vocabulary, the adjudicator's
 progress lines, the context-file provider-safety scan and the post-publication receipt check all
 behave as designed.
@@ -3483,7 +3479,7 @@ markup.
 On a clean 15-finding comment it reported:
 
     FAIL: 1 participant-identifier privacy issue(s):
-      report/PSE_Zhou2026_comment.docx: opaque per-row identifier listing (22 distinct identifiers)
+      report/A31_comment.docx: opaque per-row identifier listing (22 distinct identifiers)
 
 Not one of the 22 was an identifier. Eleven were pandoc bookmark anchors — `X` followed by hex,
 which the detector's hex exemption misses because of the prefix. Nine were style names carried in
@@ -3628,7 +3624,7 @@ the next. `project_draft_claim_tags.py` and `run_meta.sh` are indexed in `script
 
 ## 2.4.4 — 2026-09-09
 
-Carrying the Höchli audit to publication cost six cycles to ordering constraints in the
+Carrying audit A32 to publication cost six cycles to ordering constraints in the
 pre-finalize chain. None was a code defect and none is hard once you know it — but five of the six
 announced themselves through a refusal that said only that something was stale, and two were
 written down nowhere. That is the same defect this project keeps finding: a rule enforced in one
@@ -3668,7 +3664,7 @@ stripping the remedies back out: two tests fail, and pass again when restored.
 
 ## 2.4.3 — 2026-09-09
 
-Found by running a fresh paper end to end on 2.4.2 (Höchli, Brügger & Messner 2022, IJSEP). The
+Found by running a fresh paper end to end on 2.4.2 (paper A32). The
 run cost two coordinator attempts, ~40 minutes each, to a defect no test could have caught, because
 it only appears when a real model cites a real file.
 
@@ -3695,14 +3691,14 @@ Three changes, because any one alone is wrong:
   validator just moved the failure later and further from its cause.
 
 ### The paper was carried to publication
-Höchli, Brügger & Messner (2022) is published: 2 rounds, `stopping_reason: target_complete`,
-`compliance_pass: true`, 14 findings, 30 PASS / 1 JUDGEMENT / 0 FAIL in the notebook, 9/10 body
-pages, 8 files in `Completed reports`, filed to the programme registry, reservation released.
+Audit A32 is published: 2 rounds, `stopping_reason: target_complete`,
+`compliance_pass: true`, no FAIL in the notebook, filed to the programme registry, reservation
+released.
 
-**Round 1 refuted two of our own findings and both refutations held.** The draft asserted an
-`all_trainings` value of 72.1 and a fifth `ziel.hierarchie` level "5". The coordinator re-decoded
-the deposit independently before acting: 200 finite values, all integers 0-193, no 72.1; a 4-level
-factor with 50 NA codes and no fifth level. Both were withdrawn. Neither changed a published
+**Round 1 refuted two of our own findings and both refutations held.** The draft asserted a
+non-integer value of a count variable and a fifth level "5" of a factor. The coordinator re-decoded
+the deposit independently before acting: the count variable held only integers, and the
+factor had four levels and no fifth. Both were withdrawn. Neither changed a published
 conclusion, but publishing either would have put a false statement about the authors' file into the
 record. Round 2 then caught that F3 still carried an inference limit round 1 had imposed on F5.
 That is the adversarial design working, twice, on findings nothing else would have caught.
@@ -3734,8 +3730,8 @@ answer was a set of live defects nobody had a reason to look for, because each o
 silently. Everything below was found that way.
 
 ### Two of the three modern releases were filed into the wrong registry
-`20260905-audit-57eb6029` recorded its registry root as `../../../../../../../.claude/skills/registry`
-— a directory that **does not exist on this machine** — and `20260901-audit-a81b2388` recorded
+Audit A33 recorded its registry root as `../../../../../../../.claude/skills/registry`
+— a directory that **does not exist on this machine** — and audit A34 recorded
 `../../../skill/i4r-audit-unified/registry`, the registry inside the skill checkout. Both receipts
 said `filed: true`. Only the third was in the programme registry. Re-filed through
 `finalization_receipt.py create --registry`, which supersedes rather than overwrites (both entries
@@ -3857,11 +3853,11 @@ records an `elapsed_seconds` of 0.001. A legacy pre-2.1 workspace is refused wit
 reconstructed without inventing them) instead of "needs manual diagnosis".
 
 ### The corrupt-archive guard refused a good deposit
-`unzip -t` inflates every member and exits 2 on the p7rj3 deposit over one zero-length entry
+`unzip -t` inflates every member and exits 2 on the A35 deposit over one zero-length entry
 written as `Defl:N` with zero compressed bytes. That archive extracts perfectly — the entry's true
 content is nothing — so the guard would have stranded a real, auditable paper. The check is now
-`zipinfo -t`, which is what "structurally broken" actually means: exit 3 on the truncated 9zsh2
-deposit, exit 0 on p7rj3. Unreadable members are now a NOTE, never a refusal. `</dev/null`
+`zipinfo -t`, which is what "structurally broken" actually means: exit 3 on the truncated A36
+deposit, exit 0 on the A35 one. Unreadable members are now a NOTE, never a refusal. `</dev/null`
 throughout, because `unzip -t` on a password-protected archive blocks forever on a terminal.
 
 ### The archive gate contradicted the manifest builder
@@ -3897,7 +3893,7 @@ fails closed.
 ### The tests
 `test_batch_scale_fixes.py`, `test_claims_join_permutation.py`, `test_repair_prompt_binding.py` and
 `test_unattended_and_filing.py` were substring greps over source. They are now behavioural: real
-zip fixtures reproducing the p7rj3 and 9zsh2 defects, real symlinks, real strands, real
+zip fixtures reproducing the A35 and A36 defects, real symlinks, real strands, real
 reservations, a real `init_run.sh` workspace. Two rules that were only reachable through a
 several-hundred-line function are now named functions — `check_claims_join` and
 `admit_repair_prompt` — so a test can exercise the rule instead of describing it. Each new module
@@ -3963,7 +3959,7 @@ including the sub-second probe.
   this tree, including four that had sat idle between 5 and 12 days unnoticed.
 - `scripts/renumber_findings.py` — every audit needs exactly one conversion from role-scoped ids to
   contiguous `F1..FN`, and no tool did it. Verified by reproducing, exactly, the 31-entry mapping
-  the dart-throwing audit had been renumbered with by hand.
+  audit A37 had been renumbered with by hand.
 - `reserve_paper.sh reap` — `list` has always *flagged* stale claims and nothing ever released one.
   Reaping is owner-scoped and evidence-based: another machine's claim is reported and held, because
   `paper` is an absolute path on the claiming machine and "no audit directory" here means "not mine
@@ -3995,7 +3991,7 @@ the authorize-then-rerun two-step.
 ### finalize filed to the wrong registry by default
 The default was `$HERE/../../registry` — the registry inside the skill checkout, not the programme
 registry the discipline tree keeps at its root. An operator who omitted `--registry` got a green
-"filed into the registry" and a row nobody would ever read. The third production audit filed there
+"filed into the registry" and a row nobody would ever read. Audit A37 filed there
 silently and had to be re-filed by hand.
 
 `resolve_registry()` now derives `<tree>/registry` from the audit directory, the same way
@@ -4023,7 +4019,7 @@ guarded, so the first notes-only event wrote `person_minutes_by_phase[None]` and
 
 ## 2.2.9 — 2026-09-08
 
-Both defects here were found by carrying the third paper all the way to publication — the first
+Both defects here were found by carrying paper A37 all the way to publication — the first
 audit driven end to end under this skill since 2.2.0. Each blocks a *finished* audit: every round
 complete, every gate green, and then a refusal at the last step. 285 tests (was 272).
 
@@ -4039,7 +4035,7 @@ Focused repair is a documented part of the contract: bounded to one attempt per 
 scientific field byte-equivalent, its prompt written to `repair_prompt.txt` in the attempt
 directory. The check now admits the recorded hash when it matches a `repair_prompt.txt` that exists
 on disk **for that role and that round**; the other four input hashes still must match exactly, and
-an unmatched prompt hash still fails. Round 2's completeness critic on the dart-throwing audit is
+an unmatched prompt hash still fails. Round 2's completeness critic on audit A37 is
 the case that surfaced it.
 
 ### The checklist gate demanded a claim order the builder is documented not to produce
@@ -4049,8 +4045,8 @@ checklist compared the extracted claim numbers against `range(1, N+1)` with `!=`
 carrying one judgement or unverifiable claim failed the post-delta checklist gate.
 
 Latent until an audit produced a non-code claim. This one has exactly one — a deposited raster
-schematic with no OCR layer, read by eye — and hit it at `[1..20, 22, 23, 24, 21]`. The first
-production audit's own claims script is `[1,2,3,5,6,7,8,10,11,12,13,14,16,17,4,9,15]` and would have
+schematic with no OCR layer, read by eye — and hit it at `[1..20, 22, 23, 24, 21]`. Audit
+A34's own claims script is `[1,2,3,5,6,7,8,10,11,12,13,14,16,17,4,9,15]` and would have
 failed the same gate had it ever run. The join is now a permutation check — every finding claimed
 exactly once, nothing invented, nothing duplicated — and the failure message names which of missing,
 unexpected or duplicated it found instead of printing the raw list.
@@ -4060,7 +4056,7 @@ that satisfies it produced in another.
 
 ## 2.2.8 — 2026-09-07
 
-Found by driving a third paper (Yamada et al. 2025, *PSE* — a Stage 1 registered report) end to
+Found by driving audit A37 end to
 end. 272 tests (was 265).
 
 ### A deposited file that no auditor cited was uncitable by the coordinator
@@ -4075,7 +4071,7 @@ That is backwards for precisely the rows the coordinator is required to produce.
 records that a file was examined and nothing was found in it — the file it names is by definition
 one that no finding rests on, and therefore the one least likely to have been bound by a role.
 Here it discarded a clean 25-minute coordinator session — four complete outputs, 49 rows, exit 0 —
-because one tested-negative row cited `pkg/dataset/df_exploratory.xlsx`. The hash the model gave
+because one tested-negative row cited `pkg/dataset/df_example.xlsx`. The hash the model gave
 was that file's **true** hash, read out of the manifest it had been handed.
 
 `known_evidence` now also admits the manifest's entries, `pkg/`-prefixed to match the audit-relative
@@ -4218,7 +4214,7 @@ audits compared side by side are comparable.
 
 ## 2.2.4 — 2026-09-04
 
-A systematic pass over the critique path after round 2 of the second production audit failed
+A systematic pass over the critique path after round 2 of audit A38 failed
 twice. Three read-only sweeps found that nine defects shared one shape: **a rule enforced in one
 place and expressed in another, or nowhere.** The fixes below close the instances; the last item
 is what stops a tenth from shipping.
@@ -4299,7 +4295,7 @@ Verified end to end, not just by tests: the round that failed twice now complete
 - `VERSION` said 2.2.0 while the changelog was at 2.2.3, so every audit recorded a stamp three
   releases old. `gate_set_version` hashed only `scripts/*.sh`, ignoring ~35 Python gates and the
   provider schemas.
-- Four recovery scripts are pinned to the first production audit and no longer match the driver.
+- Four recovery scripts are pinned to one earlier audit and no longer match the driver.
   They are now listed as stale rather than as working: one fails in a way that reads like a
   corrupt audit rather than a stale script.
 - Remedies added to the messages that had none (`immutable path regained write permission`,
@@ -4337,7 +4333,7 @@ Verified end to end, not just by tests: the round that failed twice now complete
 
 ## 2.2.3 — 2026-09-03
 
-Critique-side defects found by driving the second production audit through two full rounds.
+Critique-side defects found by driving audit A38 through two full rounds.
 
 ### A critic could not raise a new issue at all
 - The runtime narrows `$defs/assessment.finding_id` to an enum of the covered claim ids, so that
@@ -4415,7 +4411,7 @@ cause, plus the audit-record correctness issues an independent evaluation had le
   pair proved it: recorded 308, re-derived 356. The close now comes from the last journal event,
   advancing when work advances and standing still when a correction merely re-derives.
 - `invocation_correction` could overwrite a terminal status, erasing a failure from every count.
-  Measured by re-projecting the first production audit's journal: 13 rows were relabelled and
+  Measured by re-projecting audit A34's journal: 13 rows were relabelled and
   **3 of them had terminated `failed`**, so 10 calls actually failed while `calls_by_status`
   reported 7. Projection now retains `superseded_status` and `summarize_invocations` reports
   `calls_by_corrected_from_status`, so a superseded failure stays countable. No history is
@@ -4481,9 +4477,8 @@ cause, plus the audit-record correctness issues an independent evaluation had le
 
 ## 2.2.1 — 2026-09-03
 
-Second production audit (Quossi et al. 2025, *International Journal of Sport and Exercise
-Psychology*) stopped in Phase 1 with two dead roles and no reports. Root cause: the audit lived
-under a directory named `Can automatic reactions mirror exercise dependence?`, and the Claude CLI
+Audit A38 stopped in Phase 1 with two dead roles and no reports. Root cause: the audit lived
+under a directory named after the paper's title, which ends in `?`, and the Claude CLI
 compiles `sandbox.filesystem` entries as glob patterns, so every rule containing the `?` matched
 nothing. Cost of the undetected failure: 5,443,051 tokens and $6.43 for zero output.
 
@@ -4530,8 +4525,7 @@ nothing. Cost of the undetected failure: 5,443,051 tokens and $6.43 for zero out
 
 ## 2.2.0 — 2026-09-02
 
-First production audit under the unified skill (Brimmell et al. 2025, *Psychology of Sport &
-Exercise*). Phase 1 reached `quorum_complete` after the fixes below; the full run and its cost
+Audit A34 ran under the unified skill. Phase 1 reached `quorum_complete` after the fixes below; the full run and its cost
 profile are recorded in that audit's `run.json` and `invocations.jsonl`.
 
 ### Authentication and dispatch
@@ -4560,7 +4554,7 @@ profile are recorded in that audit's `run.json` and `invocations.jsonl`.
   completed twice no longer breaks the coordinator.
 - Prompt names the literal headings the validator checks, including
   `## Appendix A. Summary of findings`, and lists the process-narration phrases
-  `check_consistency.sh` rejects: attempt 2 of the first audit paraphrased a drafting rule
+  `check_consistency.sh` rejects: attempt 2 of audit A34 paraphrased a drafting rule
   ("never corrections of an earlier draft") into the public report and tripped the gate.
 - New `scripts/build_safe_evidence.py` and `scripts/build_draft_registry.py` produce the two
   coordinator inputs the skill previously required but never built.
@@ -4579,10 +4573,10 @@ profile are recorded in that audit's `run.json` and `invocations.jsonl`.
   gates of its own and cannot disable the provider's. Pinned by `tests/test_error_classification.py`.
 
 ### Guardrails that discarded valid work
-The operator's instruction after the first audit: no result is useless. Every gate below threw
+The operator's instruction after audit A34: no result is useless. Every gate below threw
 away a complete, valid model output over a bookkeeping condition.
 - Critique: a second valid review of identical input that differed from the first (ordinary
-  sampling variance) was fatal to the round. The first production audit lost a fully valid
+  sampling variance) was fatal to the round. Audit A34 lost a fully valid
   four-critic round this way, with `quorum_met: true` and the message `missing: unknown`. The
   first cached object is never overwritten, the newer output is preserved under
   `result_cache/conflicts/`, the invocation keeps the valid output it produced and bound in its
@@ -4603,15 +4597,15 @@ away a complete, valid model output over a bookkeeping condition.
   count of 1..3 and would have refused to replay this audit's own attempt-4 reviews; they now accept
   the knob's maximum.
   The driver also exports `I4R_MAX_ATTEMPTS=$MAX_TRIES` for its helper calls: the runtime helper
-  counts accepted inference starts per role under its own ceiling, and on the first audit the driver
+  counts accepted inference starts per role under its own ceiling, and on audit A34 the driver
   allowed a fourth attempt that the helper then refused to record, discarding two complete reviews
   (data and completeness, round 1) after the provider had returned them. One knob now governs both.
-  Every exhausted budget on the first audit was consumed by harness defects, not by a role
+  Every exhausted budget on audit A34 was consumed by harness defects, not by a role
   failing at its task; the operator decides the ceiling.
 - Critique: the round's input identity (`runtime-contract-6`, snapshot `i4r-runtime-snapshot-5`)
   no longer includes the driver, helper and validator code hashes; they stay in `MANIFEST.json` as
   telemetry. Binding them meant every bug fix to the runtime orphaned an authorized round and its
-  valid cached reviews, which is exactly how the first audit's complete four-critic round was
+  valid cached reviews, which is exactly how audit A34's complete four-critic round was
   lost twice over. The finalize gate, its self-test fixture and the release-pipeline test
   fixtures moved to `i4r-runtime-snapshot-5` with it. The snapshot-reuse check compares the identity-bearing
   manifest fields only; it had kept comparing the four code hashes, so the first same-input
@@ -4622,7 +4616,7 @@ away a complete, valid model output over a bookkeeping condition.
   `--supersede-plan` under `I4R_AUTO_AUTHORIZE=1` so an unattended run continues instead of
   refusing with "prepared critique round plan differs from the current immutable input".
 - Critique: a schema-invalid review is re-sampled within `MAX_TRIES` instead of marking the role
-  permanent; all three critics that failed this way on the first audit passed on a fresh attempt.
+  permanent; all three critics that failed this way on audit A34 passed on a fresh attempt.
   The retry-backoff journal accepts the `schema` error class for this re-sample alongside the
   provider-retryable classes, so the telemetry still names the real reason for the retry.
 - Critique prompt (`prompts/common.txt`) now states the two contract details that rejected three
@@ -4630,28 +4624,28 @@ away a complete, valid model output over a bookkeeping condition.
   give a non-empty `requested_correction` on every REFUTED or OVERSTATED verdict.
 - Settled facts: `scripts/approve_settled.py` writes the coordinator's promotion approval
   (`settled.approved` and `valid_for_report_hash` bound to the current `REPORT_final.md`) on every
-  row that already meets the promotion rule, and clears it elsewhere. On the first audit that object
+  row that already meets the promotion rule, and clears it elsewhere. On audit A34 that object
   was never written, `make_settled.sh` promoted zero facts, and a critique round was dispatched with
   an empty cache before the omission was noticed. Run it after each integration, before
   `make_settled.sh`.
 - Post-delta gates: documented that `DIFF_MANIFEST_round_N.json` must be regenerated against the
   integrated canonical files (after `make_settled.sh`) before `run_post_delta_gates.py --round N`;
   the verifier recomputes the packet from the live after-paths, so the packet a round was dispatched
-  with fails the gate once integration has changed the report (first audit, round 2).
+  with fails the gate once integration has changed the report (audit A34, round 2).
 - Phase 1: a schema-invalid role output no longer stops the role. It is a property of one
-  sample, not of the role: on the first audit every such failure passed on a fresh attempt.
+  sample, not of the role: on audit A34 every such failure passed on a fresh attempt.
   After the bounded focused repair, remaining budget is spent on a fresh sample before the role
   is declared failed.
 
 ### Document build
 - `build_docx.sh` passed the LibreOffice profile as `file://<transaction dir>/lo-profile`. An audit
   directory named after a paper title routinely contains a colon and spaces, which are not URL-safe,
-  and LibreOffice aborts (SIGABRT, exit 134) on that URL; the first audit's title contains a colon,
+  and LibreOffice aborts (SIGABRT, exit 134) on that URL; audit A34's title contains a colon,
   so every canonical build failed while the scratch dry run passed. The throwaway profile now lives
   in a URL-safe private temp directory; document and output paths are passed as plain paths.
 
 ### Release privacy gate
-- `check_release_privacy.py` reported two files of the first audit as "absolute path(s) naming a real
+- `check_release_privacy.py` reported two files of audit A34 as "absolute path(s) naming a real
   account": the auditor's own privacy-detector script and the safe-evidence builder, whose regex
   source spells the `/Users/` prefix with no account behind it. The Windows-path pattern's account
   segment accepted any non-slash character, so `|` and `[^` counted as account names. The segment is
@@ -4705,25 +4699,25 @@ away a complete, valid model output over a bookkeeping condition.
   `completed` in the invocation ledger, so finalize gate 0d saw two canonical completions per auditor
   role and an output hash that no longer matched the promoted report. The truthful correction is an
   append-only `invocation_correction` setting those rows to `legacy_record` with the reset as the
-  recorded reason (applied on the first audit for twelve rows: seven Phase-1 rows of the reset run, two of them failed calls, and five critic rows of the superseded round identity); the status vocabulary has no
+  recorded reason (applied on audit A34 for twelve rows: seven Phase-1 rows of the reset run, two of them failed calls, and five critic rows of the superseded round identity); the status vocabulary has no
   `superseded` value and the reset itself should record this (see INSTALL.md).
   `summarize_invocations.py --check` (finalize gate 0d) now treats `legacy_record` rows as history:
   they are excluded from the Phase-1 quorum and five-way concurrency window, the initial fan-out is
   each role's earliest canonical call (attempt numbers continue across a reset), and
   `legacy_record` counts as a terminal disposition. Failed finalizations also left their
-  `.finalize-tx.*` transaction directories behind (fifteen on the first audit).
+  `.finalize-tx.*` transaction directories behind (fifteen on audit A34).
 
 ### Post-delta gate journaling
 - `run_post_delta_gates.py` wrote a passing receipt but never journaled the `gate=post_delta` event
   from which `post_delta_gates_passed` is projected, so `target_complete` finalization failed schema
-  validation on the first audit with a valid receipt on disk. The gate now journals its own passing
+  validation on audit A34 with a valid receipt on disk. The gate now journals its own passing
   result (stamped with the receipt's `completed_at`).
 
 ### Probe compliance scope
 - The compliance rule "one successful capability probe per audit/model" counted every successful
   probe on a model route. The probe cache is keyed by the policy's `cache_key_fields` (CLI version,
   model, effort, schema-compiler identity, schema set, probe contract) and a key change makes a new
-  probe mandatory; on the first audit the Codex CLI updated between two invocations and the runtime
+  probe mandatory; on audit A34 the Codex CLI updated between two invocations and the runtime
   helper (the schema compiler) changed twice, so four keys each held one legitimate success. The rule
   now counts successes per distinct cache key, using the `.runtime/probes/<key>.json` records.
 
@@ -4766,7 +4760,7 @@ away a complete, valid model output over a bookkeeping condition.
   round 1 only), so literal round-2 confirmations of corrected claims replace the round-1
   OVERSTATED-derived records a settled fact would otherwise rest on. Both carried the same rule
   separately; they now derive the admissible rounds the same way.
-- `scripts/integrate_round.py` replaces the ad-hoc integration code the first audit improvised and
+- `scripts/integrate_round.py` replaces the ad-hoc integration code audit A34 improvised and
   lost twice. It plans and applies a round from the round's own outputs: every claim id that
   received a verdict (tested negatives included), the conflicts critics declared, coordinator
   approval read from the live registry, the verdict-to-outcome mapping of
@@ -4803,14 +4797,14 @@ away a complete, valid model output over a bookkeeping condition.
 
 ### comment.json skeleton
 - `generate_finding_artifacts.py --apply` requires an existing `comment.json` to inject findings
-  into, but nothing created one; the first audit's round-1 chain stopped at its first step. New
+  into, but nothing created one; audit A34's round-1 chain stopped at its first step. New
   `scripts/init_comment.py` writes the schema-valid non-finding skeleton from `run.json` and a
   facts file, validating against `schemas/comment.schema.json` and rejecting unknown keys.
 
 ### House citations
 - The validators demand the `AI-Games` and `AI-vertical` citation markers, but the unified skill
   dropped the reference text during the merge (the older SKILL.md and every published comment have
-  it). Coordinator attempt 2 of the first audit produced an otherwise fully valid bundle and failed
+  it). Coordinator attempt 2 of audit A34 produced an otherwise fully valid bundle and failed
   only here, because a careful model will not invent a citation. New `reference/house_citations.md`
   is the single source; the coordinator prompt carries both entries verbatim with their anchors and
   the Introduction sentence, and the published four-author byline is recorded there too.

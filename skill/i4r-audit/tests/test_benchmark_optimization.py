@@ -11,7 +11,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/benchmark_optimization.py"
 SEEDS = ROOT / "config/benchmark-seeded-fixtures.json"
-FESSI = ROOT / "tests/fixtures/fessi-benchmark-replay.json"
+REGRESSION_REPLAY = ROOT / "tests/fixtures/regression-benchmark-replay.json"
 
 
 def run_measurement(
@@ -364,13 +364,13 @@ class BenchmarkOptimizationTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertIn("FATAL:", result.stderr)
 
-    def test_fessi_replay_fixture_is_projected_and_cannot_claim_speedup(self) -> None:
-        output = self.root / "fessi.json"
-        result = self.invoke(str(FESSI), "--output-json", str(output), "--require-gates")
+    def test_regression_replay_fixture_is_projected_and_cannot_claim_speedup(self) -> None:
+        output = self.root / "regression.json"
+        result = self.invoke(str(REGRESSION_REPLAY), "--output-json", str(output), "--require-gates")
         self.assertEqual(result.returncode, 1, result.stderr)
         summary = json.loads(output.read_text())
         self.assertEqual(summary["selection"]["measured_case_ids"], [])
-        self.assertEqual(summary["selection"]["projected_case_ids"], ["fessi-principal-replay"])
+        self.assertEqual(summary["selection"]["projected_case_ids"], ["regression-principal-replay"])
         self.assertIsNone(summary["performance"]["median_paired_token_reduction_fraction"])
         self.assertIsNone(summary["performance"]["median_paired_wall_clock_reduction_fraction"])
         self.assertIsNone(summary["noninferiority"]["optimized_recall"])

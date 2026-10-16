@@ -3,7 +3,7 @@
 ## Static warning for one defect class only: a snippet (or the prelude) calls, unqualified, a function
 ## an installed package documents, while nothing the notebook runs before it attaches that package.
 ## The release notebook then records "could not find function" for the claim, although an operator
-## harness that attached the package passed it (the Perfectionism audit, 2026-09-30: five claims).
+## harness that attached the package passed it (audit A15, 2026-09-30: five claims).
 ## Called by make_verification_notebook.sh; prints "WARN: ..." lines on stdout and always exits 0.
 ##
 ## It stays quiet whenever it cannot be sure:

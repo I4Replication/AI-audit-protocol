@@ -125,9 +125,7 @@ no rounds. It measures what the full pipeline adds. It is for evaluation, not fo
 
 ## Status
 
-**Private by design for now.** The skill's failure-mode documentation names papers from audits
-whose authors have not yet been notified. Do not make this repository public before that
-correspondence is complete (protocol §3, Disclosure), or scrub the named audits first.
+**Private for now.** The files in this repository do not name the papers that were audited or their authors. Earlier commits in its history do, so rewrite the history (or start a new repository from the current files) before making it public.
 
 ## How to cite
 

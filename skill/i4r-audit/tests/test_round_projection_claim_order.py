@@ -7,7 +7,7 @@ cannot express one. ``validate_round_projections.py``, which ``finalize_run.sh``
 same lists with plain ``!=``. So a round the runtime had accepted was refused at finalization with
 "actual claim assessments are not assigned", after every round and every release gate had passed.
 
-Found on the tenth production audit (knee loading in cycling): round 2's completeness critic
+Found on audit A21: round 2's completeness critic
 assessed exactly its 18 assigned claims but listed F39 before F3.
 
 The coverage rule itself still holds after this fix: a missing, extra or duplicated id is refused.

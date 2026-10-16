@@ -1,6 +1,6 @@
 """The packaged 2.6.4 post-fan-out verifier, run on disk with the real runner.
 
-The Neudorfer audit (20260923-audit-3309cfcf) excluded three true article-text findings, F13-F15,
+Audit A23 excluded three true article-text findings, F13-F15,
 because nothing could supply their family-A (Claude) confirmation: they were raised after Phase 1,
 and the only packaged Claude confirmations were the five Phase-1 auditors'. Hand-made
 verification records were refused by make_settled (role_class other, recorded after round-1
@@ -80,7 +80,7 @@ WITHHELD_SENTINELS = (
 CLAIMS = {
     "F1": "Auditor-raised: the deposited script drops two rows before fitting.",
     "F2": "Excluded row: the abstract rounds the sample size.",
-    "F13": "The article reports r = 0.91 for the chest strap in Table 2.",
+    "F13": "The article reports r = 0.88 for the reference device in Table 2.",
     "F14": "The deposited data.csv holds three participants, contradicting the reported sample.",
     "F15": "The limitations paragraph omits the device firmware version.",
     "F16": "A claim whose only cited source is the generated report.",
@@ -448,7 +448,7 @@ class VerifierRunsUnderThePhase1Contract(VerifierFixture):
         with self.assertRaisesRegex(verifier_contract.VerifierContractError, "changed after it was recorded"):
             verifier_contract.verify_record(root, row, by_id, families)
         result_path.write_bytes(original)
-        hand_made = dict(row, invocation_id="auditor-operator-verification-fd95c8f0",
+        hand_made = dict(row, invocation_id="auditor-operator-verification-0f0f0f0f",
                          input_artifact_sha256="2" * 64)
         with self.assertRaisesRegex(verifier_contract.VerifierContractError, "completion receipt"):
             verifier_contract.verify_record(root, hand_made, {**by_id, hand_made["invocation_id"]: hand_made},
@@ -979,7 +979,7 @@ class AuditorInputsArePinnedTo263(unittest.TestCase):
         for role in phase1_runtime.ROLE_SPECS:
             self.assertEqual(run_phase1.role_identity(role), ("auditor", 0))
         self.assertEqual(run_phase1.role_identity("verifier_0123456789ab"), ("verifier", 0))
-        # The Neudorfer out-of-protocol names, the probe and near-misses are never a verifier.
+        # The A23 out-of-protocol names, the probe and near-misses are never a verifier.
         for role in ("operator_verifier", "auditor_operator_verification", "phase1_capability_probe",
                      "verifier", "verifier_0123456789AB", "verifier_0123456789abc"):
             self.assertEqual(run_phase1.role_identity(role), ("other", None), role)
@@ -1252,7 +1252,7 @@ class VerifierReviewFindings264(VerifierFixture):
     def test_the_deny_list_holds_only_what_can_be_read(self) -> None:
         # 2.6.6: every denial adds sandbox profile to every Bash call (unlink and create rules for
         # the path and each ancestor); 47 denials under a long, deep audit path overflowed ARG_MAX
-        # (E2BIG) on the tenth production audit and left the verifier without a shell.
+        # (E2BIG) on audit A21 and left the verifier without a shell.
         run_verifier = importlib.import_module("run_verifier")
         root = self.audit_after_phase1()
         (root / "coordinator").mkdir()
@@ -1440,7 +1440,7 @@ class VerifierRecordsAreReadmitted(VerifierFixture):
     def test_the_pre_265_prompt_is_byte_identical_to_the_264_prompt(self) -> None:
         # Pinned from 2.6.4's own build_verifier_prompt on this synthetic packet. The first cut of
         # 2.6.5 put the rule on a new line; removing it then left a line break where 2.6.4 had a
-        # space, so no 2.6.4 record re-admitted (seen on the seventh production audit's copy).
+        # space, so no 2.6.4 record re-admitted (seen on audit A28's copy).
         run_verifier = importlib.import_module("run_verifier")
         packet = {"source_snapshot_sha256": "a" * 64, "hypotheses_sha256": "b" * 64,
                   "hypotheses": [{"hypothesis_id": "H1", "claim_sha256": "c" * 64},
@@ -1593,7 +1593,7 @@ class VerifierRecordsAreReadmitted(VerifierFixture):
                          {refuted["invocation_id"]: "legacy_record", confirmed["invocation_id"]: "legacy_record"})
         verdicts, errors = self.verdicts(root)
         self.assertEqual((verdicts, errors), ({f13: [(refuted["invocation_id"], "REFUTED")]}, []))
-        # The Neudorfer relabelled shape is never a verifier.
+        # The A23 relabelled shape is never a verifier.
         root = fresh("relabel")
         record(root, [confirmation.F13_CLAIM], ["CONFIRMED"], relabel=("operator_verifier", "other"))
         self.assertEqual(self.verdicts(root), ({}, []))

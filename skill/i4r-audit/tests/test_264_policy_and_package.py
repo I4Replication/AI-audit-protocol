@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """2.6.4: the post-fan-out verifier's policy, its drift check, and the package freshness check.
 
-The Neudorfer audit (20260923-audit-3309cfcf) excluded three true article-text findings, F13-F15,
+Audit A23 excluded three true article-text findings, F13-F15,
 because no Claude-family confirmation was admissible for a finding first raised after Phase 1.
 Hand-made verification records were refused by make_settled.sh (role_class `other`; a call that
 ended after round-1 integration), and the one relabelled `role_class auditor` was counted by
@@ -97,7 +97,7 @@ def auditors_moved_verifier_left(policy: dict) -> None:
 
 
 def verifier_made_a_sixth_auditor(policy: dict) -> None:
-    # The Neudorfer relabelling, in policy form. Phase 1 refuses a sixth audit-scoped role.
+    # The A23 relabelling, in policy form. Phase 1 refuses a sixth audit-scoped role.
     policy["models"]["phase_1_auditors"]["verifier"] = dict(policy["models"]["post_fan_out_verifier"])
 
 

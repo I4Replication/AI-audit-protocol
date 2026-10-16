@@ -14,7 +14,7 @@ recorded hash must match a prompt file that actually exists on disk for THAT rol
 and the other four hashes must match exactly. What is no longer required is that the prompt be the
 un-augmented one.
 
-Found on the dart-throwing audit, where round 2's completeness critic was repaired
+Found on audit A37, where round 2's completeness critic was repaired
 ("repaired without scientific changes") and finalize then refused the run.
 """
 from __future__ import annotations

@@ -27,7 +27,7 @@ Phase-1 auditor raised or independently found (its role is in `provenance.origin
 fan-out — by the coordinator, the operator, or a critic's new issue — can be confirmed only by the
 post-fan-out verifier (`scripts/run_verifier.py`; see *Family-A confirmation for findings raised
 after fan-out* below). Never write that confirmation by hand or relabel another call as an auditor:
-both are refused, as they were in the Neudorfer audit, where three true findings (F13–F15) were
+both are refused, as they were in audit A23, where three true findings (F13–F15) were
 excluded after hand-made records failed one gate after another. Record the true origin in
 `provenance`; `round_introduced` does not decide eligibility, because operator rows written at
 coordinator time carry 0.

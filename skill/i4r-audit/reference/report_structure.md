@@ -18,7 +18,7 @@ use `--preview-max-pages N`: the result is written below `report/previews/`, mar
 cannot enter the document cache, staging tree, finalization receipt, or publication.
 
 Draft toward **nine body pages before Round 2**, leaving one page for adversarial corrections. For
-the 20-finding Fessi regression shape, aim for 2,900--3,200 body words while preserving P1--P20,
+the 20-finding regression shape (audit A01), aim for 2,900--3,200 body words while preserving P1--P20,
 their statuses, impact classes, evidence/remedy bindings, body treatments, and Appendix rows. Put
 extended corroboration and benign-explanation detail in `LEDGER.md` or `ADJUDICATION.md`.
 
