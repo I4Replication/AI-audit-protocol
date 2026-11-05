@@ -4,8 +4,8 @@
 **published** paper and its replication package, and writes the comment for publication.
 
 This repository holds:
-- the skill, `skill/i4r-audit` (version 2.7.7);
-- a single-agent baseline used to evaluate it, `skill/baseline` (version 1.1.0).
+- the skill, `skill/i4r-audit` (version 2.7.11);
+- a single-agent baseline used to evaluate it, `skill/baseline` (version 1.2.0).
 
 ## How it works
 
@@ -128,10 +128,15 @@ no rounds. It measures what the full pipeline adds. It is for evaluation, not fo
 Neither the files in this repository nor its commit history name the papers that were audited or their authors.
 
 ## How to cite
-> Barbarioli, Bruno and Aparicio, Juan Pablo and Brodeur, Abel and Brodeur, Abel and Abdul Baki, Ghina and Fazio, Luna and Valenta, David, Multi-agent Reproducibility Auditing with Verifiable Evidence (October 17, 2026). Available at  > SSRN: https://ssrn.com/abstract=7651342 or http://dx.doi.org/10.2139/ssrn.7651342
+> Barbarioli, Bruno and Aparicio, Juan Pablo and Brodeur, Abel and Abdul Baki, Ghina and Fazio, Luna and Valenta, David, Multi-agent Reproducibility Auditing with Verifiable Evidence (October 17, 2026). Available at SSRN: https://ssrn.com/abstract=7651342 or http://dx.doi.org/10.2139/ssrn.7651342
 >
 > Brodeur, A., et al. (2026). AI-assisted teams outperform AI-led teams but not human-only teams in
 > assessing research reproducibility in quantitative social science. *PNAS*, 123(22), e2524747123.
 >
 > Institute for Replication (2026). Reproducing with AI Across the Expertise Ladder. OSF:
 > https://osf.io/dkfzt/
+
+## License
+
+This repository is licensed under the [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+The full text is in [`LICENSE`](LICENSE).

@@ -1830,6 +1830,7 @@
         "capability_probe_failed",
         "operator_pause",
         "external_dependency",
+        "critique_round_failed",
         null
       ]
     },

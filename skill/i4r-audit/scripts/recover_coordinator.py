@@ -35,6 +35,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 SKILL = HERE.parent
 sys.path.insert(0, str(HERE))
 import claude_routes
+import claude_thinking_tokens
 import record_invocation
 import run_coordinator as coordinator
 
@@ -473,7 +474,8 @@ def validate_provider_and_bundle(
         )
     if primary != corrected.get("observed_model") or all_models != corrected.get("observed_model_ids"):
         raise coordinator.CoordinatorError("served model IDs disagree with the coordinator record")
-    usage, cache_usage = coordinator.extract_usage(result)
+    # 2.7.11: parsed as the runner parsed it for this audit (claude_thinking_tokens, frozen in its snapshot)
+    usage, cache_usage = coordinator.extract_usage(result, thinking=claude_thinking_tokens.frozen(root))
     if not coordinator.complete_usage(usage) or usage != corrected.get("usage"):
         raise coordinator.CoordinatorError("provider usage is incomplete or disagrees with the record")
     if cache_usage != corrected.get("cache_usage"):
@@ -510,6 +512,8 @@ def validate_provider_and_bundle(
         raise coordinator.CoordinatorError(
             "coordinator output closure is incomplete or contains unexpected files"
         )
+    # 2.7.11: no bookkeeping context. These are the bytes the runner validated and stored (normalized, if it
+    # normalized anything), which the bundle binds; recovery re-judges them and may not rewrite them.
     artifacts, findings = coordinator.validate_outputs(
         output, draft_ids, known_pairs, known_paths, ledger_rows
     )

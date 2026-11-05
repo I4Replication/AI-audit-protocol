@@ -1,6 +1,6 @@
 ---
 name: baseline
-description: Run the single-agent, single-pass I4R baseline on a fixed subset of already-audited papers, for comparison with the full multi-agent pipeline (i4r-audit). One Claude call per paper audits the paper and its replication package and writes the whole comment, with no critics and no revision rounds; outputs go to baseline_comments/. Use when the user asks to run, check or summarise the baseline. Do not use to audit a new paper (use i4r-audit).
+description: Run the single-agent, single-pass I4R baseline on a fixed subset of already-audited papers, for comparison with the full multi-agent pipeline (i4r-audit). One Claude call per paper audits the paper and its replication package and writes the whole comment and one verification check per finding, with no critics and no revision rounds; outputs go to baseline_comments/, and the claims script built from the checks goes to baseline_metadata/. Use when the user asks to run, check or summarise the baseline. Do not use to audit a new paper (use i4r-audit).
 ---
 
 # baseline: the single-agent, single-pass condition
@@ -37,6 +37,20 @@ What is held fixed against the full pipeline:
   built by i4r-audit's builder. Paper-level choices that the pipeline's own comments make differently from paper to
   paper (minor issues as run-in titles or numbered subsections, the wording of tested hypotheses) are left to the
   agent; matching one paper's published comment would mean showing it to the agent.
+- **Claims script** (1.2.0): the agent writes one verification snippet per finding, under the pipeline's contract
+  (i4r-audit 2.7.9's `verification_guide.md`, verbatim apart from examples this public copy rewords): `C-<n>.R` that calls `expect()` before computing and
+  `check()` after, or `C-<n>.judgement` / `C-<n>.unverifiable`, plus an optional `_prelude.R`. `claims_map.tsv` is
+  derived from the snippet kinds as the pipeline's projection derives it, and `claims_script.R` is built by the
+  pipeline's own `make_claims_script.sh` (2.7.9, byte for byte apart from one comment this public copy rewords; `reference/PROVENANCE.json`). The pipeline releases
+  only when every check passes in its notebook; the baseline's validator runs the built script itself, standalone,
+  from an empty folder with the deposit at `I4R_PKG_DIR` (within 540 s, under the agent's Bash limit), and any
+  FAIL, error or count R reports that no claim's line accounts for is a validation error. The pass sets differ in
+  both directions: the 2.7.9 builder's standalone harness loads only csv, tsv, txt and rds files, has no `SCRATCH`
+  or `judgement()`, and compares non-numbers with `identical()` and numbers one at a time, where the notebook
+  compares as text and accepts equal-length vectors. The agent is told so, loads other formats in `_prelude.R`, and
+  its script runs as published. After the call, the runner runs the agent's R again with a minimal environment and,
+  on macOS, under `sandbox-exec` (network denied, writes only in its scratch folder). A record keeps counts, claim
+  ids and key names only; R's own output goes to the agent's console, never to `run.json` or `validation.json`.
 - **Accounting**: served model ids, tokens, cost, turns and time, read from the CLI's result envelope as the
   pipeline reads them.
 
@@ -60,7 +74,8 @@ comments before any paid call.
 - Paid calls run **one at a time**: `run`, `batch` and `probe` take `baseline_comments/.batch.lock` atomically.
 - Never contact authors or journals. Personal data in a deposit is reported as a finding, never a reason to stop.
 - Never edit the full pipeline's records (`runs/`, `comments/`, `metadata/`) or another baseline run's output. A
-  rerun moves the earlier output to `baseline_comments/.superseded/`; nothing is deleted.
+  rerun moves the earlier output, and its published claims script, to `baseline_comments/.superseded/`; nothing is
+  deleted.
 - Do not change the condition between papers. A different model or effort is a different condition: run it into its
   own output folder, or record why.
 - Choose the subset before the first paid run. `select_subset.py --write` refuses to replace a SUBSET.json that runs
@@ -72,7 +87,8 @@ comments before any paid call.
 cp -R "<tree>/skill/baseline" ~/.claude/skills/baseline      # or: ln -s "<tree>/skill/baseline" ~/.claude/skills/baseline
 ```
 
-Restart Claude Code. The scripts run from the tree root, the folder holding `data/`, `runs/` and `metadata/`. They
+Restart Claude Code. The scripts run from the tree root, the folder holding `data/`, `runs/` and `metadata/`. R
+(`Rscript`) must be on the PATH: the validator runs every claims script. They
 use i4r-audit, from `<tree>/skill/i4r-audit-unified/i4r-audit` or `~/.claude/skills/i4r-audit`, for the deposit's
 column-name exemptions, the environment fingerprint and rendering. Without it the baseline still runs and says so.
 
@@ -127,7 +143,7 @@ only; a renamed copy with other bytes, or the paper's title in another document,
 | Status | Meaning | Rerun? |
 |---|---|---|
 | `completed` | the call succeeded and the outputs pass `validate_outputs.py` | no |
-| `completed_invalid` | the call succeeded but the outputs fail validation; they are kept, the errors listed, nothing repaired (a repair would be a second round) | no: it is a baseline result |
+| `completed_invalid` | the call succeeded but the outputs fail validation (a missing or malformed snippet, or a claims-script check that FAILs or errors, included); they are kept, the errors listed, nothing repaired (a repair would be a second round) | no: it is a baseline result |
 | `budget_exhausted` | the call hit its USD budget; whatever it wrote is validated and kept | no: it is a baseline result (`--force` to rerun) |
 | `timeout` | the call ran past its timeout and was killed | `batch --rerun-failed` |
 | `failed` | the call or the setup failed (the error class says why) | `batch --rerun-failed`, after fixing the cause |
@@ -160,6 +176,15 @@ come from its build manifest.
   `render_history`.
 - **`findings.json`.** The comment.json finding subset (`reference/FINDINGS_FORMAT.md`).
 - **`evidence/`.** The agent's scripts, aggregate text results and figures.
+- **`verification_snippets/`, `claims_map.tsv`, `claims_script.R`.** The agent's one check per finding, the map
+  derived from them, and the claims script the pipeline's builder made from them. `run.json` records under
+  `claims_script` whether it was built and ran, its checks, PASS and FAIL counts, every claim's status (key names of
+  failing checks only, never values), the builder's hash and where it was published.
+
+`baseline_metadata/<journal>/<paper>/claims_script.R`: the same claims script, published as the pipeline publishes
+its own in `metadata/<journal>/<paper>/`. It is published when it passes the hygiene check (with the comment writer's
+rules, since it quotes every claim) and `findings.json` was kept, whether or not every check passed (the run's status
+says which). Only snippet names the contract allows are kept from `verification_snippets/`.
 - **`run.json`.** The condition, the environment, the source audit and snapshot, the hashes of the code that ran,
   and every call (argv, deny list, served models, context window, tokens, cache writes by lifetime, cost, turns,
   time, errors). It also holds the scan, validation and render records.
@@ -183,5 +208,5 @@ copy of the deposit: remove it with `rm -rf` when the analysis no longer needs i
 ## Tests
 
 From the skill folder: `python3 -m unittest discover -s tests`. A fake CLI stands in for Claude, so no test makes a
-model call. `I4R_SCAN_ROOTS` and `I4R_CLAUDE_TMP_ROOT` exist so tests can point the contamination scan and the
+model call; the claims-script tests run R. `I4R_SCAN_ROOTS` and `I4R_CLAUDE_TMP_ROOT` exist so tests can point the contamination scan and the
 temporary-folder denial at their own folders; do not set them for real runs.

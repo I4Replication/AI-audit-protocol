@@ -34,6 +34,7 @@ FINDING_SCHEMA = SKILL / "schemas/v2/finding-row.schema.json"
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(SKILL / "schemas/tools"))
 import claude_routes
+import claude_thinking_tokens
 import phase1_runtime
 import provider_safety
 import record_invocation
@@ -82,6 +83,7 @@ OUTPUT_TARGETS = {
 WORKING_REPORT_TARGET = "report/REPORT_final.md"
 SAFE_TEXT_SUFFIXES = {".json", ".md", ".txt"}
 MACHINE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
+HEX64 = re.compile(r"[0-9a-f]{64}")
 # First alternative: an account name containing spaces, admitted only when a path separator
 # follows it. Without it `/Users/<Anna Smith>/...` redacted to `<private-path> Smith/...` and
 # the surname survived into run.json -- and, with the `/Users/` prefix now gone, straight
@@ -1150,7 +1152,10 @@ def nonnegative(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
-def extract_usage(result: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def extract_usage(result: dict[str, Any], *, thinking: bool = False) -> tuple[dict[str, Any], str]:
+    """``thinking`` (2.7.11, claude_thinking_tokens.frozen: audits initialised on 2.7.11 or later) reads the CLI's
+    thinking count as reasoning_tokens; without it the parse is 2.7.10's byte for byte (reasoningTokens, a key the CLI
+    does not write, so reasoning_tokens stays null)."""
     snake = {
         "input_tokens": "input_tokens",
         "output_tokens": "output_tokens",
@@ -1163,9 +1168,14 @@ def extract_usage(result: dict[str, Any]) -> tuple[dict[str, Any], str]:
         "output_tokens": "outputTokens",
         "cached_input_tokens": "cacheReadInputTokens",
         "cache_creation_input_tokens": "cacheCreationInputTokens",
-        "reasoning_tokens": "reasoningTokens",
+        "reasoning_tokens": "thinkingTokens" if thinking else "reasoningTokens",
     }
     raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    if thinking:
+        # the top-level view nests it: usage.output_tokens_details.thinking_tokens
+        details = raw_usage.get("output_tokens_details")
+        raw_usage = {**raw_usage, "reasoning_tokens": details.get("thinking_tokens")
+                     if isinstance(details, dict) else None}
     per_model = result.get("modelUsage") if isinstance(result.get("modelUsage"), dict) else {}
     # Claude's top-level usage describes the primary Sonnet path only.  When modelUsage exists,
     # sum its mutually exclusive camelCase components across every served model (including
@@ -1232,7 +1242,7 @@ def complete_usage(usage: dict[str, Any]) -> bool:
     )
 
 
-def usage_by_model(result: dict[str, Any]) -> list[dict[str, Any]]:
+def usage_by_model(result: dict[str, Any], *, thinking: bool = False) -> list[dict[str, Any]]:
     """Return exact provider-exposed model partitions without inventing a split."""
     raw = result.get("modelUsage")
     if not isinstance(raw, dict):
@@ -1241,7 +1251,7 @@ def usage_by_model(result: dict[str, Any]) -> list[dict[str, Any]]:
     for model, model_usage in raw.items():
         if not isinstance(model, str) or not model or not isinstance(model_usage, dict):
             continue
-        usage, _cache = extract_usage({"modelUsage": {model: model_usage}})
+        usage, _cache = extract_usage({"modelUsage": {model: model_usage}}, thinking=thinking)
         partitions.append({
             "model": model, "identity_assurance": "observed", "usage": usage,
         })
@@ -1315,10 +1325,57 @@ def redact_private_paths(message: str, *roots: pathlib.Path) -> str:
     return LOCAL_PATH.sub("<private-path>", text)
 
 
+CODE_WITHHELD = "<code-shaped token withheld>"
+UNMASKABLE_TEXT = "<error text withheld: not provider-safe>"
+# Every whitespace character but the space, and every C0 control: JSON writes each as a backslash
+# escape, and in run.json a home directory followed by an escaped newline reads as a path. A double
+# quote becomes a single quote for the same reason: its escape puts a backslash, a Windows path
+# separator, after whatever precedes it ("C:/Users" then the quote).
+_ESCAPED_IN_JSON = re.compile(r"[^\S ]|[\x00-\x1f]")
+
+
+def _withhold_row_code(match: re.Match[str]) -> str:
+    start, end = match.start(1) - match.start(0), match.end(1) - match.start(0)
+    return match.group(0)[:start] + CODE_WITHHELD + match.group(0)[end:]
+
+
+def provider_safe_text(message: str, *roots: pathlib.Path) -> str:
+    """Exception text as Phase 1 and the verifier journal it: the coordinator's scan passes it (2.7.9).
+
+    A pause detail, a status error or a terminal record's error is projected into run.json, and
+    validate_provider_visible_string refuses run.json for a private path or for a participant-code-
+    shaped token, before any call; a terminal record's error cannot even be masked by a later
+    text_redaction. redact_private_paths removes the paths. A deposit file named like a code
+    (SUBJ_P12.sav) reaches the same text through a manifest mismatch or the deadline's step label
+    ("... during copying SUBJ_P12.sav"), so every such token is withheld too, with no deposit
+    exemption, which only ever admits more. Each pass replaces whatever the scan's own two tests
+    still find, the path test run with the quote JSON closes the string with (a text ending in a
+    home directory is a path in run.json); every match holds a slash, a backslash or a capital
+    letter and no replacement does, so at most len(text) passes find something, and the text is
+    returned only when both tests pass. A lone surrogate (a file name that is not UTF-8) is
+    written as its escape, so the text always encodes. Print the raw text to stderr if the
+    operator needs the name.
+    """
+    text = redact_private_paths(message, *roots).encode("utf-8", "backslashreplace").decode("utf-8")
+    text = _ESCAPED_IN_JSON.sub(" ", text).replace('"', "'")
+    for _ in range(len(text) + 1):
+        if not (LOCAL_PATH.search(text + '"') or provider_safety.first_participant_code(text)):
+            return text
+        # A match that took the quote ends in the replacement; otherwise the quote is still last.
+        quoted = LOCAL_PATH.sub("<private-path>", text + '"')
+        text = quoted[:-1] if quoted.endswith('"') else quoted
+        text = RAW_PARTICIPANT_CODE.sub(CODE_WITHHELD, text)
+        text = ROW_PARTICIPANT_CODE.sub(_withhold_row_code, text)
+    return UNMASKABLE_TEXT  # only if the scan learns a shape these replacements do not remove
+
+
 # Claude CLI 2.1.206: "API Error: Claude's response exceeded the 64000 output token maximum. To configure
 # this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable." (the number is the request's
 # max_tokens).
 OUTPUT_LIMIT = re.compile(r"response exceeded the \d+ output token maximum")
+
+
+TRANSIENT_STATUS = re.compile(r"(?<![0-9a-z])(?:429|502|503|504|5xx)(?![0-9a-z])")
 
 
 def classify_error(message: str, *, timed_out: bool = False, schema: bool = False) -> str:
@@ -1351,13 +1408,57 @@ def classify_error(message: str, *, timed_out: bool = False, schema: bool = Fals
         return "model"
     if any(term in lower for term in ("capability", "unsupported capability", "tool unsupported")):
         return "capability"
-    if any(term in lower for term in ("rate limit", "429", "overloaded", "502", "503", "504", "5xx")):
+    # 2.7.11: a status code counts only as a token of its own. A bare substring test found "503" inside a served
+    # model id's date suffix (claude-sonnet-5-20260503) or a sha256 in the message, and turned a deterministic failure
+    # (the served-model line below) into a transient one that main() pays to retry.
+    if any(term in lower for term in ("rate limit", "overloaded")) or TRANSIENT_STATUS.search(lower):
         return "transient"
     if "served sonnet" in lower or "sonnet 5 primary" in lower:
         return "model"
     if any(term in lower for term in ("network", "connection", "transport")):
         return "transport"
     return "permanent"
+
+
+# 2.7.9: audit context the coordinator is shown, with a sha256 in input_manifest.json, but may not
+# cite. Every later reader re-hashes a cited file against the live audit (the critique round
+# snapshot, make_settled.sh, make_diff_packet.py, generate_finding_artifacts.py), so only a file that
+# keeps its bytes for the rest of the audit can be evidence. These two do not; a citation of either
+# is refused by name instead of as an anonymous unbound hash.
+UNCITABLE_CONTEXT = {
+    "run.json": (
+        "run.json is audit metadata, not evidence: it is re-projected from the journal after every "
+        "event, so no hash of it stays valid"
+    ),
+    "pipeline-policy.snapshot.json": (
+        "pipeline-policy.snapshot.json is audit policy, not evidence: amend_round_cap.py and "
+        "repin_critic_route.py rewrite it, and every later round re-hashes what a finding cites"
+    ),
+}
+MASKED_MANIFEST_UNCITABLE = (
+    "the package_manifest.json this coordinator was shown masks participant-code-shaped names, "
+    "so its hash is not the file's"
+)
+# 2.7.11 (A62): the draft registry's Markdown is listed in input_manifest.json with a
+# sha256 beside the draft rows, and was cited. normalize_bookkeeping drops such a citation when the row has
+# other evidence; a row citing nothing else is refused by this name.
+DRAFT_PROSE_UNCITABLE = (
+    "draft-registry prose (work/registry_draft/*.md) is context handed to the coordinator, not evidence"
+)
+
+
+def uncitable_context(path: str, known_paths: set[str], draft_prose: Iterable[str] = ()) -> str:
+    """Why a citation of audit context the coordinator was shown is refused, as a message suffix."""
+    origin = path.removeprefix("context/")
+    reason = UNCITABLE_CONTEXT.get(origin)
+    if reason is None and origin == PACKAGE_MANIFEST and origin not in known_paths:
+        reason = MASKED_MANIFEST_UNCITABLE
+    draft = origin.removeprefix("draft/")   # the snapshot spelling of a draft-registry input
+    if reason is None and draft.endswith(".md") and (draft.startswith("work/registry_draft/") or path in draft_prose):
+        reason = DRAFT_PROSE_UNCITABLE
+    if reason is None:
+        return ""
+    return f" ({reason}; cite the paper/, pkg/, report/ or work/ file the finding rests on)"
 
 
 def known_evidence(
@@ -1378,6 +1479,19 @@ def known_evidence(
         relative = audit_relative(root, path)
         pairs.add((relative, sha256_file(path)))
         paths.add(relative)
+    # 2.7.9: the stable audit context, which the prompt says to cite "by its `origin` value in
+    # input_manifest.json". Four attempts (A86, A88, A87, A89) were failed for
+    # citing package_manifest.json or the safe-evidence manifest
+    # (safe_paths[0]) with the very hash input_manifest.json lists. Each is bound at its live bytes,
+    # which is what every later reader re-hashes; the package manifest below, only when no name was
+    # masked. run.json and the policy snapshot change later and stay unbound (UNCITABLE_CONTEXT).
+    context = {"PAPER.txt": root / "PAPER.txt"}
+    if safe_paths and safe_paths[0].is_file():
+        context[audit_relative(root, safe_paths[0])] = safe_paths[0]
+    for relative, path in context.items():
+        if path.is_file() and not path.is_symlink():
+            pairs.add((relative, sha256_file(path)))
+            paths.add(relative)
     # The deposit's own manifest. package_manifest.json is in REQUIRED_AUDIT_CONTEXT, so the
     # coordinator is GIVEN these hashes and told the snapshot is exhaustive -- and was then failed
     # for citing one, because the bound set was assembled only from what the five roles happened to
@@ -1401,6 +1515,15 @@ def known_evidence(
             deposited = f"pkg/{relative}"
             pairs.add((deposited, digest))
             paths.add(deposited)
+        # The manifest itself (2.7.9), when the snapshot holds its own bytes. A masked projection
+        # (package_manifest_projection) has another hash: the model was given that one and never saw
+        # the file's, so a citation of the manifest stays refused at either hash. (The 2.6.8 masking
+        # shields the coordinator only: critic snapshots copy work/pkg_manifest.txt, which lists every
+        # deposit file unmasked, either way.)
+        raw = manifest_path.read_bytes()
+        if live_context_bytes(root, PACKAGE_MANIFEST, manifest_path) == raw:
+            pairs.add((PACKAGE_MANIFEST, sha256_bytes(raw)))
+            paths.add(PACKAGE_MANIFEST)
     # The model only ever sees the SNAPSHOT, whose spelling differs from the audit-relative keys
     # above: `report/01_reproduction.md` is mounted at `reports/01_reproduction.md`, and
     # `work/safe_evidence/privacy_scan.json` at `evidence/work/safe_evidence/...`. The runtime
@@ -1475,6 +1598,167 @@ def canonicalize_citations(
     return changed
 
 
+# 2.7.11: bookkeeping fields whose canonical value is already determined by the attempt's own inputs,
+# but which the model copies by hand. One slip in any of them failed the whole attempt (or stalled a
+# later step) although every scientific field was sound:
+#   - A61: tested-negative rows carried one report sha256 with a single transcribed
+#     character wrong; "verification disagrees with canonical telemetry" failed a whole
+#     attempt. The invocation_id fixes the record: invocations.jsonl names its output_artifact and
+#     output_sha256.
+#   - A62: rows also cited work/registry_draft/COORDINATOR_NOTES.md, which
+#     input_manifest.json lists (kind draft_registry) with its sha256 beside the draft rows; "unbound
+#     evidence hash" failed a whole attempt. Draft prose is not evidence.
+#   - A62 and A63 wrote environment_fingerprint=null on every row; approval refuses null
+#     later, and both operators back-filled it by hand. Every draft row carries the audit's one
+#     Phase-1 fingerprint.
+#   - A64: dependencies.finding_ids named a row by its id prefix ("COD-Fnn" for
+#     "COD-Fnn-<slug>"); generate_finding_artifacts.py refused them two steps later.
+# Each is restored from its canonical source before validation, only when that source is unambiguous
+# and only where 2.7.10 refused the value or a later step would (a citation 2.7.10 bound is never
+# dropped); anything else still fails exactly as before. validate_outputs does this only when given
+# the context: run_once passes it, and so does recover_misplaced_coordinator_outputs.py (it judges a
+# response the runner never saw, as the runner would); recover_coordinator.py does not (it re-judges
+# bytes the runner already stored, and may not rewrite them). Every change is listed in the attempt's
+# bookkeeping_normalization.json (ids, audit-relative paths and hashes only) and summarised as one
+# [note] on stderr.
+BOOKKEEPING_RECORD = "bookkeeping_normalization.json"
+PROSE_SOURCE = "input_manifest.json kind draft_registry: prose handed to the coordinator, not evidence"
+
+
+def bookkeeping_context(
+    draft_rows: list[dict[str, Any]], input_manifest_files: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """What normalize_bookkeeping may restore from: the draft-registry prose the coordinator was handed
+    (both spellings: the origin and the snapshot path it read), and the draft rows' one fingerprint."""
+    prose: set[str] = set()
+    for entry in input_manifest_files or []:
+        if not isinstance(entry, dict) or entry.get("kind") != "draft_registry":
+            continue
+        for key in ("origin", "snapshot"):
+            value = entry.get(key)
+            if isinstance(value, str) and value.endswith(".md"):
+                prose.add(value)
+    fingerprints = {
+        (row.get("dependencies") or {}).get("environment_fingerprint") for row in draft_rows
+    } - {None, ""}
+    return {
+        "draft_prose": sorted(prose),
+        "environment_fingerprint": next(iter(fingerprints)) if len(fingerprints) == 1 else None,
+    }
+
+
+def normalize_bookkeeping(
+    rows: list[dict[str, Any]],
+    completed_invocations: dict[str, dict[str, Any]],
+    context: dict[str, Any],
+    known_pairs: set[tuple[str, str]],
+    known_paths: set[str],
+) -> list[dict[str, Any]]:
+    """Restore determined bookkeeping fields in place; returns one entry per field changed."""
+    entries: list[dict[str, Any]] = []
+
+    def note(finding_id: str, field: str, action: str, previous: Any, value: Any, source: str) -> None:
+        entries.append({"finding_id": finding_id, "field": field, "action": action,
+                        "previous": previous, "value": value, "source": source})
+
+    prose = set(context.get("draft_prose") or ())
+    fingerprint = context.get("environment_fingerprint")
+    ids = {row["id"] for row in rows}
+    for row in rows:
+        finding_id = row["id"]
+        for index, verification in enumerate(row["verifications"]):
+            invocation = completed_invocations.get(verification["invocation_id"])
+            record = verification["evidence_record"]
+            canonical = (invocation or {}).get("output_sha256")
+            if (
+                invocation is not None and invocation.get("output_artifact") == record["path"]
+                and invocation.get("model_family") == verification["model_family"]
+                and isinstance(canonical, str) and HEX64.fullmatch(canonical)
+                and record["sha256"] != canonical
+            ):
+                note(finding_id, f"/verifications/{index}/evidence_record/sha256", "restored", record["sha256"],
+                     canonical, f"invocations.jsonl output_sha256 of {verification['invocation_id']}")
+                record["sha256"] = canonical
+        hashes = row["evidence"]["source_hashes"]
+        dependencies = row["dependencies"]
+        if any(item["path"] not in prose for item in hashes):   # a row citing only draft prose fails by name
+            kept = []
+            for index, item in enumerate(hashes):
+                if item["path"] in prose and (item["path"], item["sha256"]) not in known_pairs:
+                    note(finding_id, f"/evidence/source_hashes/{index}", "dropped", item["path"], None, PROSE_SOURCE)
+                else:
+                    kept.append(item)
+            if len(kept) < len(hashes):
+                row["evidence"]["source_hashes"] = kept
+            artifacts = dependencies["artifact_paths"]
+            stray = [index for index, artifact in enumerate(artifacts)
+                     if artifact in prose and artifact not in known_paths]
+            for index in stray:
+                note(finding_id, f"/dependencies/artifact_paths/{index}", "dropped", artifacts[index], None,
+                     PROSE_SOURCE)
+            if stray:
+                dependencies["artifact_paths"] = [artifact for index, artifact in enumerate(artifacts)
+                                                  if index not in stray]
+        if dependencies.get("environment_fingerprint") is None and fingerprint:
+            note(finding_id, "/dependencies/environment_fingerprint", "restored", None, fingerprint,
+                 "the draft registry rows' one environment_fingerprint")
+            dependencies["environment_fingerprint"] = fingerprint
+        finding_ids = dependencies.get("finding_ids")
+        if isinstance(finding_ids, list):
+            resolved: list[str] = []
+            changed = False
+            for index, dependency in enumerate(finding_ids):
+                target = dependency
+                if isinstance(dependency, str) and dependency not in ids:
+                    matches = [candidate for candidate in ids
+                               if candidate.startswith(dependency + "-") or candidate.startswith(dependency + "_")]
+                    if len(matches) == 1 and matches[0] != finding_id:
+                        target = matches[0]
+                if target == dependency:
+                    resolved.append(dependency)
+                    continue
+                changed = True
+                if target in resolved or target in finding_ids:
+                    note(finding_id, f"/dependencies/finding_ids/{index}", "dropped", dependency, None,
+                         f"resolves to {target}, which the row already depends on")
+                    continue
+                note(finding_id, f"/dependencies/finding_ids/{index}", "resolved", dependency, target,
+                     "the one finding id with this prefix")
+                resolved.append(target)
+            if changed:
+                dependencies["finding_ids"] = resolved
+    return entries
+
+
+def record_bookkeeping_normalization(
+    root: pathlib.Path, attempt: pathlib.Path, entries: list[dict[str, Any]],
+) -> None:
+    """The attempt's account of every field normalize_bookkeeping restored or dropped, and one stderr note."""
+    if not entries:
+        return
+    record = {
+        "schema_version": "1.0.0",
+        "output": "output.partial/findings.jsonl",
+        "rows": len({entry["finding_id"] for entry in entries}),
+        "fields": len(entries),
+        "entries": entries,
+    }
+    atomic_write(attempt / BOOKKEEPING_RECORD, pretty_bytes(record), 0o644)
+    counts: dict[str, int] = {}
+    for entry in entries:
+        field = entry["field"]
+        label = ("verification hash restored" if field.endswith("/sha256")
+                 else "fingerprint restored" if field.endswith("/environment_fingerprint")
+                 else "draft-prose citation dropped" if "/source_hashes/" in field
+                 else "draft-prose dependency dropped" if "/artifact_paths/" in field
+                 else f"dependency id {entry['action']}")
+        counts[label] = counts.get(label, 0) + 1
+    summary = ", ".join(f"{label} x{count}" for label, count in sorted(counts.items()))
+    print(f"  [note ] coordinator output: {len(entries)} bookkeeping field(s) in {record['rows']} row(s) set from "
+          f"their canonical source ({summary}); see {audit_relative(root, attempt / BOOKKEEPING_RECORD)}",
+          file=sys.stderr)
+
+
 def validate_outputs(
     output: pathlib.Path,
     draft_ids: set[str],
@@ -1482,7 +1766,12 @@ def validate_outputs(
     known_paths: set[str],
     invocation_rows: list[dict[str, Any]],
     canonical_paths: dict[str, str] | None = None,
+    bookkeeping: dict[str, Any] | None = None,
+    normalization_record: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """``bookkeeping`` (2.7.11, bookkeeping_context) restores determined bookkeeping fields before the checks
+    (normalize_bookkeeping); each change is appended to ``normalization_record``, even when a later check refuses
+    the response, because the stored findings.jsonl is rewritten either way. Without it the checks are 2.7.10's."""
     paths: dict[str, pathlib.Path] = {}
     texts: dict[str, str] = {}
     for name in OUTPUT_TARGETS:
@@ -1524,20 +1813,40 @@ def validate_outputs(
         if label not in adjudication:
             raise CoordinatorError(f"ADJUDICATION.md lacks required field {label}")
     findings = parse_findings(paths["findings.jsonl"])
-    if canonicalize_citations(findings, canonical_paths or {}):
+    completed_invocations = {
+        row["invocation_id"]: row for row in invocation_rows if row.get("status") == "completed"
+    }
+    rewritten = canonicalize_citations(findings, canonical_paths or {})
+    if bookkeeping is not None:
+        entries = normalize_bookkeeping(findings, completed_invocations, bookkeeping, known_pairs, known_paths)
+        if entries:
+            changed = {entry["finding_id"] for entry in entries}
+            for row in findings:   # parse_findings' two checks, again, on every row a restored value touched
+                if row["id"] not in changed:
+                    continue
+                errors = validate_json_schema.errors_for_value(row, FINDING_SCHEMA)
+                try:
+                    if errors:
+                        raise ValueError("; ".join(errors[:20]))
+                    validate_v2.validate_finding_row(row, f"findings[{row['id']}]")
+                except (ValueError, validate_v2.ValidationError) as exc:
+                    raise CoordinatorError(
+                        f"{row['id']}: bookkeeping normalization produced an invalid row: {exc}") from exc
+            if normalization_record is not None:
+                normalization_record.extend(entries)
+            rewritten = True
+    if rewritten:
         # Rewritten before promotion, so the stored artifact carries audit-relative paths and the
         # recorded output hash is taken over what was actually stored.
         paths["findings.jsonl"].write_text(
             "".join(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n" for row in findings),
             encoding="utf-8")
         texts["findings.jsonl"] = paths["findings.jsonl"].read_text(encoding="utf-8")
+    draft_prose = (bookkeeping or {}).get("draft_prose") or ()
     final_ids = {row["id"] for row in findings}
     missing_drafts = sorted(draft_ids - final_ids)
     if missing_drafts:
         raise CoordinatorError("coordinator dropped draft registry IDs: " + ", ".join(missing_drafts))
-    completed_invocations = {
-        row["invocation_id"]: row for row in invocation_rows if row.get("status") == "completed"
-    }
     for row in findings:
         finding_id = row["id"]
         disposition = row["ledger_disposition"]
@@ -1557,10 +1866,14 @@ def validate_outputs(
         for item in source_hashes:
             pair = (item["path"], item["sha256"])
             if pair not in known_pairs:
-                raise CoordinatorError(f"{finding_id} cites an unbound evidence hash: {pair[0]}")
+                raise CoordinatorError(
+                    f"{finding_id} cites an unbound evidence hash: {pair[0]}"
+                    + uncitable_context(pair[0], known_paths, draft_prose))
         for artifact in row["dependencies"]["artifact_paths"]:
             if artifact not in known_paths:
-                raise CoordinatorError(f"{finding_id} cites an unbound dependency: {artifact}")
+                raise CoordinatorError(
+                    f"{finding_id} cites an unbound dependency: {artifact}"
+                    + uncitable_context(artifact, known_paths, draft_prose))
         for verification in row["verifications"]:
             invocation = completed_invocations.get(verification["invocation_id"])
             if invocation is None:
@@ -1907,6 +2220,7 @@ def run_once(argv: list[str] | None = None) -> int:
     provider_duration_seconds: float | None = None
     provider_cost: dict[str, Any] | None = None
     usage_partitions: list[dict[str, Any]] = []
+    thinking = False   # 2.7.11: claude_thinking_tokens, from the audit's snapshot
     identity_artifact: str | None = None
     identity_artifact_sha256: str | None = None
     try:
@@ -1915,6 +2229,10 @@ def run_once(argv: list[str] | None = None) -> int:
         policy = record_invocation.load_policy_snapshot(root)
         record_invocation.validate_policy_binding(root)
         coordinator_policy = policy["models"]["coordinator"]
+        try:
+            thinking = claude_thinking_tokens.rule_of(policy)
+        except claude_thinking_tokens.RuleError as exc:
+            raise CoordinatorError(str(exc)) from exc
         # 2.7.0: exactly one of the packaged Claude routes, as this audit's snapshot froze it
         # (Sonnet 5 before 2.7.0, Sonnet 5.5 after; at max before 2.7.3, at xhigh after); never config/.
         if coordinator_policy not in claude_routes.LIVE_ROUTES:
@@ -1962,6 +2280,7 @@ def run_once(argv: list[str] | None = None) -> int:
         source = materialize_snapshot(root, attempt, specs, input_manifest)
         known_pairs, known_paths, canonical_paths = known_evidence(
             draft_rows, report_hashes, root, safe_paths, input_manifest.get("files"))
+        bookkeeping = bookkeeping_context(draft_rows, input_manifest.get("files"))
         prompt = build_prompt(audit_id, invocation_id, input_hash, coordinator_policy["requested_model"],
                               coordinator_policy["reasoning_effort"])
         prompt_hash = sha256_bytes(prompt.encode("utf-8"))
@@ -2055,8 +2374,8 @@ def run_once(argv: list[str] | None = None) -> int:
         primary, all_models, primary_count = observed_models(
             result, coordinator_policy["requested_model"],
         )
-        usage, cache_usage = extract_usage(result)
-        usage_partitions = usage_by_model(result)
+        usage, cache_usage = extract_usage(result, thinking=thinking)
+        usage_partitions = usage_by_model(result, thinking=thinking)
         turn_count = result_turn_count(result)
         provider_duration_seconds = result_provider_duration_seconds(result)
         provider_cost = result_provider_cost(result)
@@ -2112,10 +2431,12 @@ def run_once(argv: list[str] | None = None) -> int:
         artifacts: dict[str, dict[str, Any]] | None = None
         findings: list[dict[str, Any]] = []
         if not validation_errors:
+            normalization: list[dict[str, Any]] = []
             try:
+                # 2.7.11: the runner opts in to bookkeeping normalization (see BOOKKEEPING_RECORD).
                 artifacts, findings = validate_outputs(
                     output, draft_ids, known_pairs, known_paths, rows,
-                    canonical_paths
+                    canonical_paths, bookkeeping=bookkeeping, normalization_record=normalization,
                 )
             except CoordinatorError as exc:
                 validation_errors.append(str(exc))
@@ -2131,6 +2452,7 @@ def run_once(argv: list[str] | None = None) -> int:
                         "without another provider call: python3 scripts/"
                         "recover_misplaced_coordinator_outputs.py <audit-dir> --attempt <this attempt>"
                     )
+            record_bookkeeping_normalization(root, attempt, normalization)
         denials = result.get("permission_denials") if isinstance(result.get("permission_denials"), list) else []
         denial_summary = {
             "count": len(denials),
@@ -2333,8 +2655,8 @@ def run_once(argv: list[str] | None = None) -> int:
                     primary, all_models, _primary_count = observed_models(
                         parsed, coordinator_policy["requested_model"],
                     )
-                    usage, cache_usage = extract_usage(parsed)
-                    usage_partitions = usage_by_model(parsed)
+                    usage, cache_usage = extract_usage(parsed, thinking=thinking)
+                    usage_partitions = usage_by_model(parsed, thinking=thinking)
                     turn_count = result_turn_count(parsed)
                     provider_duration_seconds = result_provider_duration_seconds(parsed)
                     provider_cost = result_provider_cost(parsed)

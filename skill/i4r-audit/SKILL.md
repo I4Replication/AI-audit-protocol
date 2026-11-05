@@ -101,7 +101,8 @@ chmod -R a-w "$AUDIT_DIR/pkg"
 ```
 
 `new_audit.sh` refuses an ambiguous folder (two PDFs, two archives) and names the candidates; pass
-`--paper` / `--package` then. It then checks that this host's Codex CLI can use the critic model
+`--paper` / `--package` then. An archive with files beside it needs `--loose include` or
+`exclude`: ask the user. It then checks that this host's Codex CLI can use the critic model
 (`scripts/check_critic_access.py`, one minimal call) and starts nothing if not: report its reason to
 the user and stop; changing the host's Codex account is the user's decision, and no audit can be moved
 off the shipped critic model. It calls `setup_workspace.sh`, which reserves the paper and refuses a
@@ -111,7 +112,7 @@ copy whose `VERSION` differs from the tree's canonical one; resolve any warning 
 ```bash
 bash scripts/log_event.sh phase_start phase=intake at=<setup_workspace.sh start>   # all phases: INSTALL.md
 bash scripts/log_event.sh model role=<role> role_class=<class> round=<n-or-0> \
-  model_id=<served-id> model_family=<family> provider=<provider> source=observed
+  model_id=<served-id> model_family=<family> provider=<provider> source=observed  # declared: not echoed
 bash scripts/log_event.sh tokens role=<role> round=<n-or-0> total_tokens=<observed-total>
 bash scripts/log_event.sh human_effort notes='<who did what, or: unattended run>'
 ```
@@ -154,9 +155,9 @@ Run the packaged orchestrator; do not create audit-local launch or recovery scri
 python3 scripts/run_phase1.py "$AUDIT_DIR"
 ```
 
-It freezes the raw inputs and deterministic aggregate evidence under one monotonic 60-second
-pre-dispatch deadline, runs a provider-free test of the exact sandbox/read/write/promotion paths,
-then reuses or makes one bounded capability
+It freezes the raw inputs and deterministic aggregate evidence under one monotonic pre-dispatch
+deadline (60 s, more for a large deposit since 2.7.9), runs a provider-free test of the exact
+sandbox/read/write/promotion paths, then reuses or makes one bounded capability
 probe before dispatching all five roles concurrently. A failed preflight stops before any auditor
 inference. Attempts use no network, plugins, or cross-attempt state, have a 90-minute
 timeout (45 in older audits), a $15 cap, immutable role packets and raw read-only access.
@@ -312,6 +313,7 @@ python3 scripts/integrate_round.py "$AUDIT_DIR" --round 1 apply --decisions "$AU
 # 3. Edit the prose and retired_claims.txt, then approve, project, approve, project. Withdrew a finding? INSTALL.md, Renumbering.
 python3 scripts/approve_settled.py "$AUDIT_DIR"; python3 scripts/generate_finding_artifacts.py "$AUDIT_DIR" --apply
 python3 scripts/approve_settled.py "$AUDIT_DIR"; python3 scripts/generate_finding_artifacts.py "$AUDIT_DIR" --apply
+python3 scripts/check_abstract_end.py "$AUDIT_DIR"   # exit 1: reword the Abstract; 3: if cheap
 # 4. Consistency; capture its exit with $?, never PIPESTATUS.
 bash scripts/check_consistency.sh "$AUDIT_DIR/report/REPORT_final.md" "$AUDIT_DIR/report/retired_claims.txt" \
   > "$AUDIT_DIR/work/consistency_round1.log" 2>&1; RC=$?
@@ -467,7 +469,8 @@ Before release:
    replaces Appendix A and writes one ordered body
    cross-reference `[claim N]` entry per included finding, exactly matching `comment.json`; do not
    hand-key duplicate inline tags.
-2. Run `check_consistency.sh` and resolve every failure.
+2. Run `check_consistency.sh` and resolve every failure. Its page WARN counts back matter;
+   never trim for it.
 3. Build the DOCX/PDF (it needs `report/front_matter.md` and `report/captions.txt`; see
    `reference/report_structure.md`) and inspect rendered pages, especially page 1 and tables.
 4. Complete the non-finding fields of `comment.json` against `reference/SCHEME.md`; finding rows come
@@ -477,9 +480,11 @@ Before release:
    Judgement and unverifiable claims must say why; they are not silent omissions. There is no
    `ALLOW_NO_VERIFICATION` waiver.
 6. Build the claims script from executable snippets or verbatim author-code ranges. Claims verified
-   by inspection remain in the explicit no-code tail.
+   by inspection remain in the explicit no-code tail. It must run on its own, as a replicator runs it
+   (`bash scripts/check_claims_script.sh "$AUDIT_DIR"`; 2.7.10): a snippet may read the deposit and the
+   article text, never the audit's own working files.
 7. Stage into a clean release directory and run its disclosure/exclusion gates. Staging requires the
-   verification notebook, status, summary, and manifest.
+   verification notebook, status, summary, and manifest, and re-runs the claims-script check.
 8. Finalize the metadata pair, then publish the bound artefact set plus the release manifest.
 
 ```bash
@@ -487,7 +492,7 @@ Before release:
 # twice, make_settled.sh, re-log settled, rebuild the last packet and gates (INSTALL.md order)
 python3 scripts/generate_finding_artifacts.py "$AUDIT_DIR" --apply
 bash scripts/log_event.sh phase_end phase=critique at=<final-round end>; bash scripts/log_event.sh phase_start phase=release
-bash scripts/build_docx.sh "$AUDIT_DIR" <output-name>
+python3 scripts/build_document.py "$AUDIT_DIR" <output-name>
 bash scripts/make_verification_notebook.sh "$AUDIT_DIR"
 bash scripts/run_verification.sh "$AUDIT_DIR"
 bash scripts/make_claims_script.sh "$AUDIT_DIR"

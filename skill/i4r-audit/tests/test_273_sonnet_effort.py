@@ -198,10 +198,16 @@ class ShippedRoute(unittest.TestCase):
                 self.assertEqual(entry["reasoning_effort"], "max")
                 entry["reasoning_effort"] = "xhigh"
             # later releases' own leaves (2.7.4: the critique ceiling and the claim-change rule; 2.7.5: the
-            # critic-route lock) are not 2.7.3's
+            # critic-route lock; 2.7.9: the pre-dispatch rule and its 600 s preflight ceiling; 2.7.11: the critic
+            # snapshot-evidence rule, the reasoning-token parse and the claims-script harness) are not 2.7.3's
             policy["critique"].pop("provider_timeout_seconds", None)
             policy["critique"]["later_rounds"]["routing_manifest"].pop("claim_change_rule", None)
             policy["critique"].pop("critic_route_lock", None)
+            policy["phase_1"]["runtime"].pop("pre_dispatch_deadline_scaling", None)
+            policy["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60
+            policy["critique"].pop("snapshot_evidence", None)
+            policy["metadata"].pop("claude_reasoning_tokens", None)
+            policy["publication"].pop("claims_script_harness", None)
             self.assertEqual(old, policy)
 
 
@@ -591,10 +597,15 @@ class LegacyRoutesAreThe272Bytes(route_tests.RouteFixture):
         again = self.run_tree(self.base_tree, "run_phase1.py", root)
         self.assertEqual(again.returncode, 0, again.stderr + again.stdout)
         self.assertEqual(len(self.starts_in(root)), 6, "2.7.2 re-dispatches nothing this tree recorded")
-        # Negative control: 2.7.2 refuses a new (xhigh) audit before any provider call; this tree admits it.
+        # Negative control: 2.7.2 refuses a new (xhigh) audit before any provider call; this tree admits it. Without
+        # 2.7.9's pre-dispatch rule and its 600 s ceiling, which 2.7.2's runtime check would refuse first: the route
+        # stays the one thing 2.7.2 does not run.
+        xhigh = policy_at(XHIGH)
+        xhigh["phase_1"]["runtime"].pop("pre_dispatch_deadline_scaling", None)
+        xhigh["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60
         for tree, code in ((self.base_tree, 1), (SKILL, 3)):
             with self.subTest(tree=str(tree)):
-                new = route_tests.minimal_audit(self.base, f"new-{code}", policy_at(XHIGH))
+                new = route_tests.minimal_audit(self.base, f"new-{code}", xhigh)
                 probe = self.run_tree(tree, "run_phase1.py", new, "--probe-only")
                 self.assertEqual(probe.returncode, code, probe.stderr + probe.stdout)
                 if code == 1:
@@ -767,7 +778,7 @@ class DriftPinsXhigh(unittest.TestCase):
         module.check_claude_routes(errors)
         self.assertEqual(errors, [])
         errors = []
-        self.assertEqual(module.check_negative_controls(shipped_policy(), errors), 20)
+        self.assertEqual(module.check_negative_controls(shipped_policy(), errors), 22)
         self.assertEqual(errors, [])
 
     def test_each_new_control_is_rejected_by_the_pins_it_names_and_only_those(self) -> None:
@@ -821,7 +832,7 @@ class DriftPinsXhigh(unittest.TestCase):
             tree = self.copied_tree(pathlib.Path(base))
             result = self.run_checker(tree)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn("twenty planted drifts were rejected", result.stdout)
+            self.assertIn("twenty-two planted drifts were rejected", result.stdout)
             policy_path = tree / "config/pipeline-policy-v2.json"
             original = policy_path.read_text(encoding="utf-8")
             policy_path.write_text(original.replace('"reasoning_effort": "xhigh"', '"reasoning_effort": "max"'),

@@ -31,6 +31,20 @@
    "sha256": "8f854d33e2e1d07f3b7db43fe0d3d2687c30f01163da08c7fe1d3fdde05cb2b3",
    "source_path": null,
    "note": "baseline's own: the comment.json finding subset it fills"
+  },
+  "verification_guide.md": {
+   "sha256": "996acb197d22c45e70284abcbc81db79e0f1fec4f7830b498ef7b14b69647001",
+   "bytes": 10968,
+   "source_path": "reference/verification_guide.md",
+   "note": "i4r-audit 2.7.9 (copied verbatim on 2026-10-29, baseline 1.2.0; this public copy rewords identifying examples, as skill/i4r-audit's does): the one-check-per-finding contract"
+  }
+ },
+ "scripts": {
+  "make_claims_script.sh": {
+   "sha256": "d66d2c2720fa28afb109a56504046642a5ddcdbf9e603ae1956f3fca57400131",
+   "bytes": 16410,
+   "source_path": "scripts/make_claims_script.sh",
+   "note": "i4r-audit 2.7.9, copied verbatim on 2026-10-29 (baseline 1.2.0; this public copy rewords one source comment, as skill/i4r-audit's does): the pipeline's own claims-script builder"
   }
  }
 }

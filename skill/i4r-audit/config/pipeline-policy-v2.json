@@ -72,6 +72,11 @@
         "orchestrator": "scripts/run_phase1.py",
         "timeout_seconds": 5400,
         "pre_dispatch_deadline_seconds": 60,
+        "pre_dispatch_deadline_scaling": {
+          "package_bytes_per_second": 10000000,
+          "package_files_per_second": 5,
+          "max_seconds": 600
+        },
         "max_provider_budget_usd": 15,
       "probe_max_normalized_tokens": 350000,
       "maximum_pre_inference_retryable_rejections_per_role": 2,
@@ -104,7 +109,7 @@
     "cross_attempt_state": false,
     "provider_free_preflight": {
       "required_before_inference": true,
-      "maximum_seconds": 60,
+      "maximum_seconds": 600,
       "checks": [
         "exact_sandbox_and_tool_policy",
         "source_and_evidence_readability",
@@ -223,6 +228,7 @@
     },
     "max_attempts_per_role_total": 3,
     "provider_timeout_seconds": 5400,
+    "snapshot_evidence": "cited_plus_deposit_1",
     "critic_route_lock": {
       "model": "gpt-6.1-sol",
       "since": "2.7.5"
@@ -525,6 +531,7 @@
       "expires_at"
     ],
     "honest_unknown_usage": true,
+    "claude_reasoning_tokens": "thinking_tokens",
     "requested_and_served_model_separate": true,
     "elapsed_components": [
       "audit_elapsed",
@@ -564,7 +571,8 @@
     ],
     "manifest": "release-manifest.json",
     "total_file_count_without_docx": 7,
-    "total_file_count_with_docx": 8
+    "total_file_count_with_docx": 8,
+    "claims_script_harness": "portable_1"
   },
   "document": {
     "abstract_max_words": 250,

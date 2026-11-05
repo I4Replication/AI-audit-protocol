@@ -268,14 +268,83 @@ def configured_model_route(envelope: dict[str, Any], route: str) -> tuple[str, s
     return model, effort
 
 
+def _event_row(line: str) -> Any:
+    try:
+        return json.loads(line)
+    except (ValueError, RecursionError):   # not JSON, or nested too deep to parse
+        return None
+
+
+def provider_diagnostic_row(row: dict[str, Any]) -> bool:
+    """Whether a ``--json`` event row is a diagnosis rather than session transcript.
+
+    The ``error`` and ``turn.failed`` rows (the rows provider_error_message in run_critique.sh
+    reads), and Codex's own warnings: an ``item.completed`` whose item has type ``error``. In the
+    outages of 2026-09-03 and 2026-10-13 the warning "Falling back from
+    WebSockets to HTTPS transport." was the only transport signal Codex wrote; the error rows said
+    "unexpected status 404 Not Found" and "workspace routing discovery failed".
+    """
+    if row.get("type") in ("error", "turn.failed"):
+        return True
+    item = row.get("item")
+    return row.get("type") == "item.completed" and isinstance(item, dict) and item.get("type") == "error"
+
+
+def provider_diagnostics(text: str) -> str:
+    """``text`` without the Codex session transcript a failure.log also carries.
+
+    failure.log is validation.txt, stderr and the first 200 ``--json`` event rows, concatenated.
+    The rows are the whole session: every command a critic ran, with its output. On audit A80
+    a critic had printed PIPELINE_POLICY.json, whose non_retryable_error_classes made the word
+    "authentication" match, and a provider at capacity was booked a permanent authentication
+    failure. A JSON object row of an event type that provider_diagnostic_row does not keep is
+    dropped; every other line is kept.
+    """
+    kept = []
+    for line in text.split("\n"):
+        row = _event_row(line)
+        if isinstance(row, dict) and isinstance(row.get("type"), str) and not provider_diagnostic_row(row):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def provider_terminal_message(text: str) -> str | None:
+    """The provider's last word: the message of the last ``turn.failed`` row, else of the last ``error`` row."""
+    failed = error = None
+    for line in text.split("\n"):
+        row = _event_row(line)
+        if not isinstance(row, dict):
+            continue
+        if row.get("type") == "turn.failed":
+            detail = row.get("error")
+            if isinstance(detail, dict) and isinstance(detail.get("message"), str):
+                failed = detail["message"]
+        elif row.get("type") == "error" and isinstance(row.get("message"), str):
+            error = row["message"]
+    return failed if failed is not None else error
+
+
 def provider_failure_classification(text: str) -> tuple[str, str]:
     """Return one policy-typed failure/retry decision from provider diagnostics.
 
     Bare timeout and vague retry wording are deliberately permanent. A retry requires an explicit
     transport condition, throttling/429, or provider HTTP 5xx classification.
+
+    The provider's last word (provider_terminal_message) is classified first and decides whenever a
+    rule other than the bare timeout matches it: Codex's non-terminal "Reconnecting... n/5 (...)"
+    rows and stderr lines must not outrank the refusal that ended the session. Only there does a
+    model at capacity count. Otherwise the rules of 2.7.8 run over all the diagnostics, the first
+    match winning.
     """
     if not isinstance(text, str):
         raise ValueError("provider failure diagnostics must be text")
+    text = provider_diagnostics(text)
+    # A model at capacity is throttling: "Selected model is at capacity. Please try a different
+    # model." was booked permanent in six audits (A80 and A75 among them),
+    # stopping a role with its retry budget unspent. A reconnect that mentions an overloaded server
+    # does not make the refusal after it retryable.
+    capacity = ("throttling", r"\bat capacity\b|\b(?:server_is_)?overloaded(?:_error)?\b|\bserver is busy\b")
     rules = (
         ("deterministic_schema", r"invalid[_ ]json[_ ]schema|output schema|response[_ ]format[^\n]*schema|schema[^\n]*(?:invalid|mismatch)"),
         ("quota", r"out of credits|insufficient[_ ]quota|quota exceeded"),
@@ -298,13 +367,21 @@ def provider_failure_classification(text: str) -> tuple[str, str]:
         ),
         ("timeout", r"timed? ?out|timeout"),
     )
-    for error_class, pattern in rules:
-        if re.search(pattern, text, re.I):
-            failure_class = (
-                "transient" if error_class in RETRYABLE_PROVIDER_ERROR_CLASSES else "permanent"
-            )
-            return failure_class, error_class
-    return "permanent", "permanent"
+
+    def first_match(diagnostics: str, ordered: tuple[tuple[str, str], ...]) -> str | None:
+        for error_class, pattern in ordered:
+            if re.search(pattern, diagnostics, re.I):
+                return error_class
+        return None
+
+    terminal = provider_terminal_message(text)
+    error_class = first_match(terminal, (capacity, *rules)) if terminal is not None else None
+    if error_class in (None, "timeout"):   # no cause named, or only a bare timeout: read everything
+        error_class = first_match(text, rules)
+    if error_class is None:
+        return "permanent", "permanent"
+    failure_class = "transient" if error_class in RETRYABLE_PROVIDER_ERROR_CLASSES else "permanent"
+    return failure_class, error_class
 
 
 def hash_tree(root: pathlib.Path, extra: list[str]) -> str:
@@ -1100,6 +1177,163 @@ def render_template(template: str, context: pathlib.Path, round_number: int) -> 
     return template.replace("${ROUND}", str(round_number))
 
 
+# 2.7.11: critic snapshots of a NEW audit also carry the verification snippets the registry names and the deposit's
+# uncited files (scripts/snapshot_evidence_rules.py has the rule, its bounds and the incidents behind it).
+def add_rule_evidence(workspace: pathlib.Path, source: pathlib.Path,
+                      frozen_evidence: dict[str, pathlib.Path]) -> None:
+    """Add to source/evidence what the audit's frozen critique.snapshot_evidence rule carries beyond the cited files.
+
+    No leaf (every audit initialised before 2.7.11) is the legacy rule: this returns before reading or writing
+    anything, so the source tree keeps its 2.7.10 bytes and an in-flight round finds its own snapshot at the same
+    content address. Under the deposit rule every candidate passes the coordinator's provider-safety screens first
+    (run_coordinator: the 2.6.8 participant-code name rule with the deposit's exemptions, the private-path pattern,
+    and for a snippet the content screen of validate_provider_visible_string); one that fails is withheld, and a
+    withheld name that fails is never written anywhere in the snapshot."""
+    import snapshot_evidence_rules as rules
+    rule = rules.frozen_rule(workspace)
+    if rule != rules.DEPOSIT_RULE:
+        return
+    import provider_safety
+    import run_coordinator
+    exemptions: list[frozenset[str]] = []
+
+    def exempt() -> frozenset[str]:
+        # the deposit's own variable names (provider_safety.deposit_exemptions), scanned once and only when needed
+        if not exemptions:
+            exemptions.append(run_coordinator.deposit_exemptions(workspace))
+        return exemptions[0]
+
+    def code_shaped(segment: str) -> bool:
+        return (provider_safety.first_participant_code(segment) is not None
+                and provider_safety.first_participant_code(segment, exempt()) is not None)
+
+    def name_safe(relative: str) -> bool:
+        if run_coordinator.LOCAL_PATH.search(rules.EVIDENCE_PREFIX + relative):
+            return False
+        return not any(code_shaped(segment) for segment in relative.split("/"))
+
+    # command_snapshot copied work/pkg_manifest.txt into the context unmasked, as every snapshot has since 2.7.8: under
+    # this rule the copy is masked (snapshot_evidence_rules.masked_listing), so no name this rule withholds is written
+    listing = source / "context" / rules.PACKAGE_LISTING
+    if listing.is_file() and not listing.is_symlink():
+        text = listing.read_bytes().decode("utf-8", "surrogateescape")
+        masked = rules.masked_listing(text, lambda path: name_safe("pkg/" + path), code_shaped)
+        if masked != text:
+            listing.write_bytes(masked.encode("utf-8", "surrogateescape"))
+
+    def content_safe(data: bytes) -> bool:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+        if run_coordinator.LOCAL_PATH.search(text):
+            return False
+        try:
+            run_coordinator.validate_provider_visible_string(text, "verification snippet")
+            return True
+        except run_coordinator.CoordinatorError:
+            pass
+        try:   # a code-shaped token passes only as one of the deposit's own variable names
+            run_coordinator.validate_provider_visible_string(text, "verification snippet", exempt())
+            return True
+        except run_coordinator.CoordinatorError:
+            return False
+
+    def nameless(path: pathlib.Path | None, reason: str) -> dict[str, Any]:
+        regular = path is not None and not path.is_symlink() and path.is_file()
+        return {"path": None, "reason": reason, "sha256": sha_file(path) if regular else None,
+                "size": path.stat().st_size if regular else None}
+
+    rows: list[Any] = []
+    registry = workspace / "work/findings.jsonl"
+    if registry.is_file():
+        rows = [json.loads(line) for line in registry.read_text().splitlines() if line.strip()]
+    withheld: list[dict[str, Any]] = []
+    snippets: list[dict[str, Any]] = []
+    snippet_bytes: dict[str, bytes] = {}
+    seen: set[str] = set()
+    named, preludes = rules.snippet_paths(row for row in rows if isinstance(row, dict))
+    for raw in named + preludes:
+        try:
+            relative = safe_relative_path(raw, "verification snippet").as_posix()
+        except ValueError:
+            if raw in named:   # never echoed: it may be an absolute private path
+                withheld.append(nameless(None, rules.INVALID_PATH))
+            continue
+        if relative in frozen_evidence or relative in seen:
+            continue
+        seen.add(relative)
+        candidate = workspace / relative
+        if raw in preludes and not (candidate.exists() or candidate.is_symlink()):
+            continue   # a prelude is optional
+        if not name_safe(relative):
+            withheld.append(nameless(candidate, rules.NAME_NOT_PROVIDER_SAFE))
+            continue
+        try:
+            artifact = regular_without_symlinks(workspace, relative, "verification snippet")
+        except ValueError:
+            withheld.append({"path": relative, "sha256": None, "size": None, "reason": rules.NOT_A_REGULAR_FILE})
+            continue
+        if artifact.stat().st_size > rules.MAX_FILE_BYTES:
+            snippets.append({"path": relative, "size": artifact.stat().st_size, "sha256": sha_file(artifact)})
+            continue
+        data = artifact.read_bytes()
+        row = {"path": relative, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        if not content_safe(data):
+            withheld.append({**row, "reason": rules.CONTENT_NOT_PROVIDER_SAFE})
+            continue
+        snippets.append(row)
+        snippet_bytes[relative] = data
+
+    # intake's manifest of the deposit (local_execution.intake_manifest); an audit without one (a paper-only audit,
+    # a runtime fixture) has no deposit to add
+    manifest_path = workspace / "package_manifest.json"
+    if manifest_path.is_symlink():
+        raise ValueError("package_manifest.json must be a regular file, not a symlink")
+    deposit: list[dict[str, Any]] = []
+    if manifest_path.is_file():
+        taken = set(frozen_evidence) | seen
+        for row in rules.deposit_candidates(load(manifest_path), taken):
+            try:
+                relative = safe_relative_path(row["path"], "deposited file").as_posix()
+            except ValueError:
+                relative = None
+            if relative != row["path"]:   # the message never echoes the entry
+                raise ValueError("package_manifest.json has a file entry that is not a normalized relative path")
+            if not name_safe(relative):
+                withheld.append({"path": None, "sha256": row["sha256"], "size": row["size"],
+                                 "reason": rules.NAME_NOT_PROVIDER_SAFE})
+                continue
+            try:
+                regular_without_symlinks(workspace, relative, "deposited file")
+            except ValueError:
+                withheld.append({**row, "reason": rules.NOT_A_REGULAR_FILE})
+                continue
+            deposit.append(row)
+
+    # every other inventory row (command_snapshot's allowed_evidence) and its path, the withheld list's included
+    others = ["source/REPORT_TO_REVIEW.md", "source/context/" + rules.WITHHELD_NAME]
+    others += ["source/" + path.relative_to(source).as_posix() for path in (source / "context").rglob("*")
+               if path.is_file() and path.name != "EVIDENCE_HASHES.json"]
+    if (source / "evidence").is_dir():
+        others += ["source/" + path.relative_to(source).as_posix()
+                   for path in (source / "evidence").rglob("*") if path.is_file()]
+    carried, bounded = rules.plan_additions(snippets, deposit, len(others), sum(len(path) for path in others))
+    withheld.extend(bounded)
+    for row in carried:
+        destination = source / "evidence" / row["path"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if row["path"] in snippet_bytes:
+            destination.write_bytes(snippet_bytes[row["path"]])
+            continue
+        shutil.copyfile(regular_without_symlinks(workspace, row["path"], "deposited file"), destination)
+        # re-hashed on the copy: a deposited file that changed since intake stops the snapshot, as a cited one does
+        if sha_file(destination) != row["sha256"]:
+            raise ValueError(f"deposited file changed since intake: {row['path']}")
+    if withheld:   # only when something was left out: a critic can tell a withheld file from a missing one
+        atomic_json(source / "context" / rules.WITHHELD_NAME, rules.withheld_document(rule, withheld))
+
+
 def command_snapshot(args: argparse.Namespace) -> int:
     workspace = pathlib.Path(args.workspace).resolve()
     report = pathlib.Path(args.report).resolve()
@@ -1225,6 +1459,9 @@ def command_snapshot(args: argparse.Namespace) -> int:
             else:
                 settled_lines.append("No settled facts are referenced by this delta review.")
             (source / "context/SETTLED.md").write_text("\n".join(settled_lines) + "\n")
+
+        # 2.7.11: what the audit's frozen snapshot-evidence rule adds (a no-op for every audit initialised earlier)
+        add_rule_evidence(workspace, source, frozen_evidence)
 
         routing = load(source / "ROUTING.json")
         if routing.get("claim_assignment_mode") not in {
@@ -3168,6 +3405,18 @@ def command_classify_provider_failure(args: argparse.Namespace) -> int:
         raise ValueError("policy non_retryable_error_classes omits a required typed stop class")
     log = pathlib.Path(args.log)
     text = log.read_text(errors="replace") if log.is_file() else ""
+    # The log keeps the first 200 rows of the events.jsonl that every caller in run_critique.sh
+    # writes beside it, and the provider's refusal ends the session: a critic that ran about 100
+    # commands has it past row 200. Its diagnostic rows are read from the file itself.
+    events = log.parent / "events.jsonl"
+    if not events.is_symlink() and events.is_file():
+        try:
+            lines = events.read_text(errors="replace").split("\n")
+        except OSError:
+            lines = []
+        diagnostic = [line for line in lines
+                      if isinstance(row := _event_row(line), dict) and provider_diagnostic_row(row)]
+        text = "\n".join([text, *diagnostic])
     failure_class, error_class = provider_failure_classification(text)
     print(f"{failure_class} {error_class}")
     return 0
@@ -3275,7 +3524,13 @@ def command_round_authorization(args: argparse.Namespace) -> int:
         atomic_json(args.output, {"metadata_version": "legacy", "state": "not_applicable"})
         return 0
     import lifecycle_journal
+    import snapshot_evidence_rules
     policy_sha = sha_file(args.policy)
+    data_classes = ["report", "canonical_findings", "deterministic_evidence", "package_metadata"]
+    # 2.7.11: a new audit's snapshots also carry uncited deposit files and the verification snippets; the plan the
+    # authorization binds says so (an older audit's plan keeps its bytes)
+    if snapshot_evidence_rules.frozen_rule(root) == snapshot_evidence_rules.DEPOSIT_RULE:
+        data_classes += ["uncited_deposit_files", "verification_snippets"]
     plan = {
         "purpose": f"I4R adversarial critique round {args.round}",
         "provider": "openai",
@@ -3283,9 +3538,7 @@ def command_round_authorization(args: argparse.Namespace) -> int:
             f"critics={args.model}/{args.effort};roles={args.roles};"
             f"targeted_adjudicator={args.adjudicator_model}/{args.adjudicator_effort}"
         ),
-        "data_classes": [
-            "report", "canonical_findings", "deterministic_evidence", "package_metadata",
-        ],
+        "data_classes": data_classes,
         "policy_sha256": policy_sha,
         "input_bindings": {
             "snapshot_sha256": args.input_sha,
@@ -3408,6 +3661,102 @@ def command_round_transition(args: argparse.Namespace) -> int:
         root, "round_integrated", payload, at=args.at, source="run_critique.sh",
     )
     print(json.dumps({"round": args.round, "state": "integrated", "event": event}, sort_keys=True))
+    return 0
+
+
+# 2.7.11: a driver run that stops without the critic quorum (a quorum failure, an interrupt, a packet or snapshot
+# fault after dispatch) used to journal nothing. The round stayed `running` in run.json, so status.py, the operator's
+# deploy check and anyone reading run.json saw a driver at work until a human logged what happened (audit
+# A59: a round lost all its critics and looked open for hours). The driver now journals a
+# run-level pause, the same event Phase 1 journals when it stops (run_phase1.journal_pause), and the next run of the
+# round ends it before it dispatches. The round's own state machine is untouched: it stays `running`, so a rerun
+# reserves, dispatches and reaches quorum exactly as before.
+CRITIQUE_STOP_REASON = "critique_round_failed"
+
+
+def _open_critique_stop(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The latest critique_round_failed pause_start that no pause_end of that reason has closed."""
+    open_stop = None
+    for event in events:
+        payload = event.get("payload") or {}
+        if payload.get("reason") != CRITIQUE_STOP_REASON:
+            continue
+        if event.get("type") == "pause_start":
+            open_stop = event
+        elif event.get("type") == "pause_end":
+            open_stop = None
+    return open_stop
+
+
+def command_round_stopped(args: argparse.Namespace) -> int:
+    """Journal that this driver run of a dispatched round stopped without its quorum (no-op otherwise)."""
+    root = _metadata_21_root(args.workspace)
+    if root is None:
+        print(json.dumps({"metadata_version": "legacy", "journaled": False}))
+        return 0
+    import lifecycle_journal
+    status_path = pathlib.Path(args.status).resolve()
+    status = load(status_path)
+    if (status.get("outcome") != "failed" or status.get("round") != args.round
+            or status.get("invocation_id") != args.invocation):
+        print(json.dumps({"journaled": False, "why": "not a failed run of this round"}))
+        return 0
+    with lifecycle_journal.journal_lock(root):
+        events = lifecycle_journal.load_events(root)
+        state = lifecycle_journal._round_state_from_events(events, args.round)
+        run_status = lifecycle_journal.project_run(events).get("status")
+        # Only a round some run dispatched and that has not reached quorum, on a run nobody has paused already:
+        # a refused rerun of a finished round, a pause for authorization and a second stop journal nothing.
+        if state != "running" or run_status != "running" or _open_critique_stop(events) is not None:
+            print(json.dumps({"journaled": False, "state": state, "status": run_status}))
+            return 0
+        payload = {
+            "reason": CRITIQUE_STOP_REASON, "phase": "critique", "round": args.round,
+            "driver_invocation": args.invocation,
+            "quorum_met": status.get("quorum_met") is True,
+            "completed_roles": [f"critic_{role}" for role in status.get("completed_roles") or []],
+            "failed_roles": [f"critic_{role}" for role in status.get("failed_roles") or []],
+            "exit_code": status.get("exit_code"),
+            "receipt": status_path.relative_to(root).as_posix(),
+            "receipt_sha256": sha_file(status_path),
+        }
+        events = lifecycle_journal._append_locked(root, [{
+            "type": "pause_start", "payload": payload, "source": "run_critique.sh",
+        }])
+        lifecycle_journal.project_all_locked(root, events)
+    print(json.dumps({"journaled": True, "event": events[-1]}, sort_keys=True))
+    return 0
+
+
+def command_round_resumed(args: argparse.Namespace) -> int:
+    """End an open critique_round_failed pause as this run of the round starts dispatching (no-op otherwise)."""
+    root = _metadata_21_root(args.workspace)
+    if root is None:
+        print(json.dumps({"metadata_version": "legacy", "journaled": False}))
+        return 0
+    import lifecycle_journal
+    with lifecycle_journal.journal_lock(root):
+        events = lifecycle_journal.load_events(root)
+        stop = _open_critique_stop(events)
+        if stop is None:
+            print(json.dumps({"journaled": False}))
+            return 0
+        run = lifecycle_journal.project_run(events)
+        state = lifecycle_journal._round_state_from_events(events, args.round)
+        if run.get("status") == "paused" and run.get("pause_reason") != CRITIQUE_STOP_REASON:
+            # another pause (an operator's) took over since: leave it, and the stop, as they are
+            print(json.dumps({"journaled": False, "status": "paused", "pause_reason": run.get("pause_reason")}))
+            return 0
+        resume_status = run.get("status") if run.get("status") != "paused" else (
+            "running" if state == "running" else "ready")
+        events = lifecycle_journal._append_locked(root, [{
+            "type": "pause_end", "source": "run_critique.sh",
+            "payload": {"reason": CRITIQUE_STOP_REASON, "phase": "critique", "round": args.round,
+                        "driver_invocation": args.invocation, "resume_status": resume_status,
+                        "stopped_by": (stop.get("payload") or {}).get("driver_invocation")},
+        }])
+        lifecycle_journal.project_all_locked(root, events)
+    print(json.dumps({"journaled": True, "event": events[-1]}, sort_keys=True))
     return 0
 
 
@@ -4251,6 +4600,19 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--at", required=True)
     p.add_argument("--report-sha256", default="")
     p.set_defaults(func=command_round_transition)
+
+    p = subs.add_parser("round-stopped")
+    p.add_argument("--workspace", required=True)
+    p.add_argument("--round", type=int, required=True)
+    p.add_argument("--invocation", required=True)
+    p.add_argument("--status", required=True)
+    p.set_defaults(func=command_round_stopped)
+
+    p = subs.add_parser("round-resumed")
+    p.add_argument("--workspace", required=True)
+    p.add_argument("--round", type=int, required=True)
+    p.add_argument("--invocation", required=True)
+    p.set_defaults(func=command_round_resumed)
 
     p = subs.add_parser("status")
     p.add_argument("--local-status", required=True)

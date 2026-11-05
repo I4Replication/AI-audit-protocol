@@ -247,37 +247,49 @@ class WaiterDefaultsToTwiceTheCeiling(unittest.TestCase):
 class DriverDeadlineIsTheFrozenCeiling(unittest.TestCase):
     """M16: every Codex call of a new audit is bounded by the frozen 5,400 s, not the raw knob's 2,700 default.
 
-    A `date +%s` shim jumps the clock 3,000 s once the first provider call is in flight (the fake Codex touches a
-    marker one second after it starts, then finishes two seconds later): a 2,700 s deadline stops that call, the
-    frozen 5,400 s one does not."""
+    Once the first provider call is in flight (the fake Codex touches a marker one second after it starts, then
+    finishes 14 seconds later) a `date +%s` shim adds 55 s to the clock at every read, about 3,000 s over the call.
+    2.7.11: the clock runs fast instead of jumping, because a gap of more than 60 s between two 0.25 s polls is time
+    the host slept and no longer counts against the ceiling (tests/test_2711_sleep_ceiling.py). A 2,700 s deadline
+    stops that call, the frozen 5,400 s one does not."""
+
+    def drive(self, work: pathlib.Path, name: str, **env: str) -> str:
+        import test_269_round_cap_amendment as cap
+        audit = cap.write_audit(work / name, cap=7, audit_id=f"{name}-deadline", protocol="2.6.9")
+        shim = work / f"bin-{name}"
+        shim.mkdir()
+        marker, reads = work / f"{name}-clock-runs", work / f"{name}-clock-reads"
+        real_date = shutil.which("date")
+        (shim / "date").write_text(
+            "#!/bin/bash\n"
+            f'if [ "$1" = "+%s" ] && [ -e "{marker}" ]; then\n'
+            f'  n=$(( $(cat "{reads}" 2>/dev/null || echo 0) + 1 )); echo "$n" > "{reads}"\n'
+            f'  echo $(( $({real_date} +%s) + 55 * n ))\n'
+            f'else exec {real_date} "$@"; fi\n')
+        (shim / "date").chmod(0o755)
+        codex = work / f"codex-{name}"
+        codex.write_text(
+            "#!/bin/bash\n"
+            f'if [ "$1" = exec ] && [ ! -e "{marker}" ]; then sleep 1; touch "{marker}"; sleep 14; fi\n'
+            f'exec "{cap.FAKE_CODEX}" "$@"\n')
+        codex.chmod(0o755)
+        helper = cap.Workspace("setUp")
+        _code, output = helper.driver(audit, 1, f"deadline-{name}", CODEX=str(codex),
+                                      PATH=f"{shim}:{os.environ['PATH']}", **env)
+        self.assertTrue(marker.exists(), "the clock never ran: the test did not bite")
+        return output
 
     def test_a_new_audit_call_is_not_cut_at_2700_s(self) -> None:
-        import test_269_round_cap_amendment as cap
         work = pathlib.Path(tempfile.mkdtemp(prefix="i4r-prop-deadline-")).resolve()
         try:
-            audit = cap.write_audit(work / "new", cap=7, audit_id="new-deadline", protocol="2.6.9")
-            shim = work / "bin"
-            shim.mkdir()
-            marker = work / "clock_jumped"
-            real_date = shutil.which("date")
-            (shim / "date").write_text(
-                "#!/bin/bash\n"
-                f'if [ "$1" = "+%s" ] && [ -e "{marker}" ]; then echo $(( $({real_date} +%s) + 3000 )); '
-                f'else exec {real_date} "$@"; fi\n')
-            (shim / "date").chmod(0o755)
-            codex = work / "codex"
-            codex.write_text(
-                "#!/bin/bash\n"
-                f'if [ "$1" = exec ] && [ ! -e "{marker}" ]; then sleep 1; touch "{marker}"; sleep 2; fi\n'
-                f'exec "{cap.FAKE_CODEX}" "$@"\n')
-            codex.chmod(0o755)
-            helper = cap.Workspace("setUp")
-            code, output = helper.driver(audit, 1, "deadline-1", CODEX=str(codex),
-                                         PATH=f"{shim}:{os.environ['PATH']}")
-            self.assertTrue(marker.exists(), "the clock never jumped: the test did not bite")
-            # Only the deadline is asserted: the jumped shell clock disagrees with the Python helpers' clock, so the
-            # round itself then stops on "timestamps and elapsed_seconds are inconsistent" either way.
+            # Only the deadline is asserted: the shell clock disagrees with the Python helpers' clock, so the round
+            # itself then stops on "timestamps and elapsed_seconds are inconsistent" either way.
+            output = self.drive(work, "frozen")
             self.assertNotIn("[tmout] provider call exceeded", output, output[-3000:])
+            self.assertNotIn("[sleep]", output, "a clock running fast is awake time, not a sleep")
+            # the bite: the same call under a 2,700 s ceiling is stopped
+            self.assertIn("[tmout] provider call exceeded 2700s",
+                          self.drive(work, "lowered", I4R_PROVIDER_TIMEOUT_SECONDS="2700"))
         finally:
             subprocess.run(["chmod", "-R", "u+w", str(work)], check=False)
             shutil.rmtree(work, ignore_errors=True)
@@ -285,7 +297,11 @@ class DriverDeadlineIsTheFrozenCeiling(unittest.TestCase):
 
 class LegacyWaiterHonoursTheKnob(unittest.TestCase):
     """An audit initialised before 2.7.4 that exports I4R_PROVIDER_TIMEOUT_SECONDS=5400 (INSTALL.md, Upgrading in-flight
-    audits to 2.7.4) gets a 180-minute default wait, as run_critique.sh gets a 5,400 s ceiling."""
+    audits to 2.7.4) gets a 180-minute default wait, as run_critique.sh gets a 5,400 s ceiling.
+
+    2.7.11: a clock that jumps 91 minutes between two polls is a host that slept, which the waiter no longer counts
+    (tests/test_2711_sleep_ceiling.py), so the waiter keeps waiting either way; the default it resolved is the one its
+    `[sleep]` line names."""
 
     def test_the_waiter_uses_the_effective_ceiling(self) -> None:
         with tempfile.TemporaryDirectory(prefix="i4r-274-wait-legacy-") as name:
@@ -305,7 +321,7 @@ class LegacyWaiterHonoursTheKnob(unittest.TestCase):
                 f'  now=$({real_date} +%s); if [ "$n" -ge 1 ]; then echo $((now + 91*60)); else echo $now; fi;\n'
                 f'else exec {real_date} "$@"; fi\n')
             (shim / "date").chmod(0o755)
-            for knob, survives in (("5400", True), ("", False)):
+            for knob, minutes in (("5400", 180), ("", 90)):
                 with self.subTest(knob=knob):
                     state.unlink(missing_ok=True)
                     sleeper = subprocess.Popen(["sleep", "30"])
@@ -318,8 +334,9 @@ class LegacyWaiterHonoursTheKnob(unittest.TestCase):
                         time.sleep(6)
                         still_waiting = waiter.poll() is None
                         waiter.kill()
-                        waiter.communicate()
-                        self.assertEqual(still_waiting, survives)
+                        _out, err = waiter.communicate()
+                        self.assertTrue(still_waiting, err)
+                        self.assertIn(f"not counted against the {minutes} min wait", err)
                     finally:
                         sleeper.kill()
 

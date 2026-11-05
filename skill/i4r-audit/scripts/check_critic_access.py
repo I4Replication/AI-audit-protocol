@@ -23,7 +23,7 @@ pass. --force always calls.
 Exit 0: the route is usable. Exit 3: the account cannot use it (unsupported model, authentication,
 authorization, quota, or any other refusal the provider returns, such as an API key without access to the model
 or an unverified organisation; on a CLI older than 0.159.0, update the ChatGPT app first). Exit 4: a network,
-rate-limit, server or timeout failure: run again. Exit 5: the Codex CLI rejected the call itself, with no
+rate-limit, model-at-capacity, server or timeout failure: run again. Exit 5: the Codex CLI rejected the call itself, with no
 answer from the provider (an unknown option, an output-schema error): update the ChatGPT app or the CLI. Exit 2: no Codex CLI, or an
 unreadable policy.
 """

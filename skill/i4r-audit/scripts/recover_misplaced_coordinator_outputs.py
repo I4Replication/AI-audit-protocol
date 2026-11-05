@@ -21,14 +21,21 @@ What it does, all fail-closed and under the coordinator promotion lock:
    audit's frozen Claude route matching the record, the prompt and sandbox settings are
    canonical, and every live input still matches the immutable snapshot.
 2. Moves the four files, byte for byte, into ``output.partial`` and re-hashes them.
-3. Runs the standard ``validate_outputs`` -- the same checks a first-time promotion gets.
+3. Runs the standard ``validate_outputs`` -- the same checks a first-time promotion gets,
+   with the same snapshot-to-origin map, so a snapshot-spelled citation is rewritten to its
+   origin in findings.jsonl as the runner rewrites it (2.7.9), and the same bookkeeping
+   context, so a determined field the model mistyped is restored as the runner restores it
+   (2.7.11: run_coordinator.normalize_bookkeeping; listed in the attempt's
+   bookkeeping_normalization.json and named in the receipt).
 4. Builds the canonical bundle and a corrected record, journals an ``invocation_correction``
    (status, output binding, error cleared; identity and attempt accounting untouched), and
    promotes the files through the shared transaction path.
-5. Writes ``coordinator/recoveries/<invocation>/receipt.json`` recording the relocation.
+5. Writes ``coordinator/recoveries/<invocation>/receipt.json`` recording the relocation
+   (``relocated_outputs``: the hashes of the bytes moved; ``outputs``: of the bytes stored).
 
 No provider is called, no attempt budget is consumed, and the original failed terminal
-event stays in the hash chain. If any check fails after the move, the files are moved back.
+event stays in the hash chain. If any check fails after the move, the files are moved back
+with the bytes they were moved with.
 """
 from __future__ import annotations
 
@@ -46,6 +53,7 @@ SKILL = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL / "scripts"))
 
 import claude_routes  # noqa: E402
+import claude_thinking_tokens  # noqa: E402
 import record_invocation  # noqa: E402
 import recover_coordinator as base  # noqa: E402
 import run_coordinator as coordinator  # noqa: E402
@@ -97,11 +105,21 @@ def relocate(attempt: pathlib.Path, hashes: dict[str, str]) -> None:
         raise
 
 
-def unrelocate(attempt: pathlib.Path, names: list[str]) -> None:
+def unrelocate(attempt: pathlib.Path, names: list[str],
+               moved: dict[str, tuple[bytes, int]] | None = None) -> None:
+    """Move the outputs back to the attempt root. ``moved`` maps a name to the bytes and mode it was
+    relocated with: validate_outputs may have rewritten findings.jsonl in place (snapshot-spelled
+    citations to their origin), and the attempt root gets back exactly what the model wrote."""
     output = attempt / "output.partial"
     for name in names:
-        if (output / name).is_file():
-            os.replace(output / name, attempt / name)
+        path = output / name
+        if path.is_file():
+            if name in (moved or {}):
+                data, mode = moved[name]
+                if path.read_bytes() != data:
+                    path.write_bytes(data)
+                os.chmod(path, mode)
+            os.replace(path, attempt / name)
 
 
 def validate_live_inputs(
@@ -190,7 +208,7 @@ def failed_record(rows: list[dict[str, Any]], invocation_id: str, attempt_number
     return row
 
 
-def validate_envelope(attempt: pathlib.Path, record: dict[str, Any]) -> dict[str, Any]:
+def validate_envelope(attempt: pathlib.Path, record: dict[str, Any], *, thinking: bool = False) -> dict[str, Any]:
     stdout_path = base.ensure_regular(attempt / "claude_stdout.json", "coordinator provider envelope")
     stderr_path = base.ensure_regular(attempt / "claude_stderr.txt", "coordinator provider stderr")
     if stderr_path.read_text(encoding="utf-8").strip():
@@ -215,7 +233,7 @@ def validate_envelope(attempt: pathlib.Path, record: dict[str, Any]) -> dict[str
         )
     if primary != record.get("observed_model") or all_models != record.get("observed_model_ids"):
         raise RecoveryError("served model IDs disagree with the failed record")
-    usage, cache_usage = coordinator.extract_usage(result)
+    usage, cache_usage = coordinator.extract_usage(result, thinking=thinking)   # 2.7.11: the runner's parse
     if not coordinator.complete_usage(usage) or usage != record.get("usage"):
         raise RecoveryError("provider usage is incomplete or disagrees with the failed record")
     if cache_usage != record.get("cache_usage") or result.get("session_id") != record.get("session_id"):
@@ -258,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = args.audit_dir.resolve()
     relocated: list[str] = []
+    moved: dict[str, tuple[bytes, int]] = {}
     try:
         if not root.is_dir():
             raise RecoveryError(f"audit directory does not exist: {root}")
@@ -285,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
             if not isinstance(route, dict):
                 raise RecoveryError("the audit policy snapshot names no coordinator route")
             record = failed_record(rows, invocation_id, attempt_number, input_hash, route)
-            envelope = validate_envelope(attempt, record)
+            envelope = validate_envelope(attempt, record, thinking=claude_thinking_tokens.frozen(root))
             validate_canonical_inputs(root, attempt, audit_id, invocation_id, input_hash, record)
             hashes = find_misplaced_outputs(attempt)
             if args.dry_run:
@@ -302,10 +321,24 @@ def main(argv: list[str] | None = None) -> int:
             os.chmod(output, 0o755)
             relocate(attempt, hashes)
             relocated = list(hashes)
+            # Judged as run_coordinator.main judges a live response: with the snapshot-to-origin map,
+            # so a citation spelled as the model read it (context/PAPER.txt, reports/01_reproduction.md)
+            # is rewritten to its origin in findings.jsonl before it is checked and stored. The
+            # rewrite is in place and the runner froze the file read-only; ``moved`` puts the
+            # relocated bytes and mode back if anything below fails. ``hashes`` stays the hash of the
+            # bytes moved (the receipt's relocated_outputs); ``artifacts`` hashes what is stored.
+            findings_path = output / "findings.jsonl"
+            moved = {"findings.jsonl": (findings_path.read_bytes(), findings_path.stat().st_mode & 0o7777)}
+            os.chmod(findings_path, 0o644)
             draft_rows, draft_ids = coordinator.load_draft_rows(draft_paths)
-            known_pairs, known_paths, _canonical = coordinator.known_evidence(
-                draft_rows, report_hashes, root, safe_paths)
-            artifacts, findings = coordinator.validate_outputs(output, draft_ids, known_pairs, known_paths, rows)
+            known_pairs, known_paths, canonical_paths = coordinator.known_evidence(
+                draft_rows, report_hashes, root, safe_paths, manifest["files"])
+            # 2.7.11: and with the runner's bookkeeping context; ``moved`` puts the model's bytes back on a refusal.
+            normalization: list[dict[str, Any]] = []
+            artifacts, findings = coordinator.validate_outputs(
+                output, draft_ids, known_pairs, known_paths, rows, canonical_paths,
+                bookkeeping=coordinator.bookkeeping_context(draft_rows, manifest["files"]),
+                normalization_record=normalization)
 
             bundle = {
                 "schema_version": "1.0.0", "audit_id": audit_id, "invocation_id": invocation_id,
@@ -358,6 +391,7 @@ def main(argv: list[str] | None = None) -> int:
                     "inspect run.events.jsonl before retrying"
                 )
 
+            coordinator.record_bookkeeping_normalization(root, attempt, normalization)
             receipt_dir = root / "coordinator/recoveries" / invocation_id
             receipt_dir.mkdir(parents=True, exist_ok=False)
             receipt = {
@@ -381,6 +415,10 @@ def main(argv: list[str] | None = None) -> int:
                            "served_model": True, "canonical_prompt_and_settings": True,
                            "relocation_byte_identical": True, "standard_output_validation": True},
             }
+            if normalization:   # 2.7.11: only when a field was restored, so every other receipt keeps its keys
+                receipt["bookkeeping_normalization"] = {
+                    "record": coordinator.audit_relative(root, attempt / coordinator.BOOKKEEPING_RECORD),
+                    "fields": len(normalization)}
             coordinator.atomic_write(receipt_dir / "receipt.json", coordinator.pretty_bytes(receipt))
             os.chmod(receipt_dir / "receipt.json", 0o444)
             status = coordinator.strict_object(attempt / "status.json")
@@ -398,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
     except (coordinator.CoordinatorError, OSError, KeyError, TypeError, ValueError) as exc:
         if relocated:
             try:
-                unrelocate(attempt, relocated)  # noqa: F821 - attempt is bound before relocation
+                unrelocate(attempt, relocated, moved)  # noqa: F821 - bound before relocation
             except Exception as undo:  # pragma: no cover
                 print(f"WARNING: could not move outputs back: {undo}", file=sys.stderr)
         print(f"FATAL: {exc}", file=sys.stderr)

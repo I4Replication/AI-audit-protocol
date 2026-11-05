@@ -6,6 +6,7 @@ import json
 import os
 import re
 import pathlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -225,6 +226,128 @@ class RunTests(Env):
         self.assertEqual(len(self.calls()), 2)
         self.assertEqual(self.record()["outcome"]["status"], "completed")
         self.assertEqual([e["status"] for e in self.runlog()], ["failed", "completed"])
+
+    def test_the_claims_script_is_published_beside_the_comment_and_in_baseline_metadata(self) -> None:
+        self.subset()
+        result, record = self.run_paper()
+        self.assertEqual(record["outcome"]["status"], "completed", record.get("validation"))
+        cs = record["claims_script"]
+        self.assertEqual((cs["built"], cs["ran"], cs["checks"], cs["pass"], cs["fail"], cs["published"]),
+                         (True, True, 1, 1, 0, "baseline_metadata/Test Journal/Paper 0/claims_script.R"))
+        self.assertEqual((self.tree / cs["published"]).read_bytes(), (self.dest() / "claims_script.R").read_bytes())
+        self.assertEqual(cs["sha256"]["claims_script.R"], sha((self.dest() / "claims_script.R").read_bytes()))
+        self.assertEqual((self.dest() / "claims_map.tsv").read_text(), "F1\tsnippet:verification_snippets/C-1.R\n")
+        self.assertTrue((self.dest() / "verification_snippets" / "C-1.R").is_file())
+        self.assertIn("verification_snippets/C-1.R", record["outputs"]["kept"])
+        tools = pathlib.Path(record["work_folder"]) / "packet" / "tools"
+        for name in ("validate_outputs.py", "claims.py", "make_claims_script.sh"):
+            self.assertEqual((tools / name).read_bytes(), (SCRIPTS / name).read_bytes(), name)
+            self.assertEqual(record["inputs"]["tools_sha256"][name], sha((SCRIPTS / name).read_bytes()), name)
+        self.assertIn("scripts/make_claims_script.sh", record["code_sha256"])
+        self.assertIn("claims script 1 checks, 0 FAIL, published", result.stdout)
+        self.assertIn("verification_guide.md", record["inputs"]["reference_sha256"])
+        self.assertEqual(set(record["condition"]["packet_tools_sha256"]),
+                         {"validate_outputs.py", "claims.py", "make_claims_script.sh"})
+        self.assertEqual(self.runlog()[-1]["condition"]["packet_tools_sha256"], record["condition"]["packet_tools_sha256"])
+
+    def test_a_check_that_does_not_reproduce_makes_the_run_invalid_and_keeps_everything(self) -> None:
+        self.subset()
+        _, record = self.run_paper(mode="claims_fail")
+        self.assertEqual(record["outcome"]["status"], "completed_invalid")
+        self.assertTrue(any("C-1 (F1) FAIL" in e for e in record["validation"]["errors"]), record["validation"])
+        self.assertEqual((record["claims_script"]["checks"], record["claims_script"]["fail"]), (1, 1))
+        self.assertTrue((self.tree / record["claims_script"]["published"]).is_file(), "kept, never repaired")
+        self.assertEqual(record["totals"]["model_calls"], 1)
+
+    def test_a_run_without_snippets_is_invalid_and_publishes_no_script(self) -> None:
+        self.subset()
+        _, record = self.run_paper(mode="claims_missing")
+        self.assertEqual(record["outcome"]["status"], "completed_invalid")
+        self.assertTrue(any("verification_snippets/ is missing" in e for e in record["validation"]["errors"]))
+        self.assertIsNone(record["claims_script"]["published"])
+        self.assertFalse((self.tree / "baseline_metadata").exists())
+
+    def test_a_rerun_moves_the_published_claims_script_with_the_comment(self) -> None:
+        self.subset()
+        self.run_paper()
+        _, record = self.run_paper("--force")
+        self.assertEqual(record["outcome"]["status"], "completed")
+        superseded = list((self.tree / "baseline_comments" / ".superseded").iterdir())
+        self.assertEqual(len(superseded), 1)
+        self.assertTrue((superseded[0] / "claims_script.R").is_file())
+        self.assertTrue((superseded[0] / "baseline_metadata" / "claims_script.R").is_file())
+        self.assertTrue((self.tree / record["claims_script"]["published"]).is_file())
+        self.assertEqual(len(list((self.tree / "baseline_metadata").rglob("claims_script.R"))), 1)
+
+    def test_stray_files_beside_the_snippets_stay_out_of_the_tree(self) -> None:
+        self.subset()
+        _, record = self.run_paper(mode="snippet_stray")
+        self.assertIn("verification_snippets/frame.csv", record["outputs"]["withheld_from_tree"])
+        self.assertFalse((self.dest() / "verification_snippets" / "frame.csv").exists())
+        self.assertTrue(any("not a snippet name" in e for e in record["validation"]["errors"]))
+
+    def test_the_claims_script_is_withheld_when_findings_json_is(self) -> None:
+        self.subset()
+        _, record = self.run_paper(mode="findings_pii")
+        self.assertIn("findings.json", record["outputs"]["withheld_from_tree"])
+        self.assertIsNone(record["claims_script"]["published"])
+        self.assertIn("claims_script.R", record["claims_script"]["withheld"])
+        self.assertFalse((self.tree / "baseline_metadata").exists())
+
+    @unittest.skipUnless(sys.platform == "darwin" and shutil.which("sandbox-exec"), "macOS sandbox-exec")
+    def test_the_runner_runs_the_agents_r_confined(self) -> None:
+        self.subset()
+        _, record = self.run_paper(mode="claims_escape")
+        self.assertFalse((self.home / "escaped.txt").exists(), "a write outside the scratch folder was refused")
+        self.assertTrue(record["claims_script"]["runner_sandbox"].startswith("sandbox-exec"))
+        self.assertEqual(record["outcome"]["status"], "completed_invalid")
+        self.assertNotIn(str(self.home), json.dumps(record["validation"]), "no path reaches the record")
+
+    def test_a_judgement_with_a_participant_code_and_a_date_stays_out_of_the_tree(self) -> None:
+        self.subset()
+        _, record = self.run_paper(mode="judgement_coord")
+        self.assertIn("verification_snippets/C-1.judgement", record["outputs"]["withheld_from_tree"])
+        self.assertFalse((self.dest() / "verification_snippets" / "C-1.judgement").exists())
+        self.assertNotIn("2021-03-04", json.dumps(record))
+
+    def test_a_claim_withheld_in_findings_json_is_withheld_in_the_claims_script_too(self) -> None:
+        # the code and the date land on different wrapped lines of claims_script.R, which passes the per-line check:
+        # only the findings_kept rule keeps it out of the tree
+        self.subset()
+        _, record = self.run_paper(mode="findings_coord")
+        self.assertIn("findings.json", record["outputs"]["withheld_from_tree"])
+        self.assertIn("claims_script.R", record["claims_script"]["withheld"])
+        self.assertIsNone(record["claims_script"]["published"])
+        self.assertFalse((self.dest() / "claims_script.R").exists())
+        self.assertFalse((self.tree / "baseline_metadata").exists())
+
+    @unittest.skipUnless(sys.platform == "darwin" and shutil.which("sandbox-exec"), "macOS sandbox-exec")
+    def test_the_runners_r_cannot_read_what_the_call_could_not(self) -> None:
+        self.subset()
+        _, record = self.run_paper(mode="claims_read_tree")
+        self.assertEqual(record["claims_script"]["claims"]["F1"]["status"], "PASS", record["claims_script"])
+        self.assertIn("unreadable", record["claims_script"]["runner_sandbox"])
+
+    def test_preflight_refuses_a_host_without_r(self) -> None:
+        self.subset()
+        path = os.pathsep.join(d for d in os.environ["PATH"].split(os.pathsep)
+                               if d and not (pathlib.Path(d) / "Rscript").exists())
+        result = self.script("run_baseline.py", "preflight", "--claude-bin", self.cli, PATH=path)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Rscript not found", result.stdout + result.stderr)
+
+    def test_a_rerun_moves_a_lone_published_claims_script_aside(self) -> None:
+        self.subset()
+        meta = self.tree / "baseline_metadata" / "Test Journal" / "Paper 0"
+        meta.mkdir(parents=True)
+        (meta / "claims_script.R").write_text("# an earlier run's script\n")
+        _, record = self.run_paper()
+        self.assertEqual(record["outcome"]["status"], "completed")
+        superseded = list((self.tree / "baseline_comments" / ".superseded").iterdir())
+        self.assertEqual(len(superseded), 1)
+        self.assertEqual((superseded[0] / "baseline_metadata" / "claims_script.R").read_text(),
+                         "# an earlier run's script\n")
+        self.assertNotEqual((meta / "claims_script.R").read_text(), "# an earlier run's script\n")
 
     def test_invalid_outputs_are_kept_and_never_repaired(self) -> None:
         self.subset()
@@ -669,6 +792,22 @@ class RoundTwoTests(Env):
         self.assertEqual(record["inputs"]["deposit_exemptions"]["source"], "none (i4r-audit 9.9.9 failed)")
         self.assertIn("describes the machine the original audit ran on", self.calls()[-1]["prompt"])
 
+    def test_a_frozen_snapshot_still_gets_this_hosts_fingerprint(self) -> None:
+        skill = self.tree / "skill" / "i4r-audit-unified" / "i4r-audit"
+        (skill / "scripts").mkdir(parents=True)
+        (skill / "VERSION").write_text("9.9.9\n")
+        (skill / "scripts" / "provider_safety.py").write_text("def deposit_exemptions(p):\n    return set()\n")
+        (skill / "scripts" / "phase1_runtime.py").write_text(
+            "def environment_fingerprint():\n    return {'python_version': 'fingerprint-from-this-host'}\n")
+        for snap in self.tree.glob("runs/*/*/audit/phase1/snapshots/*"):
+            bc.freeze_tree(snap)   # i4r-audit 2.7.9 leaves its Phase-1 snapshot read-only
+        self.subset()
+        _, record = self.run_paper()
+        self.assertEqual(record["outcome"]["status"], "completed", record["outcome"])
+        fingerprint = record["inputs"]["environment_fingerprint"]
+        self.assertTrue(fingerprint["regenerated_on_this_host"])
+        self.assertNotEqual(fingerprint["sha256"], fingerprint["snapshot_sha256"])
+
     def test_environment_values_never_reach_the_record(self) -> None:
         self.subset()
         _, record = self.run_paper(CLAUDE_TEST_SECRET="supersecretvalue-123")
@@ -803,7 +942,33 @@ class DenyListTests(Env):
         self.assertIn("inside the protected", out.stderr)
 
 
-class ValidatorTests(unittest.TestCase):
+class MaskTests(unittest.TestCase):
+    def test_paths_of_this_host_are_masked_for_the_tree(self) -> None:
+        import run_baseline
+        home = str(pathlib.Path.home())
+        text = (f'File "{home}/x/run.py", line 1\n/private/var/folders/ab/T/tmp1/a.R\n/tmp/claims-x/y\n'
+                f'/Users/someoneelse/z ok')
+        masked = run_baseline._masked(text)
+        for leak in (home, "/private/var/folders", "/tmp/claims-x", "/Users/someoneelse"):
+            self.assertNotIn(leak, masked)
+        self.assertIn("ok", masked)
+
+
+class OutputsBase(unittest.TestCase):
+    """The fake agent's good outputs and a deposit to run their claims script against."""
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory(prefix="baseline-deposit-")
+        self.addCleanup(tmp.cleanup)
+        raw = pathlib.Path(tmp.name)
+        (raw / "pkg").mkdir()
+        (raw / "paper").mkdir()
+        (raw / "pkg" / "data.csv").write_text("x,y\n1,2\n3,4\n")
+        (raw / "paper" / "paper.txt").write_text("The mean of x is 2.0.\n")
+        self.pkg = raw / "pkg"
+
+    def validate(self, out: pathlib.Path, exempt: set[str] | None = None, **kw) -> dict:
+        return validate_outputs.validate(out, self.pkg, exempt, **kw)
+
     def outputs(self, **edits) -> pathlib.Path:
         tmp = tempfile.TemporaryDirectory(prefix="baseline-validate-")
         self.addCleanup(tmp.cleanup)
@@ -818,8 +983,10 @@ class ValidatorTests(unittest.TestCase):
             path.write_text(text.replace(old, new))
         return out
 
+
+class ValidatorTests(OutputsBase):
     def test_the_fake_good_output_passes(self) -> None:
-        self.assertTrue(validate_outputs.validate(self.outputs())["ok"])
+        self.assertTrue(self.validate(self.outputs())["ok"])
 
     def test_structure_agreement_and_hygiene_errors(self) -> None:
         cases = {
@@ -857,7 +1024,7 @@ class ValidatorTests(unittest.TestCase):
         }
         for name, edits in cases.items():
             with self.subTest(case=name):
-                self.assertFalse(validate_outputs.validate(self.outputs(**edits))["ok"], name)
+                self.assertFalse(self.validate(self.outputs(**edits))["ok"], name)
 
     def test_compact_findings_json_is_judged_finding_by_finding(self) -> None:
         out = self.outputs()
@@ -871,17 +1038,18 @@ class ValidatorTests(unittest.TestCase):
             "| 1 | Table 2 mean differs from the deposit | CONFIRMED | No | Section 3 |\n| 2 | Item | CONFIRMED | No | Section 3 |")
         report = report.replace("None beyond the above.", "**An item is reverse-scored.** <!-- finding:F2 --> Noted.")
         (out / "REPORT_final.md").write_text(report)
-        result = validate_outputs.validate(out)
+        (out / "verification_snippets" / "C-2.judgement").write_text("The item is reverse-scored.\nItem wording.\n")
+        result = self.validate(out)
         self.assertTrue(result["ok"], result["errors"])
 
     def test_a_heading_with_a_finding_id_is_named(self) -> None:
-        result = validate_outputs.validate(self.outputs(**{"REPORT_final.md": ("does not yield\n", "does not yield (F1)\n")}))
+        result = self.validate(self.outputs(**{"REPORT_final.md": ("does not yield\n", "does not yield (F1)\n")}))
         self.assertTrue(any("carries a finding id" in e for e in result["errors"]), result["errors"])
 
     def test_ids_in_code_spans_and_f_statistics_are_not_finding_ids(self) -> None:
         out = self.outputs(**{"REPORT_final.md": ("None beyond the above.",
                                                   "The file `F1.csv` gives F(1, 46) = 3.2 and F1.5 is a label.")})
-        result = validate_outputs.validate(out)
+        result = self.validate(out)
         self.assertTrue(result["ok"], result["errors"])
 
     def test_the_printed_appendix_is_generated_from_findings_json(self) -> None:
@@ -926,7 +1094,7 @@ class ValidatorTests(unittest.TestCase):
         out = self.outputs()
         text = (out / "REPORT_final.md").read_text()
         self.assertGreater(len(text), 1000)
-        self.assertTrue(validate_outputs.validate(out)["ok"])
+        self.assertTrue(self.validate(out)["ok"])
 
     def test_a_complete_unverifiable_finding_passes(self) -> None:
         out = self.outputs(**{"findings.json": ('"impact": "value_wrong"', '"impact": "unverifiable"')})
@@ -934,19 +1102,253 @@ class ValidatorTests(unittest.TestCase):
         data["findings"][0].update(unverifiable_reason="code_missing", blocked_tier=3,
                                    unverifiable_basis="The model script is not in the deposit.")
         (out / "findings.json").write_text(json.dumps(data))
-        self.assertTrue(validate_outputs.validate(out)["ok"])
+        self.assertTrue(self.validate(out)["ok"])
 
     def test_binary_and_compressed_evidence_are_errors(self) -> None:
         for name in ("rows.rds", "rows.csv.gz", "blob.bin"):
             with self.subTest(file=name):
                 out = self.outputs()
                 (out / "evidence" / name).write_bytes(b"\x00\x01")
-                self.assertFalse(validate_outputs.validate(out)["ok"])
+                self.assertFalse(self.validate(out)["ok"])
 
     def test_a_deposit_header_may_be_quoted(self) -> None:
         out = self.outputs(**{"REPORT_final.md": ("Duplicate rows", "The column EMG_P01 rows")})
-        self.assertTrue(validate_outputs.validate(out, None, {"EMG_P01"})["ok"])
-        self.assertFalse(validate_outputs.validate(out, None, set())["ok"])
+        self.assertTrue(self.validate(out, {"EMG_P01"})["ok"])
+        self.assertFalse(self.validate(out, set())["ok"])
+
+
+
+class ClaimsTests(OutputsBase):
+    """The claims script: one snippet per finding, built by the pipeline's builder, run against the deposit."""
+    def snippet(self, out: pathlib.Path, name: str, text: str) -> None:
+        (out / "verification_snippets").mkdir(exist_ok=True)
+        (out / "verification_snippets" / name).write_text(text)
+
+    def errors(self, out: pathlib.Path) -> str:
+        result = self.validate(out)
+        self.assertFalse(result["ok"])
+        return "\n".join(result["errors"])
+
+    def test_the_pipelines_builder_makes_the_script_and_every_check_runs(self) -> None:
+        out = self.outputs()
+        keep = pathlib.Path(tempfile.mkdtemp(prefix="baseline-built-"))
+        self.addCleanup(shutil.rmtree, keep, True)
+        result = self.validate(out, keep_claims=keep)
+        self.assertTrue(result["ok"], result["errors"])
+        cs = result["claims_script"]
+        self.assertEqual((cs["built"], cs["ran"], cs["checks"], cs["pass"], cs["fail"], cs["code_claims"]),
+                         (True, True, 1, 1, 0, 1))
+        self.assertEqual(cs["claims"]["F1"]["status"], "PASS")
+        self.assertEqual(cs["builder_sha256"], sha((SCRIPTS / "make_claims_script.sh").read_bytes()))
+        script = (keep / "claims_script.R").read_text()
+        self.assertIn("## CLAIM 1 [CORRIGENDUM MATERIAL]  (finding F1, Section 3)", script)
+        self.assertIn('check("C-1", mean_x = mean(read_deposit("data.csv")$x))', script)
+        self.assertIn("claims_summary()", script)
+        self.assertEqual((keep / "claims_map.tsv").read_text(), "F1\tsnippet:verification_snippets/C-1.R\n")
+
+    def test_a_check_that_does_not_reproduce_is_an_error_naming_the_key_not_the_value(self) -> None:
+        out = self.outputs(**{"verification_snippets/C-1.R": ("mean_x = 2,", "mean_x = 2.5,")})
+        result = self.validate(out, claims_output=True)
+        self.assertFalse(result["ok"])
+        msg = "\n".join(result["errors"])
+        self.assertIn("C-1 (F1) FAIL", msg)
+        self.assertIn("did not reproduce: mean_x", msg)
+        self.assertNotIn("2.5", msg, "the record keeps key names, never values")
+        self.assertTrue(any("FAIL" in l for l in result["claims_fail_lines"]), "the agent's console sees the line")
+        self.assertEqual(result["claims_script"]["claims"]["F1"]["failing"], ["mean_x"])
+
+    def test_declared_but_never_checked_is_a_fail(self) -> None:
+        out = self.outputs(**{"verification_snippets/C-1.R": ("mean_x = 2,", "mean_x = 2, n = 2,")})
+        self.assertIn("declared but no observation was read: n", self.errors(out))
+
+    def test_judgement_and_unverifiable_claims_go_to_the_no_code_tail(self) -> None:
+        for kind, first in (("judgement", "The deposited column x is the variable the paper names."),
+                            ("unverifiable", "not in the package: the value is in the article's prose only")):
+            with self.subTest(kind=kind):
+                out = self.outputs()
+                (out / "verification_snippets" / "C-1.R").unlink()
+                self.snippet(out, f"C-1.{kind}", first + "\nThe basis, in a sentence.\n")
+                keep = pathlib.Path(tempfile.mkdtemp(prefix="baseline-built-"))
+                self.addCleanup(shutil.rmtree, keep, True)
+                result = self.validate(out, keep_claims=keep)
+                self.assertTrue(result["ok"], result["errors"])
+                self.assertEqual(result["claims_script"][f"{kind}_claims"], 1)
+                self.assertEqual(result["claims_script"]["claims"]["F1"]["status"], kind.upper())
+                self.assertEqual((keep / "claims_map.tsv").read_text(), "F1\tnone\n")
+                script = (keep / "claims_script.R").read_text()
+                self.assertIn("CLAIMS WITH NO CODE", script)
+                self.assertIn("MANUAL CHECK: mean of x", script)
+
+    def test_the_snippet_contract(self) -> None:
+        good = 'expect("C-1", m = 2, tol = 0)\ncheck("C-1", m = mean(read_deposit("data.csv")$x))\n'
+        cases = {
+            "verification_snippets/ is missing": lambda out: shutil.rmtree(out / "verification_snippets"),
+            "records under C-2": lambda out: self.snippet(out, "C-1.R", good.replace('check("C-1"', 'check("C-2"')),
+            "must call both": lambda out: self.snippet(out, "C-1.R", 'expect("C-1", m = 2)\n'),
+            "there is no finding F9": lambda out: self.snippet(out, "C-9.R", good.replace("C-1", "C-9")),
+            "keep exactly one": lambda out: self.snippet(out, "C-1.judgement", "An assessment.\nIts basis.\n"),
+            "first line must state the reason": lambda out: self.snippet(out, "C-1.unverifiable", "\n") or
+                (out / "verification_snippets" / "C-1.R").unlink(),
+            "the prelude holds loaders": lambda out: self.snippet(out, "_prelude.R", 'expect("C-1", m = 2)\n'),
+            "not a snippet name": lambda out: self.snippet(out, "notes.txt", "x\n"),
+            "F1 has no verification snippet": lambda out: (out / "verification_snippets" / "C-1.R").unlink(),
+        }
+        for needle, edit in cases.items():
+            with self.subTest(needle):
+                out = self.outputs()
+                edit(out)
+                self.assertIn(needle, self.errors(out))
+
+    def test_a_comment_in_a_snippet_is_not_a_recorded_outcome(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", '# check("C-2", m = 1)\n'
+                                   'expect("C-1", m = 2, tol = 0)\ncheck("C-1", m = mean(read_deposit("data.csv")$x))\n')
+        self.assertTrue(self.validate(out)["ok"])
+
+    def test_a_check_that_writes_beside_the_deposit_or_stops_is_an_error(self) -> None:
+        tail = 'expect("C-1", m = 2, tol = 0)\ncheck("C-1", m = mean(read_deposit("data.csv")$x))\n'
+        for needle, head in (("changed the deposit", 'writeLines("x", file.path(PKG_DIR, "new.txt"))\n'),
+                             ("stopped with an error", 'stop("boom")\n')):
+            with self.subTest(needle):
+                out = self.outputs()
+                self.snippet(out, "C-1.R", head + tail)
+                msg = self.errors(out)
+                self.assertIn(needle, msg)
+                self.assertNotIn(str(self.pkg), msg, "no absolute path reaches the record")
+                for extra in self.pkg.iterdir():
+                    if extra.name != "data.csv":
+                        extra.unlink()
+
+    def test_participant_codes_in_a_snippet_fail_the_hygiene_check(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", '# drop SUBJ_P12\nexpect("C-1", m = 2, tol = 0)\n'
+                                   'check("C-1", m = mean(read_deposit("data.csv")$x))\n')
+        self.assertIn("verification_snippets/C-1.R", self.errors(out))
+
+    def test_a_key_with_a_space_is_read_and_its_fail_reported(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", 'expect("C-1", m = 2, "n rows" = 99, tol = 0)\n'
+                                   'd <- read_deposit("data.csv")\ncheck("C-1", m = mean(d$x), "n rows" = nrow(d))\n')
+        msg = self.errors(out)
+        self.assertIn("did not reproduce: n rows", msg)
+
+    def test_a_count_r_reports_that_no_claim_accounts_for_is_an_error(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", 'expect(sprintf("C-%d", 9), extra = 99)\n'
+                                   'expect("C-1", m = 2, tol = 0)\ncheck("C-1", m = mean(read_deposit("data.csv")$x))\n')
+        msg = self.errors(out)
+        self.assertIn("could be attributed to a claim", msg)
+        self.assertIn("FAIL that no claim's line shows", msg)
+
+    def test_what_r_printed_reaches_the_console_never_the_record(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", 'expect("C-1", m = 2, tol = 0)\nprint("row SUBJ_P12 at /var/folders/x")\n'
+                                   'stop("cannot open SUBJ_P12_2021-03-04.csv")\n'
+                                   'check("C-1", m = mean(read_deposit("data.csv")$x))\n')
+        result = self.validate(out, claims_output=True)
+        record = json.dumps({k: v for k, v in result.items() if not k.startswith("claims_") or k == "claims_script"})
+        self.assertNotIn("SUBJ_P12", record)
+        self.assertNotIn("/var/folders", record)
+        self.assertIn("stopped with an error (Rscript exit 1); the last claim it reached was C-1", record)
+        self.assertIn("SUBJ_P12", result["claims_error_tail"], "the agent's console still sees it")
+
+    def test_a_failing_key_built_from_deposit_file_names_is_withheld_from_the_record(self) -> None:
+        for name in ("SUBJ_P12_2021-03-04.csv", "P12_2021-03-04.csv"):
+            (self.pkg / name).write_text("x\n1\n")
+        self.addCleanup(lambda: [p.unlink() for p in self.pkg.glob("*P12_*")])
+        out = self.outputs()
+        self.snippet(out, "C-1.R",
+                     'files <- list.files(PKG_DIR, pattern = "P[0-9]+_.*[.]csv$")\n'
+                     'expect("C-1", m = 2, tol = 0)\n'
+                     'do.call(expect, c(list("C-1"), setNames(as.list(rep(3, length(files))), files)))\n'
+                     'check("C-1", m = mean(read_deposit("data.csv")$x))\n'
+                     'do.call(check, c(list("C-1"), setNames(as.list(rep(1, length(files))), files)))\n')
+        result = self.validate(out, claims_output=True)
+        self.assertFalse(result["ok"])
+        record = json.dumps({k: v for k, v in result.items() if k not in ("claims_fail_lines", "claims_error_tail")})
+        self.assertNotIn("P12", record)
+        self.assertNotIn("2021-03-04", record)
+        self.assertIn("[key withheld: it fails the hygiene check]", record)
+        self.assertTrue(any("P12" in l for l in result["claims_fail_lines"]), "the agent's console still sees it")
+
+    def test_a_value_printed_over_several_lines_is_a_reading_problem_not_a_wrong_number(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", 'expect("C-1", txt = "line1\\nline2")\ncheck("C-1", txt = "line1\\nline2")\n')
+        msg = self.errors(out)
+        self.assertIn("could not be read; print each checked value on one line", msg)
+        self.assertNotIn("the comment's number is wrong", msg)
+
+    def test_a_record_printed_mid_line_is_still_read(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", 'cat("rows read: ")\nexpect("C-1", m = 2, tol = 0)\n'
+                                   'check("C-1", m = mean(read_deposit("data.csv")$x))\n')
+        self.assertTrue(self.validate(out)["ok"])
+
+    def test_a_claim_the_stopped_script_never_reached_is_not_called_a_wrong_number(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", 'expect("C-1", m = 2, tol = 0)\nstop("a deposit file is missing")\n'
+                                   'check("C-1", m = 1)\n')
+        msg = self.errors(out)
+        self.assertIn("not reached before the claims script stopped", msg)
+        self.assertNotIn("the comment's number is wrong", msg)
+
+    def test_r_code_may_name_a_percentile_beside_a_date(self) -> None:
+        out = self.outputs()
+        self.snippet(out, "C-1.R", 'P50 <- quantile(c(1, 2, 3)[as.Date("2021-03-04") > as.Date("2020-01-01")], 0.5)\n'
+                                   'expect("C-1", m = 2, tol = 0)\ncheck("C-1", m = mean(read_deposit("data.csv")$x))\n')
+        self.assertTrue(self.validate(out)["ok"], self.validate(out)["errors"])
+
+    def test_a_malformed_finding_id_is_an_error_not_a_crash(self) -> None:
+        out = self.outputs()
+        data = json.loads((out / "findings.json").read_text())
+        data["findings"][0]["id"] = "F1a"
+        (out / "findings.json").write_text(json.dumps(data))
+        self.assertIn("finding id 'F1a' is not F<n>", self.errors(out))
+
+    def test_comment_rules_apply_to_judgement_snippets_and_the_built_script(self) -> None:
+        out = self.outputs()
+        (out / "verification_snippets" / "C-1.R").unlink()
+        self.snippet(out, "C-1.judgement", "P12 tested 2021-03-04 in the lab.\nBasis.\n")   # only the comment rule sees it
+        self.assertIn("verification_snippets/C-1.judgement", self.errors(out))
+
+    def test_without_code_snippets_the_script_still_has_the_pipelines_harness(self) -> None:
+        out = self.outputs()
+        (out / "verification_snippets" / "C-1.R").unlink()
+        self.snippet(out, "C-1.unverifiable", "not in the package: the value is in the prose only\nContext.\n")
+        self.snippet(out, "_prelude.R", "helper <- function(x) x + 1\n")
+        keep = pathlib.Path(tempfile.mkdtemp(prefix="baseline-built-"))
+        self.addCleanup(shutil.rmtree, keep, True)
+        result = self.validate(out, keep_claims=keep)
+        self.assertTrue(result["ok"], result["errors"])
+        script = (keep / "claims_script.R").read_text()
+        for needle in ("standalone check harness", "helper <- function(x) x + 1", "claims_summary()"):
+            self.assertIn(needle, script)
+        self.assertEqual((result["claims_script"]["checks"], result["claims_script"]["fail"]), (0, 0))
+
+    @unittest.skipUnless((LIVE / "scripts" / "generate_finding_artifacts.py").is_file(), "i4r-audit not beside the baseline")
+    def test_the_claims_map_matches_the_live_projection(self) -> None:
+        import claims
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gfa", LIVE / "scripts" / "generate_finding_artifacts.py")
+        live = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(live)
+        rows = []
+        for n, kind in ((1, "code"), (2, "judgement"), (3, "unverifiable")):
+            rows.append({"id": f"F{n}", "status": "approved", "claim": f"Claim {n}", "impact": "none",
+                         "confidence": "CONFIRMED", "changes_conclusion": False, "report_section": f"Section {n}",
+                         "evidence": {"rerun_command": "x"}, "remedy": {"description": "y"}, "verifications": [],
+                         "verification_snippet": {"kind": kind}, "ledger_disposition": {"status": "INCLUDED"}})
+        live.comment_projection = lambda row: {}   # the comment projection is not under test; the map is
+        rendered = live.render(rows, rows)
+        kinds = {r["id"]: {"kind": r["verification_snippet"]["kind"]} for r in rows}
+        self.assertEqual(claims.claims_map(rows, kinds), rendered["claims_map"])
+
+    def test_the_map_follows_the_pipelines_projection(self) -> None:
+        import claims
+        findings = [{"id": "F1"}, {"id": "F2"}, {"id": "F3"}]
+        kinds = {"F1": {"kind": "code"}, "F2": {"kind": "judgement"}, "F3": {"kind": "unverifiable"}}
+        self.assertEqual(claims.claims_map(findings, kinds),
+                         "F1\tsnippet:verification_snippets/C-1.R\nF2\tnone\nF3\tnone\n")
 
 
 class ProvenanceTests(unittest.TestCase):
@@ -965,6 +1367,24 @@ class ProvenanceTests(unittest.TestCase):
         self.assertIn('"|---:|" + "-" * 64 + "|" + "-" * 12 + "|:" + "-" * 10 + ":|" + "-" * 10 + "|"', source)
         self.assertEqual(render_comment.APPENDIX_SEPARATOR,
                          "|---:|" + "-" * 64 + "|" + "-" * 12 + "|:" + "-" * 10 + ":|" + "-" * 10 + "|")
+
+    def test_the_claims_builder_is_the_recorded_bytes(self) -> None:
+        prov = json.loads((SKILL / "reference" / "PROVENANCE.json").read_text())
+        for name, row in prov["scripts"].items():
+            self.assertEqual(sha((SCRIPTS / name).read_bytes()), row["sha256"], name)
+
+    @unittest.skipUnless((LIVE / "scripts" / "make_claims_script.sh").is_file(), "i4r-audit not beside the baseline")
+    def test_the_claims_builder_and_verification_guide_are_the_live_ones(self) -> None:
+        self.assertEqual((SCRIPTS / "make_claims_script.sh").read_bytes(),
+                         (LIVE / "scripts" / "make_claims_script.sh").read_bytes())
+        self.assertEqual((SKILL / "reference" / "verification_guide.md").read_bytes(),
+                         (LIVE / "reference" / "verification_guide.md").read_bytes())
+
+    @unittest.skipUnless((LIVE / "scripts" / "generate_finding_artifacts.py").is_file(), "i4r-audit not beside the baseline")
+    def test_the_claims_map_rule_is_the_live_projections(self) -> None:
+        source = (LIVE / "scripts" / "generate_finding_artifacts.py").read_text()
+        self.assertIn('source = f"snippet:verification_snippets/C-{n}.R" if snippet.get("kind") == "code" else "none"',
+                      source)
 
     def test_reference_files_are_the_recorded_bytes(self) -> None:
         prov = json.loads((SKILL / "reference" / "PROVENANCE.json").read_text())

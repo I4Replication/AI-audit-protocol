@@ -709,7 +709,11 @@ def _verify(audit: pathlib.Path, *, require_post_delta_gates: bool = False, defe
                         f"run another critique round, gating it first")
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 missing = not receipt.is_file()
-                if not missing:
+                if "not read-only: pkg/" in str(exc):   # 2.7.11: modes only, which no receipt binds
+                    remedy = (f"; the synced folder strips pkg/'s read-only mode: if every file still matches "
+                              f"package_manifest.json, run chmod -R a-w {shlex.quote(str(audit / 'pkg'))} and run "
+                              f"this again (scripts/refreeze_pkg.py does it after checking); nothing needs rebuilding")
+                elif not missing:
                     remedy = ""
                 elif number == len(rounds):
                     remedy = (f". Run them: python3 scripts/run_post_delta_gates.py \"$AUDIT_DIR\" --round {number} "

@@ -329,7 +329,7 @@ class StagePathAndSymlinkTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("masked in the staged record work/reproduce.sas: 1 home path(s)", result.stdout)
         self.assertEqual((release / "work/reproduce.sas").read_text(), "%include '/" + "home/<user-dir>/private/input';\n")
-        self.assertIn("work/reproduce.sas  (1 path(s), 0 address(es))",
+        self.assertIn("work/reproduce.sas  (1 path(s), 0 address(es), 0 date(s))",
                       (release / "RELEASE_PATH_NEUTRALISATION.txt").read_text())
         self.assertEqual((audit / "work/reproduce.sas").read_text(), f"%include '{private}';\n")
         self.assertFalse((release / "RELEASE_REJECTED").exists())

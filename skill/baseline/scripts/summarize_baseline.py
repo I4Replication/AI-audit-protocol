@@ -25,7 +25,7 @@ from run_baseline import final_dir, load_subset, out_root  # noqa: E402
 
 # what the agent was asked and how its calls ran: a different prompt or cache lifetime is a different condition
 CONDITION_KEYS = ("requested_model", "reasoning_effort", "max_budget_usd", "timeout_seconds", "prompt_template_sha256",
-                  "prompt_cache_ttl")
+                  "packet_tools_sha256", "prompt_cache_ttl")
 PRICES = {k: v for k, v in bc.CONFIG.get("cache_write_usd_per_mtok", {}).items() if isinstance(v, dict)}
 
 

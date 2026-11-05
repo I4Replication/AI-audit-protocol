@@ -78,6 +78,20 @@ check("C-5", n_analytic = nrow(d), n_girls = sum(d$girl == 1))
 An expectation that is declared and then never checked is a **FAIL**, not a silence. So is an
 observation reported under a key that was never declared. Neither can be produced by forgetting.
 
+**One value per key.** Each named value, and `tol`, is one number or one string. `check()` would
+compare two equal-length vectors, but the summary table writes one row per element under the same
+claim and key, and `run_verification.sh` refuses the notebook ("verification summary repeats
+claim/key pair"); an empty value, or vectors of different lengths, stop the summary chunk itself, so
+no status is written. Give each value its own key:
+
+```r
+expect("C-5", mean_girls = 2.41, mean_boys = 2.97, tol = 0.005, note = "two decimals")
+m <- tapply(d$score, d$sex, mean)
+check("C-5", mean_girls = m[["girl"]], mean_boys = m[["boy"]])
+```
+
+`scripts/run_snippets.sh` fails such a key and names it, so test snippets with it before release.
+
 ---
 
 ## 3. The four verdicts
@@ -193,3 +207,18 @@ let the helper compute). A chunk that records an outcome under another claim's i
 The notebook needs `work/verification_plan.json` (written by the projection) and binds exactly one
 section per finding; the older abstract cross-check sections (`C-ABS.<n>`) are no longer generated,
 so keep the abstract consistent with the body through `check_consistency.sh`.
+
+Every code check also runs on its own, in the claims script, on a replicator's machine
+(`check_claims_script.sh` runs it that way before release). Two habits keep it portable:
+
+- **Quote the article with white space removed on both sides.** pdftotext versions differ in where
+  they put spaces: one PDF gives `t(20) = -1.25; p = .22` and `12.5 ± 3.1` from Poppler 21.03 and
+  `t(20)=-1.25; p=.22` and `12.5±3.1` from 26.07, so a phrase matched with its spacing fixed passes on
+  one and FAILs on the other (one published script FAILed several checks this way). Compare
+  `gsub("[[:space:]]+", "", phrase)` against the article text with its white space removed too.
+- **Prefer R to a program outside it.** The claims script names every program outside R a check runs
+  (pdftotext and the other Poppler tools, python3 and the modules it imports, macOS's textutil), with
+  the version the audit recorded, and checks each one before the first claim; a replicator without it,
+  or with an older one, is told which claims may FAIL for that reason. It cannot make a missing
+  program appear: where R can do the job (reading a .docx with `xml2` or `officer`, a .mat file with
+  `R.matlab`), use R.

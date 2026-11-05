@@ -15,8 +15,14 @@ call the timeout stops is terminalized by the runner as `timed_out`; it is a cha
 the model wrote into its output workspace, and a request not started otherwise. One monotonic provider-free
 pre-dispatch deadline covers source traversal, hashing and copying, paper extraction, deterministic
 scans, immutable role-packet construction, and the exact sandbox/read/write/promotion preflight.
-It is capped at 60 seconds; subprocesses and scans receive only its remaining time. The deadline
-may be tightened for a test but never raised. A timeout pauses with zero auditor inference.
+It is 60 seconds for an audit initialised before 2.7.9. A newer audit froze a rule
+(`phase_1.runtime.pre_dispatch_deadline_scaling`, `scripts/pre_dispatch_deadlines.py`) that adds 1 second
+per 10 MB and per five files its package manifest declares, up to 600 seconds; the verifier runs under
+the same deadline. Its snapshot states that ceiling as `phase_1.provider_free_preflight.maximum_seconds`
+(600; 60 in an older audit's). A manifest the rule cannot read counts as empty, and an absurd size gets
+the ceiling; the preflight then refuses that manifest inside the deadline. Subprocesses and scans receive
+only its remaining time. The deadline may be tightened for a test (to 60 seconds or less) but never
+raised. A timeout pauses with zero auditor inference and names the step it stopped in.
 The provider timeout and budget options
 are parsed for an explicit diagnostic, but a canonical run rejects any deviation from the exact
 hash-bound policy values (including a stricter local override).
@@ -31,7 +37,9 @@ for an earlier one. Each audit keeps its route, effort included, for its whole l
 1. Validate the policy, run identity, package-manifest checksum closure, raw source types, and source
    readability. Symlinks and special files are rejected.
 2. Copy `paper/` and `pkg/` once into `phase1/snapshots/<sha256>/raw`, build the deterministic common
-   evidence, bind all context hashes, and make the snapshot read-only.
+   evidence, bind all context hashes, and make the snapshot read-only. A file whose copy no longer hashes
+   to the digest the manifest check (or, for `paper/`, the inventory) read, because a sync client replaced
+   it meanwhile, pauses the preflight: "deposit file changed during the preflight: <file>".
 3. Create one immutable packet per role. Every role retains read-only raw access, but receives only
    the deterministic evidence indexes routed to its assignment.
 4. Run the provider-free smoke test. It checks the exact read/write/deny paths, deny-all network
@@ -57,7 +65,12 @@ for an earlier one. Each audit keeps its route, effort included, for its whole l
    keychain credentials, so a subscription-authenticated CLI could not start an auditor.
 
 A local preflight or probe failure writes `phase1/status.json`, projects a metadata-2.1 pause, and
-starts zero auditor inferences. A successful retry projects `pause_end` before continuing.
+starts zero auditor inferences. A successful retry projects `pause_end` before continuing. The
+error text in the pause, in `status.json` and in every terminal row passes
+`run_coordinator.provider_safe_text` (2.7.9): private paths are redacted and every
+participant-code-shaped token, a deposit file's name included, reads `<code-shaped token withheld>`,
+so the coordinator's scan of `run.json` never refuses it. The `PAUSED:` line on stderr keeps the
+full text.
 
 ## Deterministic evidence
 
@@ -91,6 +104,15 @@ An attempt writes incrementally under its private `output.partial` directory. Ac
   remedy; and
 - `evidence/manifest.json` closing over every regular evidence file and binding every cited raw
   source hash.
+
+Anything else in `output.partial` is outside the contract. Since 2.7.9 the runner moves what lies
+outside `evidence/` (a `work/` directory, a scratch script, a dotfile), whole, to the
+attempt's `non_contract_scratch/` and records each file's path, size and sha256 in
+`non_contract_scratch.json` beside it, then admits the output; none of it is promoted. An extra file
+under `evidence/` is still refused, as is a symlink anywhere, and a refusal names up to five paths.
+Each move is retried while Windows refuses it (`fs_retry`), and a read-only directory is made
+owner-writable first; a host that still refuses gets the refusal, with every entry put back.
+Re-admitting a promoted verifier tree moves nothing: an extra file there is refused, as before.
 
 Only a validated report and evidence directory can be promoted. Promotion is serialized and rolls
 back before terminal journaling. Once the terminal event exists, canonical bytes stay at the

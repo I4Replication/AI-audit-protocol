@@ -41,6 +41,90 @@ ln -s /path/to/versioned/i4r-audit ~/.claude/skills/i4r-audit
 Restart Claude Code after installing. Invoke `/i4r-audit` or ask for an I4R reproducibility audit of
 a paper and its package.
 
+## Upgrading in-flight audits to 2.7.11
+
+Nothing to do for an audit that is running. Its next critique round makes one extra model probe, and a round
+relaunched after the upgrade that reaches targeted adjudication makes one more adjudicator call: the critique runtime
+helper and `run_critique.sh` changed, and both caches bind them. Install between rounds: a running bash reads its
+script as it goes. An audit initialised before 2.7.11 keeps, for life, the 2.7.10 claims-script harness, critic
+snapshots that carry the cited files only, and no Claude thinking count in its records. It gets at once the check of
+hand-logged events (`log_event.sh` refuses a value finalize would refuse, and names the allowed values), the
+coordinator's bookkeeping repairs, the stricter status-code retry rule, critique ceilings that do not count the time
+the host sleeps, the journaled pause when a round stops without its quorum, `pkg/` given back its read-only mode at
+staging, finalize and publication, the staging and check-3c fixes, and the operator tools (`status.py`,
+`reserve_paper.sh`). Five cases need an operator:
+
+- **A critique round that stopped without its quorum on 2.7.11** is journaled as a pause (`critique_round_failed`),
+  and `status.py` shows it with the failed roles. Rerun the same `run_critique.sh` command on a 2.7.11 machine: it
+  journals the pause's end before it dispatches. A machine still on 2.7.10 does not end the pause.
+- **Re-filing a published audit whose claims script predates 2.7.10** (a metadata correction, a reopen, a registry
+  recovery): `stage_release.sh` and `publish_completed.sh` accept the script the audit already published when it runs
+  clean, and print a WARNING when it does not; they never ask for a rebuild. Published audits are not amended. Any
+  other claims script gets the full 2.7.10 check.
+- **A policy snapshot left by an init that did not finish on 2.7.10 or earlier** (no `run.json` yet) is refused
+  with a message naming the first rule it predates: remove that file and re-run init, so the audit freezes the
+  2.7.11 rules.
+- **A machine still on 2.7.10:** reinstall from the shared zip before starting any new audit. A 2.7.10 copy reserves
+  the paper and copies the deposit before `init_run.sh` refuses the version. If `init_run.sh` already refused with
+  "this skill copy is version 2.7.10 ... canonical skill is 2.7.11", nothing has run: reinstall and rerun the same
+  `init_run.sh` command on the same AUDIT_DIR (do not rerun `new_audit.sh`; it refuses a second intake). To give the
+  paper up instead, run `bash scripts/reserve_paper.sh release data/<Journal>/<Paper>` and move
+  `runs/<Journal>/<Paper>` under `old_runs/`; `reap` does not release an intake-only claim. An audit already running
+  keeps its install: the pin is checked only at intake and init.
+- **A new intake** whose paper folder holds an archive with other files or folders beside it is refused until it is
+  run with `--loose include` or `--loose exclude` (ask the user which), and intake refuses to start without `pdftotext`.
+
+Reinstall on every machine.
+
+## Upgrading in-flight audits to 2.7.9
+
+Nothing to do for an audit that is running. Its next critique round makes one extra model probe, and a round
+relaunched after the upgrade that reaches targeted adjudication makes one more adjudicator call: the critique runtime
+helper changed, and both caches bind it. An audit initialised before 2.7.9 keeps its 60 s pre-dispatch deadline for
+life; it gets the faster preflight and the retried renames. Four cases need an operator:
+
+- **A critic or the adjudicator stopped `permanent` on Codex's "Selected model is at capacity"** (booked as
+  `authentication`, `unsupported_model`, `deterministic_schema` or `permanent`): rerun the same `run_critique.sh`
+  command. Completed roles replay from cache and the stopped role gets its next attempt. The journal keeps the old
+  error class; a `log_event.sh` note can say why.
+- **A filed audit whose row left `registry/index.jsonl`** (`check --require-registry` refuses with "registry index
+  does not contain exactly one row for this audit"): the first filing on 2.7.9 writes back each row a conflicted copy
+  of the index still holds. An audit whose `index.jsonl` row is an earlier filing's, because its re-filing was stamped
+  earlier than the filing it replaced (a clock was off on either machine; see the synced-folder notes on the registry
+  below), refuses with "registry index row no longer matches the finalization receipt" and is not written back. For
+  any audit still refused, from one synced machine while nobody else is filing: `python3
+  scripts/finalization_receipt.py registry-audit <tree>/registry` lists them, and `registry-recover <tree>/registry
+  <audit-dir>...` restores each row that hashes to the audit's receipt. Never re-finalize a published audit to get
+  its row back.
+- **An audit re-finalized on a machine still on 2.7.8 after 2.7.9 had filed it** keeps the 2.7.9 filing's
+  `registry/<id>/index_row.json`, because 2.7.8 does not write that file. `check` then uses the row in `index.jsonl`.
+  `registry-audit` lists the file as STALE, and as BROKEN an `index_row.json` that is empty, truncated or unreadable.
+  Filings skip a broken file with a warning that names its audit, and that audit's `check` refuses. Both make
+  `registry-audit` exit 1. `registry-recover <tree>/registry <audit-dir>` replaces either file with the row the
+  receipt hashes to. It never replaces a file that claims the current filing.
+- **A coordinator failed with "cites an unbound evidence hash" or "unbound dependency" naming `PAPER.txt`,
+  `package_manifest.json` or `work/safe_evidence/manifest.json`:** such a citation is now admitted, so run the same
+  `run_coordinator.py` command again. Each rerun is a new paid coordinator call (most of an hour each for the four that
+  failed). If its three attempts are spent, the runner refuses with "3-attempt coordinator provider budget is
+  exhausted"; raise the ceiling for that run, e.g. `I4R_MAX_ATTEMPTS=4 python3 scripts/run_coordinator.py ...`. No
+  recovery tool applies to this refusal: `recover_coordinator.py` and `recover_misplaced_coordinator_outputs.py`
+  each repair one other defect and refuse it.
+
+Reinstall on every machine. A machine still on 2.7.8 or older files the registry the old way, and an audit it
+initialises freezes the 60 s deadline, which that audit keeps wherever it later runs, 2.7.9 included. It also
+refuses, before any call, Phase 1 and the verifier of an audit initialised on 2.7.9: "audit-scoped phase_1.runtime
+differs from the packaged execution contract" (that audit froze the new deadline rule, which 2.7.8 does not know).
+Upgrade the machine; the audit needs nothing. A policy snapshot 2.7.8 froze in an audit directory without a
+`run.json` (an init that did not finish, or `record_invocation.py --init-policy`) has no rule, and 2.7.9's
+`init_run.sh` refuses it ("predates the pre-dispatch rule ... remove it (rm ...)"): remove that file and re-run init.
+
+## Upgrading in-flight audits to 2.7.8
+
+Nothing to do for an audit that is running. An audit whose staging stopped with "N line(s) pair a participant code
+with a timestamp" in a Phase-1 evidence script or another record: clear the failed release directory (`chmod -R u+w`
+first; it holds RELEASE_REJECTED), then rerun `stage_release.sh` into a fresh directory, log the delivery and
+`phase_end release`, finalize and publish. A pair in the comment's own outputs still refuses and is reworded there.
+
 ## Upgrading in-flight audits to 2.7.7
 
 Nothing to do for an audit that is running. 2.7.7 changes no frozen value, prompt, packet or receipt (CHANGELOG,
@@ -123,8 +207,8 @@ route, packets, prompts and receipts.
   which every login rewrites; only the digest is kept) and the route, so a new login, another account or another
   CLI is checked again; a refusal is never cached as a pass. Exit 3: the account cannot use it, including any refusal
   the provider returns for the account, key or organisation (on a CLI older than 0.159.0, update the ChatGPT app
-  first); exit 4: network, rate limit, server or timeout, run it again; exit 5: the CLI rejected the call itself,
-  with no answer from the provider, update it. On a refusal nothing is reserved, and `new_audit.sh` prints the command
+  first); exit 4: network, rate limit, model at capacity, server or timeout, run it again; exit 5: the CLI rejected
+  the call itself, with no answer from the provider, update it. On a refusal nothing is reserved, and `new_audit.sh` prints the command
   to run again. Signing the CLI in to another account (for example an OpenAI API key whose organisation offers the
   model: `printenv OPENAI_API_KEY | codex login --with-api-key`) is the user's decision, not the operator agent's.
   `setup_workspace.sh` called directly skips this check: run `python3 scripts/check_critic_access.py` first.
@@ -679,6 +763,39 @@ in" from the shell. Start a new audit with `bash scripts/new_audit.sh "data/<Jou
 `scripts/` in the documented commands is the skill's own `scripts/` folder: run `new_audit.sh` from the tree
 root by the skill's path, and use the absolute paths it prints for the next steps.
 
+### What intake checks before it reserves (2.7.11)
+
+`new_audit.sh` refuses each of these before the critic-access call, the claim and the copy, so a refusal costs
+nothing and leaves nothing behind:
+
+- **An archive with files or folders beside it.** When the package is a `.zip` in the paper folder and anything
+  else sits beside it (files other than PDFs and `I4R_comment_*`, any folder but `__MACOSX`, another archive), it
+  lists them and asks for `--loose include` (the archive extracted as usual, the entries copied under
+  `pkg/beside_archive/`) or `--loose exclude` (the archive alone). Ask the user which is meant; `--package <folder>`
+  covers any other combination. A folder that is only the archive unpacked is a copy of it: move it out of `data/`.
+  The choice is recorded in the audit's `paper_source.json` (`package`, names only) and journaled once by
+  `init_run.sh` as a `note` of kind `intake_package` (counts and extensions only). Every other intake writes
+  `paper_source.json` as before.
+- **The skill version.** The canonical-`VERSION` rule `init_run.sh` applies (same `I4R_CANONICAL_SKILL_DIR` and
+  `I4R_ALLOW_SKILL_VERSION_MISMATCH=1`) is now applied by `new_audit.sh`, and again by `setup_workspace.sh`
+  before its claim. An install older than 2.7.11 does not check it: it reserves and copies, and then its
+  `init_run.sh` refuses. That intake stays valid: reinstall and rerun the same `init_run.sh` command on the same
+  `AUDIT_DIR` (`new_audit.sh` refuses a second intake), or give the paper up with
+  `bash scripts/reserve_paper.sh release data/<Journal>/<Paper>` and move `runs/<Journal>/<Paper>` under
+  `old_runs/` (`reap` never releases an intake-only claim).
+- **Poppler.** Without `pdftotext` on `PATH` there is no `paper/paper.txt`, and Phase 1 would read the operator's
+  `PAPER.txt` summary as the article, so intake refuses (put the `i4rdoc` environment's `bin` first on `PATH`). A
+  PDF that `pdftotext` cannot read, such as a scan, is still taken with the note `paper text: EXTRACTION FAILED`.
+
+One `--loose include` refusal comes later: an archive whose own top level holds `beside_archive` is refused by
+`setup_workspace.sh` after the claim and the extraction, and it prints the commands that undo both.
+
+**Two-column articles.** `paper/paper.txt` is extracted with `pdftotext -layout`, which keeps each page's layout:
+on a two-column page both columns share every line (about two thirds of the lines in most journals here). Tables
+are aligned there, and verification snippets keep citing it. When the article has two columns, say so in
+`BRIEF.md`: read tables in `paper.txt`, and running text in reading order with `pdftotext paper/paper.pdf -` (in
+Phase 1 the snapshot's `raw/paper/paper.pdf`; `pdftotext` is an allowed tool there) or in the PDF itself.
+
 ## Running a batch
 
 Nothing in this skill takes a tree root except `status.py` and `reserve_paper.sh`. Across many
@@ -691,17 +808,45 @@ python3 scripts/status.py <tree-root> --stuck    # only the ones needing attenti
 bash scripts/reserve_paper.sh reap <tree-root>   # stale claims, dry run; --force to release
 ```
 
-`status.py` walks `runs/` (and the legacy journal folders), never `data/`, `metadata/` or
-`old_runs/`. It is read-only, takes no lock and starts no provider call, so it is safe against a live
-batch. It flags an unfinished audit idle past `--idle-days`, an audit holding a lock while idle
-(the signature of a killed process), Dropbox conflicted copies inside the audit tree, and a
-finished audit whose reservation was never released.
+`status.py` walks the tree for audit folders (`runs/`, the legacy journal folders, workspaces relocated under
+`.work/`), never `data/`, `metadata/` or `old_runs/`. It is read-only and starts no provider call; it only
+tests each `run.lock` with a non-blocking shared lock it drops at once (and, for a stopped critique round,
+asks `ps` whether the driver pid the round recorded still runs), so it is safe against a live batch.
+It flags an unfinished audit idle past `--idle-days`, an audit holding a lock while idle (the signature
+of a killed process), Dropbox conflicted copies inside the audit tree, a finished audit whose reservation
+was never released, and (2.7.9) an audit filed into `registry/` that no index row holds as its current
+filing, whose `registry/<id>/index_row.json` is stale or broken, or whose `registry/<id>/current.json`
+cannot be used; a line above the list counts those across the whole registry.
+
+2.7.11: an audit that has stopped is flagged at once, whatever its idle time, with the reason and the step
+to take: a journaled pause; a Phase 1 whose last run paused or failed (`phase1/status.json`); and a critique
+round whose last run stopped, either through the `critique_round_failed` pause a 2.7.11 driver journals or
+through a `failed` round `ROUND_STATUS.json` on a round the journal has not integrated (an older driver, or a
+run refused before it dispatched). The critique line names the round, the failed critics, the receipt, and
+the command that resumes the round with the `CRITICS` and `DIFF_MANIFEST` it was started with (finished
+critics come from cache). Nothing is flagged while this machine runs the step again (it holds
+`phase1/run.lock`, or a live driver of that round holds the round lock); a re-run on another machine shows
+as stopped until it starts dispatching. An idle audit whose Phase 1 never started says so, and the board
+prints the journal's last entry when it is a `note` (a parking note, say). The baseline study's run records
+(`baseline_comments/` and any archive of it) are not audits and are not listed, a damaged `run.json` is
+no longer reported as missing, and a round lock's own `pid` copied by Dropbox is not counted as a conflicted
+copy.
 
 `reserve_paper.sh reap` releases only **your own** claims whose audit shows no journal activity
 inside the stale window. Another machine's claim is reported and held, because `paper` in a
 reservation is an absolute path on the claiming machine and this machine cannot see their audit
 directory at all — "no audit directory" there means "not mine to judge". `I4R_REAP_ANY_OWNER=1`
 overrides, and should only be set after actually asking them.
+
+2.7.11: an archived copy of the paper's audit (under `old_runs/`, or an `audit.failed-*` sibling) is never the
+only proof reap consults. When the paper-folder globs find no live journal (a title whose `?*[]{}\` characters the
+run folder drops, a relocated workspace, or only an archived sibling), every audit outside `old_runs/` whose
+`paper_source.json` names the paper counts, the youngest journal decides, and one with no journal yet holds the
+claim. 2.7.10 stopped at the first `paper_source.json` it found, which could be the archived copy's, and judged a
+live audit by that copy's old journal (with `--force`, releasing the live audit's claim). A claim whose intake
+never initialised (`init_run.sh` refused, for instance on the skill version) is held by reap for good: finish the
+init, or release it by hand (`reserve_paper.sh release data/<Journal>/<Paper>`). `list` prints `UNREADABLE` for a
+claim it cannot parse and goes on, instead of ending with a traceback.
 
 ### When something dies mid-Phase-1
 
@@ -723,6 +868,25 @@ still counts toward the limit of two pre-inference requests per role, which `I4R
 does not raise. It refuses outright if a response *was* retained — that case goes through the
 ordinary received-response path rather than discarding real work.
 
+### When the Phase-1 preflight pauses (`local_preflight_failed`)
+
+The preflight runs before any provider call, so re-running `run_phase1.py` costs nothing.
+
+- **`Phase-1 pre-dispatch deadline exceeded during <step>`.** Hashing and copying the deposit outran its deadline.
+  An audit initialised on 2.7.9 or later gets 60 s plus 1 s per 10 MB and per five files of its package (at most
+  600 s, `scripts/pre_dispatch_deadlines.py`); one initialised earlier keeps 60 s for its whole life, so run its
+  Phase 1 on a host with a fast local disk (a Mac did several hundred MB in seconds), with the sync client paused.
+- **`[Errno 13] Permission denied` (or `[Errno 1]`) on a rename, on WSL.** A Windows program (the Dropbox or OneDrive
+  client, or an antivirus scan) held a file open under `/mnt/<drive>/`. Each rename is retried for up to 16 s
+  first (the journal's writes for a twelfth of `LOCK_TIMEOUT` per lock hold in all), and the message names the cause
+  when it still fails. Pause syncing, or exclude the folder from scanning, for the minute of the preflight, then
+  re-run. The empty `phase1/snapshot_staging/snapshot-*` and `phase1/snapshots/.<sha>.<pid>.tmp` directories a
+  refused rename leaves are never read and can stay.
+- **`deposit file changed during the preflight: <file>`.** The file's bytes changed between the package-manifest check
+  and the copy, usually a sync client still writing it. Let syncing finish, then re-run. If the re-run stops on
+  `package manifest hash/size mismatch` for that file, the deposit no longer matches its intake manifest: restore the
+  deposited file.
+
 ### Journal notes for the round sequence
 
 `run_critique.sh` journals `round_integrated` itself when a round's critique completes; it marks the
@@ -735,6 +899,26 @@ and the claim tags, which stales the first approval).
 `human_effort` takes either `phase=<phase> person_minutes=<n>` (measured operator time) or
 `notes='<text>'`; an unattended run logs `notes='unattended run'`. Finalize still warns (the comparison has no
 numerator), but the warning then records the documented reason instead of reading as an oversight.
+
+### When a critique round stops (2.7.11)
+
+A `run_critique.sh` run that dispatched and stops without its critic quorum (a role out of attempts, an interrupt, a
+packet or snapshot fault after dispatch) journals a run-level `pause_start` with reason `critique_round_failed`,
+bound to its invocation's `ROUND_STATUS.json` by path and sha256. `run.json` then reads `paused` with that reason,
+the round itself stays `running`, and `wait_for_round.sh` prints the command that resumes the round. Rerun that
+command (finished critics come from cache): the rerun journals the `pause_end` before it dispatches, then proceeds as
+any run of the round. A run refused before dispatch journals nothing. Resume an audit paused this way on 2.7.11 or
+later. A rerun on 2.7.10 integrates the round and `run.json` reads `running` again, but the journal's
+`critique_round_failed` pause stays open and counts as paused time until a 2.7.11 `run_critique.sh` run of any round
+dispatches, or finalize; while `run.json` reads paused, a 2.7.10 `run.schema.json` refuses the reason. A deploy
+check that waits for every round to close can treat a `running` round as closed when `run.json` is paused with
+`critique_round_failed`, the open pause names that round, and no provider call is unterminated.
+
+Host sleep is not provider time. The per-call critique ceiling and `wait_for_round.sh`'s own deadline skip any gap of
+more than 60 s between two of their polls (the driver prints `[sleep] no poll for Ns`), so a call the host slept
+through is no longer stopped at the wake and charged an attempt; a hung call is still stopped at the ceiling. The
+hibernation behind this fix was a low-power sleep on a flat battery, which `caffeinate` cannot prevent: run batches on AC
+power.
 
 ### Renumbering to the published scheme
 
@@ -973,6 +1157,20 @@ The draft rows are mechanical and unmerged; edit dispositions or let the coordin
 Every `.jsonl` row under `work/registry_draft` must pass `schemas/v2/finding-row.schema.json` and
 the semantic rules in `schemas/tools/validate_v2.py`; a free-form notes file belongs in `.md`.
 
+The coordinator cites a path by its `origin` in `input_manifest.json`, at the sha256 listed there.
+Since 2.7.9 that includes `PAPER.txt`, `work/safe_evidence/manifest.json` and `package_manifest.json`
+(not a masked copy of it). `run.json` and `pipeline-policy.snapshot.json` are refused by name: their
+bytes change later (every journal event; `amend_round_cap.py`, `repin_critic_route.py`). Every later
+round re-hashes what a finding cites, so leave `PAPER.txt` and `work/safe_evidence/` as they are once
+the coordinator has run: a cited file that changed stops the next round's snapshot with "referenced
+evidence hash changed", before any provider call. To continue, put the cited bytes back. The completed
+coordinator attempt, `coordinator/invocations/<input-hash>/attempt_NN_<invocation-id>/` (the folder of
+the `coordinator_bundle.json` its `invocations.jsonl` row names as `output_artifact`), holds them under
+`source/`, at the `snapshot` path its `source/input_manifest.json` lists for the file's `origin`:
+`context/PAPER.txt` for `PAPER.txt`, `evidence/SAFE_EVIDENCE.json` for the safe-evidence manifest,
+`evidence/work/safe_evidence/...` for a payload. Copy that file over the live one (its sha256 is the
+one listed there) and rerun the stopped command.
+
 Two operator commands appear in the record when a run needs them and are documented here so the
 record stays readable: `python3 scripts/record_invocation.py --correct "$AUDIT_DIR" <invocation-id>
 correction.json`, with `{"set": {"status": "legacy_record"}, "reason": "<why>"}` in the file, appends a
@@ -1078,6 +1276,44 @@ remove the empty leftovers before re-running (they hold nothing). The publish lo
 file since 2.4.10 (`<paper>.publish.lock`, holding the owner's pid), so it is not resurrected; a
 leftover one from an earlier version, in either form, is broken automatically once its owner is
 dead, and refused while the owner is alive.
+
+The registry is shared the same way, and its lock only excludes processes on one machine. Since
+2.7.9 a filing also writes `registry/<audit_id>/index_row.json`, which only that audit's filing
+writes and which `finalization_receipt.py check` reads; `index.jsonl` is rebuilt at each filing as
+one row per audit from itself, every `index_row.json` and any `index (... conflicted copy ...).jsonl`
+(a copy's row counts only while it is its audit's current filing; copies are never moved or
+deleted). The view keeps each audit's current filing (`registry/<audit_id>/current.json`) ahead
+of a row with a later version stamp, which a machine whose clock runs ahead can write. A row for a
+later filing whose `versions/` folder has not reached the machine comes first, since its `current.json`
+then lags, and a conflicted copy's row only fills a missing row or replaces one the machine knows was
+superseded. A filing on 2.7.8 writes no `index_row.json`, so its row can still leave `index.jsonl`.
+A later filing takes it back from a conflicted copy, but not when Dropbox kept none, nor in two
+states that follow a re-filing on 2.7.8: a clock was off, so the re-filing is stamped earlier than
+the filing it replaced, and the index of a machine that missed it won the Dropbox conflict; or the
+audit was first filed on 2.7.9, and a machine filed another audit while it had the re-filing's
+`index.jsonl` and `versions/` folder but not yet its `current.json`. The audit whose row left then
+fails `check`; `registry-audit` lists it (MISSING, or STALE when its `index_row.json` is the earlier
+filing's), `status.py` flags it, and `registry-recover` restores its row (below). To take an
+audit out of the registry, move its `registry/<audit_id>` folder away as well as deleting its
+`index.jsonl` line, or the next filing writes the line back. An audit filed before 2.7.9 still
+checks against `index.jsonl`. So does an audit whose `index_row.json` is stale: it comes from an
+earlier filing, because a machine on 2.7.8 or older re-filed the audit or a sync conflict kept
+another filing's copy. An `index_row.json` that is empty, truncated or unreadable is broken. Filings
+leave a broken file out of `index.jsonl`, which keeps that audit's row, and print a warning naming the
+audit. That audit's `check` refuses until the file is replaced.
+When no index row holds a filed audit's current filing (its `check` refuses), `python3
+scripts/finalization_receipt.py registry-audit <tree>/registry` (read-only; the tree root also works)
+lists it, and also lists stale and broken `index_row.json` files, and as UNUSABLE a `current.json`
+that is unreadable, damaged, names no filing or is a symlink. It exits 1 for any of these. `check`,
+`registry-audit` and `registry-recover` all read `current.json` (`check` follows a symlink that stays
+inside the registry), so restore an unusable one first: let Dropbox finish syncing it, take it from
+the folder's version history, or replace a symlink with a copy of its target. `registry-recover
+<tree>/registry <audit-dir or finalization_receipt.json>...` then writes its `index_row.json` from the
+row in `index.jsonl`, a conflicted copy, or a rebuild from its filed pair under `versions/`, and only
+when that row hashes to the receipt's `index_row_sha256`. It replaces a stale or broken file the
+same way, but never one that claims the current filing and differs. Both commands refuse a folder
+that is not a registry. Run `registry-recover` on one machine, after Dropbox has synced. Do not
+re-finalize a published audit to get its row back.
 
 Every machine that runs audits must run the same skill version. The tree syncs the canonical copy
 to all of them; since 2.4.11 `init_run.sh` refuses to start an audit from a copy whose `VERSION`
@@ -1203,13 +1439,64 @@ an omitted value cannot establish convergence.
 Verification must run through `bash scripts/run_verification.sh "$AUDIT_DIR"`; it writes the
 content-bound `verification_manifest.json` required by release staging. There is no
 `ALLOW_NO_VERIFICATION` waiver. Build the final comment with
-`bash scripts/build_docx.sh "$AUDIT_DIR"`. Canonical builds read the ten-body-page limit from the
-hash-bound audit policy snapshot and reject `MAX_PAGES`; use `--preview-max-pages N` only for a
-non-release preview under `report/previews/`. Publication contains the single
+`python3 scripts/build_document.py "$AUDIT_DIR" <output-name>` (it runs `build_docx.sh` with the same arguments).
+Canonical builds read the ten-body-page limit from the hash-bound audit policy snapshot and reject `MAX_PAGES`;
+use `--preview-max-pages N` only for a non-release preview under `report/previews/`.
+
+**Length and build failures (2.7.11).** `check_consistency.sh`'s `~N words — unlikely to fit 10 rendered
+pages` WARN divides the whole of `REPORT_final.md` by 600 words a page: the References, Data and Code
+Availability and Appendix sections and the generated claim-tag block count, though none of them is body.
+It cannot change (every post-delta receipt binds its bytes), and it never blocks. On 2026-11-01 it fired on
+104 of the 131 published comments whose bound report is on disk, and every one of them fits. Across the 131,
+the body ran 2,546 to 4,805 words on 7 to 10 pages (282 to 534 words a page; tables and figures make the
+difference) and the back matter 1,253 to 5,112 words. Do not cut prose for it. The cap is counted only by
+the build; for a draft, `bash scripts/build_docx.sh --preview-max-pages 30 "$AUDIT_DIR" length` writes
+`report/previews/length.manifest.json`, whose `pages.body_pages` is the exact count.
+`python3 scripts/build_document.py` runs `build_docx.sh` with the same arguments and keeps what a failed build
+printed in `document_build_diagnostics/last_failure_output.txt`: for a failure before validation (a missing
+input or tool, a table without a caption, pandoc, LibreOffice, promotion), `last_failure.json` records the stage
+and only "document build failed before promotion". `build_docx.sh` discards LibreOffice's own messages.
+
+Publication contains the single
 [`document-manifest-v3`](schemas/v3/document-build-manifest.schema.json)-bound PDF, claims script,
 `run.json`, `comment.json`,
 `finalization_receipt.json`, `document_build_manifest.json`, and `release-manifest.json`, plus the
 bound DOCX when one was produced (seven files without DOCX, eight with it).
+
+### Critic snapshots and the critic sandbox (2.7.11)
+
+- **What a critic snapshot carries.** An audit initialised before 2.7.11 froze no `critique.snapshot_evidence`: its
+  round snapshots carry the cited files only (every `evidence.source_hashes` path and existing
+  `dependencies.artifact_paths`), byte for byte as before, with the context copy of `work/pkg_manifest.txt` that
+  every snapshot has carried since 2.7.8, which names every deposited file: such an audit's critics receive every
+  deposit name, code-shaped ones included. A new audit freezes `cited_plus_deposit_1`
+  (`scripts/snapshot_evidence_rules.py`): its snapshots also carry, under `source/evidence/`, each row's
+  `verification_snippet.path` and the `_prelude.R` beside it, then the deposit's uncited files from
+  `package_manifest.json`, smallest first, within 230 inventory rows, 15,000 characters of inventory paths, 25 MB per
+  file and 100 MB per snapshot. The bounds keep the critic schema's evidence enums within the provider's
+  structured-output limits. A file whose path has a participant-code-shaped component or matches the private-path
+  pattern, and a snippet that fails the coordinator's provider-safety content screen, is withheld. Everything left out
+  is listed in `source/context/WITHHELD_FILES.json` (a code-shaped or invalid name by sha256 and size only), which a
+  critic may cite, and the snapshot's copy of `work/pkg_manifest.txt` is masked as the coordinator's
+  `package_manifest.json` is: a code-shaped component becomes a placeholder such as `masked-file-001.csv`, a
+  private-path name one placeholder, and each line keeps its sha256. Such a name is written nowhere in the snapshot.
+  A deposited file that changed since intake stops the snapshot. The round plan names the added data classes
+  `uncited_deposit_files` and `verification_snippets`.
+- **Which findings later-round critics review.** A later round's packet lists every changed finding in
+  `changed_claim_ids`, bookkeeping-only changes (a settled field, a re-bound verification record) included, because
+  `verify_diff_packet.py`, the post-delta gates and finalize's review scope consume that list. For an audit on
+  `substantive_specialists_1` (initialised on 2.7.4 or later) the specialists review `specialist_claim_ids`, the
+  substantive changes, and completeness reviews every changed id. A round with no substantive change keeps one
+  specialist on the full list, because finalize needs completeness plus a specialist in every later round. An older
+  audit sends every changed finding to every critic. Completeness re-reviewing bookkeeping-only findings is expected.
+- **Critics cannot run R.** Codex runs each critic in a read-only sandbox, and R cannot create its per-session
+  temporary files there (`creating temporary file for -e failed`), so a critic that tries `Rscript` falls back to
+  Python or to the auditors' reports; about 63 of 1,321 critic reports under `runs/` say so. This is expected and no
+  reason to rerun a round. The snippets a new audit's snapshot carries are there to be read.
+- **In-flight audits.** The critique runtime helper and the driver changed, so an in-flight audit pays one more
+  critique model probe on its next round (the probe cache key binds the helper), and a round relaunched across the
+  upgrade that reaches targeted adjudication pays one more adjudicator call (the target-snapshot address binds the
+  helper and the driver). Round snapshots, plans and cached critics keep their bytes. Install between rounds.
 
 ## Appendix A rendering and document manifests (2.6.9)
 
@@ -1269,6 +1556,18 @@ now prints the reference with `SOURCE_DATE_EPOCH=0`, whose members are the same 
 is stable. This changes the key's reference hash once, together with the builder hash; the archives
 written before it are never hit again and may be removed.
 
+**Leftover transaction folders (2.7.11 note).** Most audits hold `.document-build-transactions/build.*`
+and `.finding-generation.*` folders dated at an earlier build or projection. `build_docx.sh` and
+`generate_finding_artifacts.py` remove their own transaction when they finish, and the synced folder
+brings the copy back seconds later. The copies are inert: never staged, published, bound by a manifest
+or receipt, or read by a gate. `build_docx.sh` removes `build.*` folders older than an hour at its next
+run. Either kind may be deleted by hand while nothing builds or projects on that audit (no
+`build_docx.sh`, `generate_finding_artifacts.py --apply`, amendment or finalize running on it); leave
+`amendments/` alone, whose backups may hold copies by design (the rollback restores what the build's
+start-up sweep removes). A `.finding-generation-commit.json` marker is not a leftover: none exists
+today, and one that appears while no projection runs is reported before the next `--apply`, which
+would restore from it.
+
 **Re-filing a published comment with the corrected Appendix.** The report text does not change, so
 no critique round runs and no reopen is needed, but a rebuild and a restage alone are not enough.
 The full chain, proven end to end on scratch copies of audit A20 (published on 2.6.7) and
@@ -1276,9 +1575,16 @@ of an audit published on the live 2.6.8, with no provider call:
 
 1. Move the filed set under `old_runs/` and claim the paper again (*Correcting a published
    comment*, steps 1 and 2).
-2. `chmod -R a-w "$AUDIT_DIR/pkg"` when the synced folder stripped its read-only mode (7 of 10
-   published audits swept): `validate_round_projections.py` refuses "archive package directory is
-   not read-only: pkg/.".
+2. `pkg/`'s read-only mode, which the synced folder strips (7 of 10 published audits swept;
+   `validate_round_projections.py` refuses "archive package directory is not read-only: pkg/.").
+   From 2.7.11 `stage_release.sh`, `finalize_run.sh` and `publish_completed.sh` give it back
+   themselves (`scripts/refreeze_pkg.py`: modes only, never journaled) when every file still hashes
+   to `package_manifest.json`, and the archive gate then checks it as before. Run `chmod -R a-w
+   "$AUDIT_DIR/pkg"` by hand only after it prints "modes left as they are" and the file it names is
+   resolved, or before running `run_post_delta_gates.py` yourself (step 5, or a round-time gate that
+   refused this mid-audit: `python3 scripts/refreeze_pkg.py "$AUDIT_DIR"` does it after checking).
+   Never rebuild the packet or re-run the gates of a finalized audit for this refusal alone: that
+   journals a gate event and stales its receipt.
 3. `bash scripts/build_docx.sh "$AUDIT_DIR" <output-name>` (the stale-manifest refusal prints the
    name).
 4. Only for an audit published on 2.6.7 or earlier. 2.6.8 changed the verification notebook's
@@ -1338,6 +1644,139 @@ records publish's filing: a new finalize would file a registry version that no l
    verification, claims script, a new `REPORT_v<N+1>.md` snapshot), then stage into a fresh directory, re-log the delivery (`bash scripts/log_event.sh delivery
    artifact_path=report/<output-name>.pdf recipient='<recipient>'`) and `phase_end phase=release`.
 5. Run finalize with `I4R_REFINALIZE_PUBLISHED=1`, then publish again (publish releases the claim).
+
+**Claims scripts built before 2.7.10 (2.7.11).** A re-filing that keeps the audit's claims script (a
+corrected Appendix, a metadata correction, a set moved aside and filed again, a reopen whose round
+changed nothing) publishes it again as it was sent. 2.7.10 refused every such re-filing, because a
+script built before 2.7.10 prints no "deposit unmodified" line. `stage_release.sh` and
+`publish_completed.sh` now run `check_claims_script.sh --release`, which recognises the script the
+audit already published: the audit was initialised before 2.7.10 (`run.json` `protocol_version`), its
+journal records publish's filing, the script has no 2.7.10 harness, and the finalization receipt binds
+its bytes. That script is still run: it passes on exit 0 with 0 FAIL ("built before 2.7.10 and
+already published"); otherwise a WARNING says why (a failing check, no Rscript, no `pkg/`) with the
+failing lines, and the release goes on. Never rebuild it with `generate_finding_artifacts.py --apply`
+to get past the check, which rewrites the published script and stales the receipt;
+`amend_claims_script.py` replaces one where that is decided. Every other script is checked as in
+2.7.10: a new audit's, a pre-2.7.10 audit's at its first publication, and an amended or rebuilt one
+(step 4 rebuilds it with the 2.7.10 harness).
+
+## Amending a published claims script (2.7.10)
+
+Claims scripts built before 2.7.10 carry a cut-down copy of the verification notebook's setup, and about half of
+them stop with an error when a replicator runs them. `scripts/amend_claims_script.py` rebuilds one with the current
+builder from the audit's own bound snippets and claims map, runs it on its own against the deposit, and republishes
+the paper in place. Findings, snippets, `comment.json` and the report are never written, and without
+`--rebuild-documents` the comment's PDF and DOCX are republished byte for byte. An audit re-filed without
+an amendment keeps its published script (2.7.11: *Correcting a published comment*).
+
+```bash
+python3 scripts/amend_claims_script.py "$AUDIT_DIR"            # dry run: build, run, check, rehearse
+python3 scripts/amend_claims_script.py "$AUDIT_DIR" --apply    # only when the dry run passes
+```
+
+- The rebuilt script must run cleanly on its own (`check_claims_script.sh`; the tool keeps no log of the run in the
+  audit). One that still fails is refused, with the failing lines: a package the snippets load that this host lacks
+  (install it and run again), a check that counts something on the auditor's own machine, or a snippet that reads the
+  audit's working files rather than the deposit. An audit whose receipt does not check is refused.
+- Before anything changes, in the dry run too, `comments/<journal>/<paper>/` and `metadata/<journal>/<paper>/` must
+  hold exactly the files their `release-manifest.json` lists, and the audit's current claims script, receipt, document
+  manifest, `comment.json`, PDF and DOCX. Every file and folder `--apply` changes (in the audit, the published folders
+  and `old_runs/`) must be writable.
+- The dry run then rehearses the whole amendment on a full scratch copy of the audit, in a scratch tree with a registry
+  of its own. It replaces the claims script and its projection row, journals the note, creates the receipt and checks
+  it for publication, makes `pkg/` read-only and runs `publish_completed.sh` (privacy, check 3c, the recount). The
+  rehearsal's `comments/` must come out byte for byte the published one. Nothing outside the scratch folders is
+  written, and they are removed however the run ends (one killed with SIGKILL may leave one in `$TMPDIR`).
+- `--apply` backs up the claims script, projection manifest and receipt to `<audit>/amendments/<time>-claims_script/`
+  (its `AMEND_PLAN.json` says when the backups are complete) and replaces the script and its row. It then journals a
+  `note`: `kind=claims_script_amendment`, `documents=unchanged`, both hashes, and `record=` that folder. A failure,
+  Ctrl-C, SIGTERM or SIGHUP before the note puts every file back. The receipt is then created again and the audit
+  re-filed in the registry it was filed in.
+- Both published folders then move to `old_runs/archived_<date>_claims_amendment/` (the plan names the two folders
+  before either moves), and `publish_completed.sh` republishes the paper with all its gates and journals its own
+  `delivery`. If it refuses, both folders move back; nothing is deleted, and a folder that cannot be moved back is
+  named with where the previous set is. The synced folder strips the read-only mode intake gave `pkg/`, which the
+  archive gate refuses, so the mode is restored first (`chmod a-w`, as in *Re-filing a published comment with the
+  corrected Appendix*, step 2; no byte changes). Once that delivery names the republished set, `AMENDMENT.json` in the
+  record folder records it all, with tree-relative paths only.
+- After the note, `--apply` resumes an unfinished amendment (receipt, filing, publication, record) and says "already
+  amended" once it is done. A finished amendment is history: a later release can amend the audit again.
+- A run killed while it republishes (SIGKILL, a power cut) may leave nothing published for the paper until `--apply`
+  runs again; the dry run then says, for `comments/` and `metadata/`, what is published and where the previous set
+  is. The resumed `--apply` takes the previous sets from the folders the plan named, whichever run moved them. A set
+  `publish_completed.sh` made visible but was stopped before it accepted (no delivery in the journal) moves into the
+  record folder's `unaccepted_publication/`, and the paper is published again. What the stopped
+  `publish_completed.sh` left is removed: its transaction folders beside `comments/` and `metadata/`, its lock, and
+  the temporary notebook `generate_finding_artifacts.py --check` writes into `work/`. While that `publish_completed.sh`
+  still runs, every run refuses and names its process group. Published folders in a state no `--apply` leaves (moved
+  or edited by hand) are refused, with what is where.
+- A run killed outright before its note (SIGKILL, a power cut) leaves a record folder that no note names, and every
+  later run refuses until `python3 scripts/amend_claims_script.py "$AUDIT_DIR" --rollback-pending` puts the audit back
+  from that folder's backups. Run it on the machine that started the amendment; it refuses while that run, or a
+  document build it started, is still alive.
+- One run per audit at a time: a second run on the same audit refuses while the first holds the audit folder's lock
+  (on this machine; never run two at once from two machines). A journal (`run.events.jsonl`) that cannot be read
+  refuses every run, `--rollback-pending` included: make it readable again first. A run that fails just as its note
+  is journaled, with a journal it cannot read, stops part way and says so: once the journal is readable, `--apply`
+  resumes the amendment if its note landed, otherwise `--rollback-pending` puts the audit back. A record whose plan
+  was written after its note is never rolled back; if no note in the journal names it, the journal has lost events
+  (an older copy restored): put back the copy that holds the note. A run cut off in the milliseconds between a journal
+  write and the projections it rewrites leaves `run.json` behind the journal; the resumed `--apply` rebuilds them
+  (`lifecycle_journal.py recover`) before it finishes.
+- Stop a run with Ctrl-C in its terminal or `kill -TERM <pid>`. A signal that arrives while the note is journaled or
+  the audit re-filed is held until that step ends, and the run says so; the wait for another filing's registry lock
+  can still be stopped (a filing that takes the lock in the instant before the re-filing is waited for, and the run
+  says the signal is held). A run started with `nohup` ignores SIGHUP, so it keeps running when its terminal closes.
+- While `publish_completed.sh` republishes the paper (about 10 to 60 s), the paper has no published folders, and the
+  republication, like every publish, releases any claim on the paper.
+- An audit whose comment older document scripts built (2.7.4 and earlier) is refused, since its receipt cannot be
+  created again on this release ("code identity differs from the release verifier"). Amend it with
+  `--rebuild-documents` (below), never by rebuilding its documents by hand: `build_docx.sh` and `finalize_run.sh` would
+  leave its receipt and its publication apart.
+
+Run it on the machine whose R has the audit's packages, when no teammate is filing, and resume an unfinished
+amendment on the machine that started it.
+
+### Comments built by older document scripts: `--rebuild-documents`
+
+An audit published on 2.7.4 or earlier has a `document_build_manifest.json` written by that release's document scripts
+(2.7.5 changed `document_release.py`). The amendment above refuses it: the receipt cannot be created again, because
+`fr.artifact_paths` reads "document manifest ... code identity differs from the release verifier". Its comment is
+rebuilt first:
+
+```bash
+export PATH="$HOME/miniconda3/envs/i4rdoc/bin:$PATH"     # pandoc and Poppler; LibreOffice from /Applications
+python3 scripts/amend_claims_script.py "$AUDIT_DIR" --rebuild-documents            # dry run
+python3 scripts/amend_claims_script.py "$AUDIT_DIR" --rebuild-documents --apply    # only when the text is the same
+```
+
+The checks, the rehearsal, the rollback, the resume, `--rollback-pending` and `AMENDMENT.json` are the amendment's
+above; what differs:
+
+- Only an audit whose receipt checks with `--require-registry` and whose documents fail on that code identity alone is
+  accepted: on a scratch copy each stale identity is set to this release's, and `fr.artifact_paths` must then pass.
+  Anything else is refused as before, and so is an audit whose documents are current (amend it without the flag).
+- The rehearsal also runs `build_docx.sh` under the bound PDF's name. It reports the files the build changed or
+  created, whether `fr.artifact_paths` now passes, the new page counts and release eligibility, and the comment's
+  text, old against new, in the PDF (`pdftotext`) and the DOCX (`word/document.xml`). Whitespace, hyphenation at line
+  ends and a header or footer repeated on every page are normalised, and any difference is shown as a short diff of
+  words. The comment's sources are bound by the receipt and never written, so a difference can only come from
+  rendering; the report says whether only typography or the order of the same words differs, or words and numbers.
+- `--apply` goes ahead only when that text is the same, or with `--accept-rendering-changes` (the diff is recorded in
+  `AMENDMENT.json`). Use the flag for a layout difference only, never for one in words or numbers.
+  - It backs up every file the build may change: the documents, the files the dry run's build changed or removed, and
+    every file already in the build's own folders (its cache, its transactions and
+    `document_build_diagnostics/last_failure.json`, which a failing build overwrites). With the claims script,
+    projection manifest and receipt, they go to `<audit>/amendments/<time>-claims_script/` (with `REBUILD_PLAN.json`).
+    It replaces the claims script, rebuilds in the audit, and checks the text and the binding again.
+  - Only then does it journal the `note` (`documents=rebuilt`, both claims-script hashes, the old and new PDF and DOCX
+    hashes) and create the receipt again. A failure or a signal before the note puts every file back and removes the
+    folders the build created; the build itself is ended with its whole process group first.
+  - Both published folders, `comments/` and `metadata/`, are then republished as above.
+  - After the note, `--rebuild-documents --apply` resumes, and says "already amended" once done. A later release whose
+    document scripts differ again can amend the audit again with `--rebuild-documents`.
+  - A `build.*` folder that reappears in `.document-build-transactions/` after the amendment, and the copies in its
+    record's backups, are inert (*Leftover transaction folders* under *Appendix A rendering and document manifests*).
 
 ## Raising the round cap of an existing audit (2.6.9)
 
@@ -1734,9 +2173,11 @@ of them are unchanged.
 `evidence/manifest.json` with the evidence files it lists. For each hypothesis it gives one verdict,
 CONFIRMED, REFUTED or UNVERIFIABLE, with evidence joined to the snapshot hashes. A CONFIRMED or
 REFUTED verdict needs a rerunnable artefact. An UNVERIFIABLE verdict must say what the deposit
-lacks. The runner validates the output, then promotes it to `work/verifier/<role>/<input_sha256>/`
-and writes the completion receipt `phase1/completions/<role>/<input_sha256>.json`. The receipt binds
-the invocation id, the snapshot, the frozen packet, the result, report and evidence-manifest
+lacks. A file the call leaves outside that set and outside `evidence/` is moved to the attempt's
+`non_contract_scratch/` (2.7.9), so it is never promoted. The runner validates the output, then
+promotes it to `work/verifier/<role>/<input_sha256>/` and writes the completion receipt
+`phase1/completions/<role>/<input_sha256>.json`. The receipt binds the invocation id, the
+snapshot, the frozen packet, the result, report and evidence-manifest
 hashes, the claim hashes and the source joins. `reference/adjudication_guide.md` maps verdicts to
 registry outcomes: CONFIRMED is `confirmed`, REFUTED is `refuted`, and UNVERIFIABLE is
 `inconclusive`. There is no OVERSTATED, and UNVERIFIABLE never counts as a confirmation.
@@ -1948,7 +2389,11 @@ or phone number passed all of them. Check 3c, `scripts/check_deposit_values.py`,
   read them. The module docstring lists every rule, and its self-test runs first.
 - A deposit file it cannot read is listed as "not scanned", a file it read only in part as "read
   in part", and a personal-data column with no usable value as such. None of these refuses
-  anything.
+  anything. Since 2.7.11 a clean verdict that missed part of the deposit says so: `ok, within what it
+  could read` and a `NOT COVERED` line naming the files not read by format and count (`.xls 3, .omv 1`),
+  or that no frozen deposit copy was found. It reads no `.omv`, `.jasp`, `.xls`, `.ods`, `.mat`, `.npy`,
+  `.h5`, `.parquet` or other format outside the list above: when that line names one, check by hand that
+  no finding, record or script in the release quotes a value from those files.
 - A value store (`work/deposit_value_hashes.json`) left by a pre-release build of this gate is reported
   on every run. It holds keyed hashes together with their key, so it counts as personal data:
   delete it. Nothing reads it.
@@ -2005,7 +2450,10 @@ The coordinator now sees each code-shaped path segment replaced by a stable plac
 (`masked-file-001.csv`), with every entry's size and sha256 kept and the holding directories
 summarised as "directory, N files". The participant-code rule itself is unchanged: a placeholder
 is not a deposit path and cannot be cited. A manifest with no code-shaped name reaches the
-coordinator byte for byte, as before.
+coordinator byte for byte, as before. Since 2.7.9 the error text Phase 1 and the verifier journal
+(pause details, status errors, terminal rows) withholds such a name the same way, as
+`<code-shaped token withheld>`, so a manifest mismatch or a deadline that names the file no longer
+stops the coordinator; `run_phase1.py`'s `PAUSED:` line on stderr still shows the name.
 
 ## Environment variables
 

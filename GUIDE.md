@@ -10,7 +10,7 @@ the human verifier, and a process record. It reports checks that passed and hypo
 carefully as the defects it confirms. It is not for peer review of unpublished manuscripts, for literature
 reviews, or for papers with no replication materials.
 
-Skill versions: **i4r-audit 2.7.7** and **baseline 1.1.0**.
+Skill versions: **i4r-audit 2.7.11** and **baseline 1.2.0**.
 
 <sub>Sources: `skill/i4r-audit/SKILL.md` frontmatter and lines 8-10; `skill/i4r-audit/VERSION`; `skill/baseline/VERSION`.</sub>
 
@@ -19,7 +19,7 @@ Skill versions: **i4r-audit 2.7.7** and **baseline 1.1.0**.
 [5 Outputs](#5-outputs) · [6 Findings scheme](#6-findings-scheme) ·
 [7 Safety, privacy and release gates](#7-safety-privacy-and-release-gates) ·
 [8 Code map, schemas and tests](#8-code-map-schemas-and-tests) · [9 The baseline skill](#9-the-baseline-skill) ·
-[10 Version history](#10-version-history) · [11 Status and how to cite](#11-status-and-how-to-cite)
+[10 Version history](#10-version-history) · [11 Status, license and how to cite](#11-status-license-and-how-to-cite)
 
 Where this README and the skill's own files disagree, the skill wins. `config/pipeline-policy-v2.json` is
 authoritative for models, roles and stopping rules, and `INSTALL.md`, `config/` and the scripts win over the
@@ -32,11 +32,12 @@ cheat sheet (which itself says `INSTALL.md` wins).
 | `skill/i4r-audit/` | The audit skill. Five parallel auditors feed an adjudication with a dispositioned ledger. A second model family then runs adversarial critique rounds. The audit ends in a gated release with a verification notebook and a numbered claims script |
 | `skill/baseline/` | The baseline. One Claude call per paper audits it and writes the whole comment, from the same inputs the pipeline's auditors received. It has no critics and no rounds ([§9](#9-the-baseline-skill)) |
 | `CHEATSHEET.html`, `CHEATSHEET.pdf` | The operator's cheat sheet, byte-identical to the copies in `skill/i4r-audit/`. Its header still reads 2.6.2, but its install step and models are 2.7.x |
+| `LICENSE` | The Creative Commons Attribution 4.0 International License (CC BY 4.0) legal code, which covers this repository ([§11](#11-status-license-and-how-to-cite)) |
 | `skill/MERGE_NOTES.md` | History only. The decision table from unifying two development branches (2026-08-21), with two addenda. Its model and round settings are out of date |
 
 Inside the skill, [`SKILL.md`](skill/i4r-audit/SKILL.md) is the run book;
 [`INSTALL.md`](skill/i4r-audit/INSTALL.md) covers installation, validation, dependencies, environment variables
-and per-version upgrade notes; [`CHANGELOG.md`](skill/i4r-audit/CHANGELOG.md) covers 2.2.0 to 2.7.7.
+and per-version upgrade notes; [`CHANGELOG.md`](skill/i4r-audit/CHANGELOG.md) covers 2.2.0 to 2.7.11.
 
 <sub>Sources: current `README.md` Contents; `cmp` of both cheat-sheet copies; `CHEATSHEET.html` title block; `skill/MERGE_NOTES.md`.</sub>
 
@@ -74,7 +75,7 @@ attended pause.
 ### Roles and models
 
 `config/pipeline-policy-v2.json` is authoritative for models, roles, round routing, retry limits and stopping
-rules. These are the routes for an audit started on 2.7.7:
+rules. These are the routes for an audit started on 2.7.7 or later:
 
 | Role | Default count | Model (spawned id) | Effort | Via |
 |---|---|---|---|---|
@@ -229,7 +230,7 @@ mkdir -p ~/.claude/skills && cd "$(mktemp -d)"
 unzip -q "<discipline-root>/skill/i4r-audit-unified/i4r-audit.zip"
 [ ! -e ~/.claude/skills/i4r-audit ] || mv ~/.claude/skills/i4r-audit ~/i4r-audit-old-$(date +%Y%m%d%H%M)
 cp -R i4r-audit ~/.claude/skills/ && cd ~/.claude/skills/i4r-audit && chmod +x scripts/*.sh
-cat VERSION         # expect 2.7.7, then restart Claude Code
+cat VERSION         # expect 2.7.11, then restart Claude Code
 ```
 
 The zip is built with `python3 scripts/build_package.py --output ../i4r-audit.zip` and checked by running the
@@ -556,6 +557,12 @@ wrote stay in R, and a deposit with no code falls back to R. Claims with no code
 `CLAIMS WITH NO CODE` tail, each with a manual check, so nothing is dropped. Claim numbers match Appendix A and
 the `[claim N]` tags and are never renumbered. `claims_map.tsv` records which code belongs to which claim.
 
+Since 2.7.10 the script carries the verification notebook's setup (the same loaders, helpers and verdict rule),
+lists the R packages its checks load, runs each claim inside its own error handler and reports whether the deposit
+was left unmodified; `check_claims_script.sh` runs it on its own, as a replicator would, at staging and publication.
+From 2.7.11 a new audit's script also names the programs outside R its checks call and the R version it needs, and
+switches a non-UTF-8 R session to UTF-8 before the first check.
+
 | Severity label | Rule (mapped mechanically) |
 |---|---|
 | RETRACTION MATERIAL | `conclusion_contradicted` or `conclusion_unsupported` at CONFIRMED |
@@ -712,7 +719,7 @@ because the suites use package-relative imports.
 
 | Topic | Stale statement | What holds |
 |---|---|---|
-| Cheat-sheet version | Header says 2.6.2 | The install step shows 2.7.7; follow `INSTALL.md` and the policy |
+| Cheat-sheet version | Header says 2.6.2 | The install step shows 2.7.11; follow `INSTALL.md` and the policy |
 | Critic timeout | Cheat sheet §9 says 45 min | New audits freeze `critique.provider_timeout_seconds=5400` (90 min) |
 | `jsonschema` | `INSTALL.md` lists it as core | Needed only by the test suite; the skill ships its own validator |
 | Adjudicator and verifier models | `reference/adjudication_guide.md` says Terra and Sonnet/max; the policy label `terra_targeted_on_policy_triggers` is legacy | The policy's `models.*`: `gpt-6.1-sol`/`max` and `sonnet-5-5`/`xhigh` |
@@ -725,7 +732,7 @@ because the suites use package-relative imports.
 
 ## 9. The baseline skill
 
-`skill/baseline/` (version 1.1.0) runs the **single-agent, single-pass** condition. One Claude call per paper
+`skill/baseline/` (version 1.2.0) runs the **single-agent, single-pass** condition. One Claude call per paper
 audits the paper and its package and writes the whole comment, with no critics, no coordinator and no rounds.
 It exists to be compared with the full pipeline on the same already-audited papers. Do not use it to audit a
 new paper.
@@ -755,6 +762,11 @@ python3 $S/scripts/summarize_baseline.py --json baseline_comments/summary.json
 
 - **Outputs.** They go to `baseline_comments/<journal>/<paper>/`. The baseline never edits `runs/`, `comments/`
   or `metadata/`. A rerun moves the earlier output to `.superseded/` and deletes nothing.
+- **Claims script (1.2.0).** The agent also writes one verification check per finding
+  (`verification_snippets/`, under the pipeline's `verification_guide.md` contract), and the pipeline's own
+  `make_claims_script.sh` builds `claims_script.R` from them. The checker runs that script on its own against
+  the deposit, and any FAIL or error is a validation error. The script is published to
+  `baseline_metadata/<journal>/<paper>/claims_script.R`, as the pipeline publishes its own in `metadata/`.
 - **Tests.** Run `python3 -m unittest discover -s tests`. It uses a fake Claude CLI.
 - **Finding i4r-audit.** The baseline looks for i4r-audit at `<tree>/skill/i4r-audit-unified/i4r-audit` or
   `~/.claude/skills/i4r-audit` (stated in `skill/baseline/SKILL.md`, Install). The two tests that compare
@@ -786,17 +798,25 @@ in 2026.
 | 2.7.5 (10-07) | Frozen critic route lock. `check_critic_access.py` runs before reservation |
 | 2.7.6 (10-07) | Stage check 3d, the `text_redaction` event, and a linear-time e-mail scanner |
 | 2.7.7 (10-09) | The validator accepts redacted events. The Phase-1 participant/date rule needs an identifier plus a date or clock time. A round-0 consistency check no longer creates a round row. The install command creates `~/.claude/skills` first |
+| 2.7.8 (10-24) | Stage check 3d also masks a timestamp written beside a participant-code shape in staged records |
+| 2.7.9 (10-26) | Fixes from a review of 45 audits: registry index rows kept per audit, so a filing on another host no longer loses one; a model at capacity is a retryable `throttling` failure; the coordinator may cite the audit context its prompt names; Phase-1 pause events carry no private paths; a new audit's pre-dispatch deadline grows with its deposit; renames retried where Windows refuses them (WSL) |
+| 2.7.10 (10-29) | The claims script carries the verification notebook's setup and runs on its own, and staging and publication check that (`check_claims_script.sh`). `amend_claims_script.py` rebuilds and republishes a published audit's claims script |
+| 2.7.11 (11-01) | For new audits: claims scripts name the outside programs and R version their checks need; Claude thinking tokens are recorded; critic snapshots also carry the verification snippets and the uncited deposit files (bounded, with participant-code-shaped names masked). For every audit: re-filing a published pre-2.7.10 audit keeps the claims script it was sent with; `pkg/` gets its read-only mode back at staging, finalize and publication; hand-logged events are checked against the run schema when logged; intake checks the skill version before it reserves and refuses an archive with files beside it unless told `--loose`; `status.py` flags a stopped audit at once; critique time limits ignore time the host sleeps |
 
 `skill/MERGE_NOTES.md` predates most of this. Its Opus coordinator, Sonnet 5 auditors at `max`, Terra critics
 and lower round cap have all been replaced.
 
-<sub>Sources: `skill/i4r-audit/CHANGELOG.md` entries 2.2.0-2.7.7; commit `c649e88` message; `skill/MERGE_NOTES.md`.</sub>
+<sub>Sources: `skill/i4r-audit/CHANGELOG.md` entries 2.2.0-2.7.11; commit `c649e88` message; `skill/MERGE_NOTES.md`.</sub>
 
-## 11. Status and how to cite
+## 11. Status, license and how to cite
 
 ### Status
 
 Neither the files in this repository nor its commit history name the papers that were audited or their authors.
+
+### License
+
+The repository is licensed under the [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/); the full text is in [`LICENSE`](LICENSE).
 
 ### How to cite
 

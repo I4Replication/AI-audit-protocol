@@ -2185,6 +2185,9 @@ PYPUB
       rm -f "$VALIDATOR"; exit 1
     }
     echo "== 0c. immutable critique-round projections =="
+    # 2.7.11: the synced folder strips pkg/'s read-only mode, which the archive gate refuses; give it back when every
+    # file still matches the intake manifest (modes only)
+    python3 "$HERE/refreeze_pkg.py" "$DIRN" || true
     python3 "$HERE/validate_round_projections.py" "$DIRN" --require-post-delta-gates \
       --stopping-reason "${STOP:-$existing_stop}" || {
       echo "FINALIZE FAILED — the critique-round check above failed; fix the cause named in its FATAL line and re-run finalize." >&2

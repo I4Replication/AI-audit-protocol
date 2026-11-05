@@ -8,6 +8,10 @@ stage. As check 3c does for deposit values, the staged copy of such a record (ch
 RELEASE_PATH_NEUTRALISATION.txt with counts, never a value. The audit's files are never opened for writing, and the
 comment's own outputs are not records, so a path or address there still refuses at check 4.
 
+2.7.8: a line of such a record that pairs a participant-code shape with a timestamp (check 4's identifier_timestamp
+rule) gets <date> for each timestamp span. Phase-1 detector self-tests build synthetic fixtures such as
+"participant 7 (night of 2000-01-01)" in hash-bound evidence scripts, which otherwise blocked staging for good.
+
 The detectors are check_release_privacy's own patterns and its own address rule, read and never changed here: every
 post-delta receipt binds that file's bytes (run_post_delta_gates.CODE_PATHS).
 """
@@ -23,6 +27,7 @@ import email_scan  # noqa: E402
 
 USER_DIR_PLACEHOLDER = "<user-dir>"
 EMAIL_PLACEHOLDER = "[e-mail address]"
+DATE_PLACEHOLDER = "<date>"
 
 
 def _refused_email_spans(text: str, label: str) -> list[tuple[int, int]]:
@@ -43,9 +48,19 @@ def _refused_email_spans(text: str, label: str) -> list[tuple[int, int]]:
     return spans
 
 
-def neutralise_records(release_root: pathlib.Path, is_record: Callable[[str], bool]) -> list[tuple[str, int, int]]:
-    """Rewrite the staged copy of every record under `release_root`; return [(relpath, paths, addresses)]."""
-    rewritten: list[tuple[str, int, int]] = []
+def _mask_code_stamps(text: str) -> tuple[str, int]:
+    """Mask every timestamp on a line that also carries a participant-code shape (check 4's identifier_timestamp)."""
+    lines, count = text.split("\n"), 0
+    for index, line in enumerate(lines):
+        if crp._CODE.search(line) and crp._STAMP.search(line):
+            lines[index], found = crp._STAMP.subn(DATE_PLACEHOLDER, line)
+            count += found
+    return ("\n".join(lines) if count else text), count
+
+
+def neutralise_records(release_root: pathlib.Path, is_record: Callable[[str], bool]) -> list[tuple[str, int, int, int]]:
+    """Rewrite the staged copy of every record under `release_root`; return [(relpath, paths, addresses, dates)]."""
+    rewritten: list[tuple[str, int, int, int]] = []
     for path in sorted(release_root.rglob("*")):
         relative = path.relative_to(release_root).as_posix()
         if path.is_symlink() or not path.is_file() or path.suffix.lower() not in crp.TEXT_SUFFIXES \
@@ -70,13 +85,14 @@ def neutralise_records(release_root: pathlib.Path, is_record: Callable[[str], bo
         spans = _refused_email_spans(text, relative)
         for start, end in reversed(spans):
             text = text[:start] + EMAIL_PLACEHOLDER + text[end:]
-        if paths or spans:
+        text, stamps = _mask_code_stamps(text)
+        if paths or spans or stamps:
             path.write_bytes(text.encode(encoding))
-            rewritten.append((relative, paths, len(spans)))
+            rewritten.append((relative, paths, len(spans), stamps))
     return rewritten
 
 
-def note(release_root: pathlib.Path, rewritten: list[tuple[str, int, int]]) -> None:
+def note(release_root: pathlib.Path, rewritten: list[tuple[str, int, int, int]]) -> None:
     """Append the rewrites to the release's neutralisation note: file and counts, never a value."""
     if not rewritten:
         return
@@ -88,10 +104,11 @@ def note(release_root: pathlib.Path, rewritten: list[tuple[str, int, int]]) -> N
         "These staged files are copies of records that are hash-bound or model output (critique records,",
         "Phase-1 auditor reports, work records and evidence scripts). In each, the account segment of a home",
         f"path was replaced with {USER_DIR_PLACEHOLDER!r} and an e-mail address that is neither the byline's nor",
-        f"printed in the published article with {EMAIL_PLACEHOLDER!r}. The audit-side originals are unmodified.",
+        f"printed in the published article with {EMAIL_PLACEHOLDER!r}, and a timestamp on a line that also carries a",
+        f"participant-code shape with {DATE_PLACEHOLDER!r}. The audit-side originals are unmodified.",
         "",
     ]
-    lines += [f"  {name}  ({paths} path(s), {emails} address(es))" for name, paths, emails in rewritten]
+    lines += [f"  {name}  ({paths} path(s), {emails} address(es), {dates} date(s))" for name, paths, emails, dates in rewritten]
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -104,8 +121,9 @@ def main(argv: list[str]) -> int:
         crp.allow_emails_from(pathlib.Path(path))
     rewritten = neutralise_records(release, cdv.record_file)
     note(release, rewritten)
-    for name, paths, emails in rewritten:
-        print(f"  masked in the staged record {name}: {paths} home path(s), {emails} e-mail address(es)")
+    for name, paths, emails, dates in rewritten:
+        print(f"  masked in the staged record {name}: {paths} home path(s), {emails} e-mail address(es), "
+              f"{dates} code-paired date(s)")
     if not rewritten:
         print("  ok: no home path or non-public address in staged records")
     return 0

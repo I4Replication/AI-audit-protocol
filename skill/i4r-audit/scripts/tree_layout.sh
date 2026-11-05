@@ -83,6 +83,37 @@ i4r_already_published () {  # root journal paper -> 0 when any publication of th
   [ -d "$(i4r_published_comment_dir "$1" "$2" "$3")" ] || [ -d "$(i4r_published_metadata_dir "$1" "$2" "$3")" ] \
     || [ -d "$1/Completed reports/$2/$3" ]
 }
+# 2.7.11: init_run.sh refuses a skill copy whose VERSION is not the tree's canonical one (check_skill_version_pin), but
+# it runs after new_audit.sh and setup_workspace.sh have reserved the paper and copied the deposit, so a teammate still
+# on the previous release left the paper looking taken. Intake makes the same comparison before anything is reserved
+# or copied. Prints why and returns 1 when a new audit must not start; I4R_ALLOW_SKILL_VERSION_MISMATCH=1 makes it a
+# warning, as in init_run.sh. A tree without a canonical VERSION (fixtures, tmp) is not checked.
+i4r_intake_version_pin () {  # root skill-dir caller
+  local c="${I4R_CANONICAL_SKILL_DIR:-$1/skill/i4r-audit-unified/i4r-audit}" canonical own
+  [ -f "$c/VERSION" ] || return 0
+  canonical="$(head -1 "$c/VERSION" | tr -d ' \t\r\n')"
+  [ -n "$canonical" ] || return 0
+  own=""; [ -f "$2/VERSION" ] && own="$(head -1 "$2/VERSION" | tr -d ' \t\r\n')"
+  [ "$own" = "$canonical" ] && return 0
+  if [ "${I4R_ALLOW_SKILL_VERSION_MISMATCH:-0}" = "1" ]; then
+    echo "WARNING: running skill version '${own:-unversioned}' differs from the tree's canonical $canonical ($c); allowed by I4R_ALLOW_SKILL_VERSION_MISMATCH=1" >&2
+    return 0
+  fi
+  echo "FATAL: $3: no audit started, nothing reserved or copied: this skill copy is version '${own:-unversioned}' ($2)" >&2
+  echo "       but the discipline tree's canonical skill is $canonical ($c), which init_run.sh requires." >&2
+  echo "       Reinstall the skill from the canonical copy (its ZIP sits beside it) and run again. To proceed anyway, set" >&2
+  echo "       I4R_ALLOW_SKILL_VERSION_MISMATCH=1; the mismatch is then recorded in protocol_version." >&2
+  return 1
+}
+# 2.7.11: intake extracts the article text (paper/paper.txt) with Poppler's pdftotext. Without it the text is simply
+# missing, and Phase 1's fallback reads PAPER.txt, the operator's citation and summary, as the article.
+i4r_intake_needs_pdftotext () {  # caller
+  command -v pdftotext >/dev/null 2>&1 && return 0
+  echo "FATAL: $1: no audit started, nothing reserved or copied: pdftotext (Poppler) is not on PATH, so the article" >&2
+  echo "       text (paper/paper.txt) could not be extracted. Install Poppler (INSTALL.md, Dependencies: the i4rdoc" >&2
+  echo "       conda environment has it) or put it on PATH, and run again." >&2
+  return 1
+}
 
 # CLI form, for tests and for callers in other languages.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

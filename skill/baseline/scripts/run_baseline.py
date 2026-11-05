@@ -16,8 +16,10 @@ verified against its manifest) into a private work folder, gives one Claude call
 it audit and write the whole comment in that one session: no critics, no coordinator, no revision round. The call is
 launched and accounted for as an i4r-audit 2.7.7 Phase-1 auditor is, and confined more tightly (its file tools reach
 only its own folders; its shell cannot read the tree, any cloud folder, the user's documents or the session data).
-The comment, its findings record, its evidence and the run record land in baseline_comments/<journal>/<paper>/;
-every run, finished or not, is also appended to baseline_comments/RUNLOG.jsonl.
+The comment, its findings record, its evidence, its verification snippets and the run record land in
+baseline_comments/<journal>/<paper>/, and the claims script the pipeline's own builder makes from the snippets also
+lands in baseline_metadata/<journal>/<paper>/, as the pipeline's lands in metadata/. Every run, finished or not, is also
+appended to baseline_comments/RUNLOG.jsonl.
 """
 from __future__ import annotations
 
@@ -39,12 +41,16 @@ import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import baseline_common as bc  # noqa: E402
+import claims  # noqa: E402
 import sources  # noqa: E402
 import validate_outputs  # noqa: E402
 
 PROMPT = bc.SKILL / "prompts" / "baseline_prompt.md"
 REFERENCE = bc.SKILL / "reference"
 OUTPUT_FILES = ("front_matter.md", "REPORT_final.md", "captions.txt", "findings.json")
+META_DIR = "baseline_metadata"
+# what the agent's packet carries: the validator, and the claims checks with the pipeline's own builder that it runs
+TOOLS = ("validate_outputs.py", "claims.py", "make_claims_script.sh")
 SYSTEMIC = {"authentication", "authorization", "quota", "model", "condition_mismatch"}   # the next paper would fail too
 RETRYABLE = {"transient", "transport"}
 RERUNNABLE = {"failed", "timeout", "interrupted", "abandoned"}
@@ -107,6 +113,11 @@ def pick(subset: dict, key: str) -> dict:
 
 def final_dir(tree: pathlib.Path, paper: dict) -> pathlib.Path:
     return out_root(tree) / paper["journal"] / bc.safe_name(paper["runs_folder"])
+
+
+def meta_dir(tree: pathlib.Path, paper: dict) -> pathlib.Path:
+    """Where the claims script is published, as the pipeline publishes its own under metadata/<journal>/<paper>/."""
+    return tree / META_DIR / paper["journal"] / bc.safe_name(paper["runs_folder"])
 
 
 def run_record(folder: pathlib.Path) -> dict | None:
@@ -384,12 +395,16 @@ def prepare(tree: pathlib.Path, paper: dict, run_root: pathlib.Path) -> dict:
     fingerprint = input_dir / "indexes" / "environment_fingerprint.json"
     original_fp = bc.sha256_file(fingerprint) if fingerprint.is_file() else None
     if helpers.get("fingerprint"):   # the auditors' fingerprint described the machine they ran on; so does this one
+        for path in (fingerprint.parent, fingerprint):   # copytree keeps a frozen (2.7.9) snapshot's read-only modes
+            if path.exists():
+                path.chmod(path.stat().st_mode | 0o200)
         fingerprint.write_text(json.dumps(helpers["fingerprint"], indent=2, sort_keys=True) + "\n")
     (packet / "reference").mkdir(parents=True)
     (packet / "tools").mkdir()
     for ref in sorted(REFERENCE.glob("*.md")):
         shutil.copy2(ref, packet / "reference" / ref.name)
-    shutil.copy2(bc.SKILL / "scripts" / "validate_outputs.py", packet / "tools" / "validate_outputs.py")
+    for name in TOOLS:
+        shutil.copy2(bc.SKILL / "scripts" / name, packet / "tools" / name)
     exempt = helpers["exempt"]
     bc.write_json(packet / "tools" / "validate_config.json", {"pkg": str(input_dir / "raw" / "pkg"), "exempt": exempt})
     bc.freeze_tree(input_dir)
@@ -408,6 +423,7 @@ def prepare(tree: pathlib.Path, paper: dict, run_root: pathlib.Path) -> dict:
         "pipeline_helpers_errors": helpers["errors"],
         "reference_sha256": {p.name: bc.sha256_file(p) for p in sorted(REFERENCE.glob("*.md"))},
         "validator_sha256": bc.sha256_file(bc.SKILL / "scripts" / "validate_outputs.py"),
+        "tools_sha256": {name: bc.sha256_file(bc.SKILL / "scripts" / name) for name in TOOLS},
     }
 
 
@@ -575,6 +591,46 @@ def _evidence_ok(path: pathlib.Path, rel: str, exempt: set[str]) -> bool:
     return not rep.errors
 
 
+def _text_ok(path: pathlib.Path, rel: str, exempt: set[str]) -> bool:
+    """A verification snippet or the built claims script: under 20 MB and clean (validate_outputs.claims_hygiene:
+    the comment writer's rules on their prose too)."""
+    if path.stat().st_size > 20 << 20:
+        return False
+    rep = validate_outputs.Report()
+    validate_outputs.claims_hygiene(rep, rel, validate_outputs.read_text(path, rep, rel), exempt)
+    return not rep.errors
+
+
+ABSOLUTE = re.compile(r"(?:/private)?/(?:Users|home)/[^/\s'\"]+|(?:/private)?/var/folders/[^\s'\"]+|(?:/private)?/tmp/[^\s'\"]+")
+
+
+def _masked(text: str) -> str:
+    """Text for the shared tree: the home folder as ~, other absolute paths of this host as <path>."""
+    return ABSOLUTE.sub(lambda m: "~" if m.group(0) == str(pathlib.Path.home()) else "<path>",
+                        text.replace(str(pathlib.Path.home()), "~"))
+
+
+def publish_claims(built: pathlib.Path, dest: pathlib.Path, meta: pathlib.Path, exempt: set[str],
+                   findings_kept: bool) -> dict:
+    """The claims script and map built during validation go beside the comment and to baseline_metadata/, if clean.
+    The script quotes every finding's claim, so it is withheld whenever findings.json was."""
+    rec: dict = {"published": None, "withheld": [], "sha256": {}}
+    for name in ("claims_script.R", "claims_map.tsv"):
+        path = built / name
+        if not path.is_file():
+            continue
+        if not _text_ok(path, name, exempt) or (name == "claims_script.R" and not findings_kept):
+            rec["withheld"].append(name)
+            continue
+        shutil.copy2(path, dest / name)
+        rec["sha256"][name] = bc.sha256_file(dest / name)
+    if "claims_script.R" in rec["sha256"]:
+        meta.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dest / "claims_script.R", meta / "claims_script.R")
+        rec["published"] = str((meta / "claims_script.R").relative_to(meta.parents[2]))
+    return rec
+
+
 def _copy_records(adir: pathlib.Path, records: pathlib.Path, exempt: set[str]) -> list[str]:
     """The prompt, settings, CLI envelope and stderr, with the home folder masked. The envelope keeps the count and
     tool names of permission denials but never their tool input (a denied Write carries the whole file); a final
@@ -638,20 +694,39 @@ def copy_outputs(out: pathlib.Path, adir: pathlib.Path, dest: pathlib.Path, exem
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, dest / rel)
             kept.append(rel)
+    snippets = out / claims.SNIPPETS
+    for path in sorted(snippets.iterdir()) if snippets.is_dir() and not snippets.is_symlink() else []:
+        rel = f"{claims.SNIPPETS}/{path.name}"
+        if path.name == ".DS_Store":
+            continue
+        if (not claims.SNIPPET_NAME.fullmatch(path.name) or not _regular(path, out)
+                or not _text_ok(path, rel, exempt)):
+            withheld.append(rel)
+            continue
+        (dest / claims.SNIPPETS).mkdir(exist_ok=True)
+        shutil.copy2(path, dest / rel)
+        kept.append(rel)
     records = dest / "records"
     records.mkdir(exist_ok=True)
     withheld += _copy_records(adir, records, exempt)
     return {"kept": kept, "withheld_from_tree": withheld, "sha256": {n: bc.sha256_file(dest / n) for n in kept}}
 
 
-def supersede(dest: pathlib.Path, tree: pathlib.Path) -> str | None:
-    """A rerun never deletes an earlier baseline output: it moves to baseline_comments/.superseded/."""
-    if dest.exists() and any(dest.iterdir()):
-        target = out_root(tree) / ".superseded" / f"{dest.parent.name}__{dest.name}__{time.strftime('%Y%m%dT%H%M%S')}"
-        target.parent.mkdir(parents=True, exist_ok=True)
+def supersede(dest: pathlib.Path, tree: pathlib.Path, meta: pathlib.Path | None = None) -> str | None:
+    """A rerun never deletes an earlier baseline output: it moves to baseline_comments/.superseded/, and its published
+    claims script (baseline_metadata/<journal>/<paper>/) moves with it, into the same folder's baseline_metadata/."""
+    has_dest = dest.exists() and any(dest.iterdir())
+    has_meta = meta is not None and meta.exists() and any(meta.iterdir())
+    if not (has_dest or has_meta):
+        return None
+    target = out_root(tree) / ".superseded" / f"{dest.parent.name}__{dest.name}__{time.strftime('%Y%m%dT%H%M%S')}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if has_dest:
         shutil.move(str(dest), str(target))
-        return str(target.relative_to(tree))
-    return None
+    if has_meta:
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(meta), str(target / META_DIR))
+    return str(target.relative_to(tree))
 
 
 def totals(attempts: list[dict]) -> dict:
@@ -680,8 +755,8 @@ def totals(attempts: list[dict]) -> dict:
 
 def code_hashes() -> dict[str, str]:
     """What ran: every script, the config, the prompt template and VERSION, by hash."""
-    files = [*sorted((bc.SKILL / "scripts").glob("*.py")), bc.SKILL / "config" / "baseline.json", PROMPT,
-             bc.SKILL / "VERSION"]
+    files = [*sorted((bc.SKILL / "scripts").glob("*.py")), *sorted((bc.SKILL / "scripts").glob("*.sh")),
+             bc.SKILL / "config" / "baseline.json", PROMPT, bc.SKILL / "VERSION"]
     return {str(p.relative_to(bc.SKILL)): bc.sha256_file(p) for p in files if p.is_file()}
 
 
@@ -730,7 +805,7 @@ def log_run(tree: pathlib.Path, record: dict) -> None:
             "cache_writes_5m": t.get("cache_writes_5m"), "cache_writes_1h": t.get("cache_writes_1h"),
             "condition": {k: record["condition"].get(k) for k in ("requested_model", "reasoning_effort", "max_budget_usd",
                                                                   "timeout_seconds", "cli_version", "prompt_template_sha256",
-                                                                  "prompt_cache_ttl")}}
+                                                                  "packet_tools_sha256", "prompt_cache_ttl")}}
     with open(out_root(tree) / "RUNLOG.jsonl", "a", encoding="utf-8") as handle:
         handle.write(json.dumps(line) + "\n")
 
@@ -801,6 +876,7 @@ def run_one(tree: pathlib.Path, paper: dict, args, scan: dict | None = None) -> 
             "bash_allowlist_sha256": bc.sha256_bytes(bc.canonical(list(bc.BASH_ALLOWLIST))), "network": "denied",
             "cli_path": cli.replace(str(pathlib.Path.home()), "~"), "cli_version": bc.cli_version(cli),
             "prompt_template_sha256": bc.sha256_file(PROMPT),
+            "packet_tools_sha256": {name: bc.sha256_file(bc.SKILL / "scripts" / name) for name in TOOLS},
             "output_cap": bc.OUTPUT_CAP.get(requested), "prompt_cache_ttl": bc.PROMPT_CACHE_TTL,
             "served_models": f"{bc.ROUTES[requested]['spawn_alias']} only; any other served model is a "
                              f"condition_mismatch",
@@ -828,18 +904,24 @@ def run_one(tree: pathlib.Path, paper: dict, args, scan: dict | None = None) -> 
                   else "failed" if not final["ok"] else "pending_validation")
         record["outcome"] = {"status": status, "error_class": final["error_class"], "problems": final["problems"]}
         record["totals"] = totals(record["attempts"])
-        record["superseded_to"] = supersede(dest, tree)   # a paid call was made: from here on dest is this run's
+        record["superseded_to"] = supersede(dest, tree, meta_dir(tree, paper))   # a paid call was made: from here on dest is this run's
         dest.mkdir(parents=True, exist_ok=True)
         owns_dest = True
         try:
             out, adir = run_root / f"out_{final['number']}", run_root / f"attempt_{final['number']}"
-            validation = validate_outputs.validate(out, run_root / "input" / "raw" / "pkg", exempt)
+            built = run_root / "claims"
+            validation = validate_outputs.validate(
+                out, run_root / "input" / "raw" / "pkg", exempt, keep_claims=built,
+                confine_claims={"deny_read": deny_read_paths(tree, run_root), "tmp_base": run_root})
             bc.write_json(run_root / "validation.json", validation)
             record["validation"] = validation
             if status == "pending_validation":
                 record["outcome"]["status"] = "completed" if validation["ok"] else "completed_invalid"
             record["outputs"] = copy_outputs(out, adir, dest, exempt)
             bc.write_json(dest / "records" / "validation.json", validation)
+            record["claims_script"] = {**(validation.get("claims_script") or {"built": False}),
+                                       **publish_claims(built, dest, meta_dir(tree, paper), exempt,
+                                                        "findings.json" in record["outputs"]["kept"])}
             try:
                 record["totals"]["findings"] = len(json.loads((dest / "findings.json").read_text())["findings"])
             except (OSError, ValueError, KeyError, TypeError):
@@ -848,7 +930,7 @@ def run_one(tree: pathlib.Path, paper: dict, args, scan: dict | None = None) -> 
             if not args.no_render and "REPORT_final.md" in kept and "front_matter.md" in kept:
                 record["render"] = render_into(dest, tree)
         except Exception:
-            record["postprocess_error"] = traceback.format_exc()[-2000:]
+            record["postprocess_error"] = _masked(traceback.format_exc()[-2000:])
             if record["outcome"]["status"] == "pending_validation":
                 record["outcome"]["status"] = "completed_invalid"
     except KeyboardInterrupt:
@@ -862,9 +944,12 @@ def run_one(tree: pathlib.Path, paper: dict, args, scan: dict | None = None) -> 
                 outcome["problems"] = [*outcome["problems"], "stopped before validation finished"]
         raise
     except bc.BaselineError as exc:
-        record["outcome"] = {"status": "failed", "error_class": "setup", "problems": [str(exc)]}
+        record["outcome"] = {"status": "failed", "error_class": "setup", "problems": [_masked(str(exc))]}
+        record["private_detail"] = str(exc)
     except Exception:
-        record["outcome"] = {"status": "failed", "error_class": "runner", "problems": [traceback.format_exc()[-2000:]]}
+        record["outcome"] = {"status": "failed", "error_class": "runner",
+                             "problems": [_masked(traceback.format_exc()[-2000:])]}
+        record["private_detail"] = traceback.format_exc()[-4000:]
     finally:
         with _Uninterruptible():
             for sub in ("input", "packet"):
@@ -875,7 +960,7 @@ def run_one(tree: pathlib.Path, paper: dict, args, scan: dict | None = None) -> 
             bc.write_json(run_root / "run.json", record)
             if owns_dest:   # never pair this run's record with another run's comment
                 dest.mkdir(parents=True, exist_ok=True)
-                bc.write_json(dest / "run.json", record)
+                bc.write_json(dest / "run.json", {k: v for k, v in record.items() if k != "private_detail"})
             log_run(tree, record)
     o, t = record["outcome"], record.get("totals") or {}
     cost = t.get("cost_usd")
@@ -885,6 +970,10 @@ def run_one(tree: pathlib.Path, paper: dict, args, scan: dict | None = None) -> 
         extra += f"; {len(record['validation']['errors'])} validation error(s)"
     if (record.get("outputs") or {}).get("withheld_from_tree"):
         extra += f"; withheld from the tree: {', '.join(record['outputs']['withheld_from_tree'])}"
+    cs = record.get("claims_script")
+    if cs:
+        extra += (f"; claims script {cs.get('checks')} checks, {cs.get('fail')} FAIL, "
+                  f"{'published' if cs.get('published') else 'not published'}")
     klass = f" ({o['error_class']})" if o.get("error_class") else ""
     print(f"  {o['status']}{klass}: {t.get('findings', '?')} findings, ${cost or 0:.2f}, {mins}{extra}")
     return record
@@ -912,7 +1001,10 @@ def preflight(tree: pathlib.Path, args) -> int:
     except bc.BaselineError as exc:
         problems.append(str(exc))
     docs = str(pathlib.Path.home() / "miniconda3" / "envs" / "i4rdoc" / "bin")
-    for tool in ("python3", "Rscript", "pdftotext", "pandoc", "soffice"):
+    if not shutil.which("Rscript"):
+        problems.append("Rscript not found: every run's claims script is run with it (1.2.0), so each run would be "
+                        "completed_invalid")
+    for tool in ("python3", "pdftotext", "pandoc", "soffice"):
         if not (shutil.which(tool) or shutil.which(tool, path=docs)
                 or (tool == "soffice" and pathlib.Path("/Applications/LibreOffice.app").exists())):
             notes.append(f"warning: {tool} not found" + (" (comments will not be rendered)" if tool == "pandoc" else ""))

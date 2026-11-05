@@ -468,12 +468,13 @@ class ReleaseIdentity(unittest.TestCase):
         # 2.6.10 (the Codex CLI resolver), 2.7.0 (Sonnet 5.5 for new audits), 2.7.1 (the probe bound
         # of new audits), 2.7.2 (Phase-1 timeout accounting and the timeout of new audits), 2.7.3 (Claude
         # effort xhigh for new audits), 2.7.4 (among others, the journaled environment) 2.7.5 (the critic route
-        # lock), 2.7.6 and 2.7.7 (unblocking fixes) sit above 2.6.9 and change none of this.
-        self.assertEqual((SKILL / "VERSION").read_text().strip(), "2.7.7")
+        # lock), 2.7.6, 2.7.7, 2.7.8 and 2.7.9 (unblocking fixes), 2.7.10 (the claims script runs on its own) and 2.7.11
+        # (the 2026-11-01 bug fixes) sit above 2.6.9 and change none of this.
+        self.assertEqual((SKILL / "VERSION").read_text().strip(), "2.7.11")
         changelog = (SKILL / "CHANGELOG.md").read_text(encoding="utf-8")
         headings = re.findall(r"^## (\S+) — ", changelog, flags=re.MULTILINE)
-        self.assertEqual(headings[:12], ["2.7.7", "2.7.6", "2.7.5", "2.7.4", "2.7.3", "2.7.2", "2.7.1", "2.7.0",
-                                         "2.6.10", "2.6.9", "2.6.8", "2.6.7"])
+        self.assertEqual(headings[:16], ["2.7.11", "2.7.10", "2.7.9", "2.7.8", "2.7.7", "2.7.6", "2.7.5", "2.7.4", "2.7.3", "2.7.2",
+                                         "2.7.1", "2.7.0", "2.6.10", "2.6.9", "2.6.8", "2.6.7"])
         self.assertNotRegex(changelog, r"(?m)^(<<<<<<<|=======|>>>>>>>)( |$)")
         top = changelog.split("\n## 2.6.9 — ", 1)[1].split("\n## 2.6.8 — ", 1)[0]
         self.assertIn("merges", top.split("\n### ", 1)[0])

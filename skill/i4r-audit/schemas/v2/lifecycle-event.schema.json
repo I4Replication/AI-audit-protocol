@@ -18,7 +18,7 @@
         "init", "phase_start", "phase_end", "round_prepared",
         "round_authorization_required", "round_authorized", "round_ready",
         "round_start", "round_end", "round_quorum_complete", "round_integrated",
-        "round_paused", "round_result", "review_scope", "invocation_reserved",
+        "round_paused", "round_result", "review_scope", "publication_redaction", "invocation_reserved",
         "provider_request", "inference_start", "provider_response",
         "invocation_terminal", "invocation_correction", "cache_reuse", "authorization_wait_start",
         "authorization_wait_end", "pause_start", "pause_end",

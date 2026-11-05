@@ -513,14 +513,20 @@ def validate_verifier_output(
     expected_scientific_projection: dict[str, Any] | None = None,
     deposit_exemptions: Iterable[str] = frozenset(),
     participant_code_rule: bool = True,
+    set_aside: pathlib.Path | None = None,
 ) -> runtime.ValidatedRoleOutput:
-    """Admit one verifier output, or reject it as an invalid sample (never a runner crash)."""
+    """Admit one verifier output, or reject it as an invalid sample (never a runner crash).
+
+    ``set_aside`` is passed only by the runner, for a provider's own output.partial
+    (runtime.check_output_tree); readmit_record never passes it, so a promoted tree is re-admitted
+    exactly as before.
+    """
     try:
         return _validated_verifier_output(
             output, role, snapshot_manifest, packet,
             expected_scientific_projection=expected_scientific_projection,
             deposit_exemptions=deposit_exemptions,
-            participant_code_rule=participant_code_rule,
+            participant_code_rule=participant_code_rule, set_aside=set_aside,
         )
     except runtime.OutputValidationError:
         raise
@@ -543,6 +549,7 @@ def _validated_verifier_output(
     expected_scientific_projection: dict[str, Any] | None = None,
     deposit_exemptions: Iterable[str] = frozenset(),
     participant_code_rule: bool = True,
+    set_aside: pathlib.Path | None = None,
 ) -> runtime.ValidatedRoleOutput:
     report, result_path, manifest_path, report_text, result = runtime.read_role_output(output)
     _check_result_header(result, role, snapshot_manifest)
@@ -588,7 +595,7 @@ def _validated_verifier_output(
         ):
             _reject("manifest_binding_unbound", "role evidence manifest contains an unbound source hash",
                     repairable=True)
-    listed = runtime.check_output_tree(output, manifest)
+    listed = runtime.check_output_tree(output, manifest, set_aside=set_aside)
     for row in scientific["verdicts"]:
         artifact = row["rerun"]["artifact"]
         if artifact is not None and _rerun_artifact_shape(artifact) not in listed:
@@ -1203,6 +1210,9 @@ def plan_batch(
     # 2.7.2: the audit's own frozen timeout (run_phase1.phase1_timeout); --timeout-seconds defaults to it.
     if args.timeout_seconds is None:
         args.timeout_seconds = audit_timeout
+    # 2.7.9: and its own pre-dispatch deadline; the verifier re-reads the whole snapshot inside it.
+    if getattr(args, "pre_dispatch_deadline_seconds", None) is None:
+        args.pre_dispatch_deadline_seconds = run_phase1.pre_dispatch_deadline(policy, root)
     if (
         args.timeout_seconds != audit_timeout
         or decimal.Decimal(args.max_budget_usd)
@@ -1849,8 +1859,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claude-bin", default=None, help="Claude CLI executable (fake runner in tests)")
     parser.add_argument("--probe-cache-dir", type=pathlib.Path, default=None)
     parser.add_argument("--timeout-seconds", type=run_phase1.bounded_timeout, default=None)
+    # 2.7.9: default None = the audit's own deadline (run_phase1.pre_dispatch_deadline); 60 s or less tightens it
     parser.add_argument("--pre-dispatch-deadline-seconds", type=run_phase1.bounded_pre_dispatch_deadline,
-                        default=run_phase1.DEFAULT_PRE_DISPATCH_DEADLINE_SECONDS)
+                        default=None)
     parser.add_argument("--max-budget-usd", type=run_phase1.bounded_budget, default=run_phase1.DEFAULT_MAX_BUDGET_USD)
     args = parser.parse_args(argv)
     requested = [part for value in args.findings for part in value.split(",") if part.strip()]
@@ -1919,7 +1930,7 @@ def _run_locked(
         return refuse(exc)
     except runtime.SnapshotModeUnstableError as exc:
         # Content verified, but the modes would not stay frozen: nothing was dispatched.
-        message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+        message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
         remedy = ("stop the sync client, or move the audit off the synced folder, then re-run this "
                   "batch; deleting the snapshot does not help while its modes keep changing")
         write_status(plan, "paused", pause_reason=runtime.SNAPSHOT_MODE_UNSTABLE, error=message,
@@ -1928,7 +1939,7 @@ def _run_locked(
                           "error": message, "remedy": remedy}, sort_keys=True))
         return EXIT_PAUSED
     except Exception as exc:  # provider-free preparation failed: nothing dispatched, no pause event
-        message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+        message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
         if plan is not None and not args.dry_run:
             write_status(plan, "preflight_failed", pause_reason="local_preflight_failed",
                          verifier_inferences_started=0, error=message)
@@ -1951,7 +1962,7 @@ def _run_locked(
                     f"the ledger holds a completed {plan.role} call for this input but no retained "
                     "response (an attempt at state response_received) to rebuild its receipt from")
         except Exception as exc:
-            message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+            message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
             write_status(plan, "failed", error=message)
             print(f"ERROR: verifier receipt rebuild failed: {message}", file=sys.stderr)
             return EXIT_FAILED
@@ -1961,7 +1972,7 @@ def _run_locked(
             completion = targets.validate_receipt(
                 root, run_phase1.completion_path(phase_root, plan.role, plan.input_hash), plan.input_hash)
         except Exception as exc:
-            message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+            message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
             write_status(plan, "failed", error=message)
             print(f"ERROR: verifier replay failed: {message}", file=sys.stderr)
             return EXIT_FAILED
@@ -1973,7 +1984,7 @@ def _run_locked(
             bound=plan.probe_bound,
         )
     except Exception as exc:
-        message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+        message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
         write_status(plan, "probe_failed", pause_reason="capability_probe_failed",
                      verifier_inferences_started=0, error=message)
         print(f"PAUSED: capability probe failed: {message}", file=sys.stderr)
@@ -1992,7 +2003,7 @@ def _run_locked(
             args.timeout_seconds, args.max_budget_usd, targets=targets,
         )
     except run_phase1.EnvironmentFaultError as exc:
-        message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+        message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
         write_status(plan, "paused", pause_reason="sandbox_environment_fault", error=message)
         print(json.dumps({"status": "paused", "pause_reason": "sandbox_environment_fault",
                           "error": message}, sort_keys=True))
@@ -2002,7 +2013,7 @@ def _run_locked(
         # host's fault, not the verifier's. Pause like a sandbox fault; the verifier status file
         # carries it, and run.json never sees a pause (its enum has no such reason). A mode that
         # would not stay frozen, with the content verified, has its own reason and remedy.
-        message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+        message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
         if isinstance(exc, runtime.SnapshotModeUnstableError):
             reason = runtime.SNAPSHOT_MODE_UNSTABLE
             remedy = ("the Phase-1 snapshot verified against its manifest but its modes kept "
@@ -2018,7 +2029,7 @@ def _run_locked(
                           "error": message, "remedy": remedy}, sort_keys=True))
         return EXIT_PAUSED
     except Exception as exc:
-        message = run_phase1.run_coordinator.redact_private_paths(str(exc), root)
+        message = run_phase1.run_coordinator.provider_safe_text(str(exc), root)
         write_status(plan, "failed", error=message, hypotheses=plan.receipt_hypotheses())
         print(json.dumps({"status": "failed", "role": plan.role, "error": message}, sort_keys=True),
               file=sys.stderr)

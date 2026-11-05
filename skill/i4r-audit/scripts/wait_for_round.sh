@@ -94,7 +94,15 @@ for name in names:
   echo "  (plus the same I4R_AUTO_AUTHORIZE / ADJUDICATE values, e.g. I4R_AUTO_AUTHORIZE=0 for an attended run)" >&2
 }
 POINTER="$OUT/CURRENT_INVOCATION"
-deadline=$(( $(date +%s) + TIMEOUT_MIN * 60 ))
+# 2.7.11: the wait counts the time the host is awake, as the driver's per-call ceiling does (run_critique.sh
+# codex_exec): a gap between two polls longer than the poll interval plus SUSPEND_GAP_SECONDS is time this loop did
+# not run (the host slept, or the waiter was stopped), and the deadline moves out by it. Before, a host that slept
+# through a round woke to "TIMEOUT ... did not finish" and exit 3 while the driver it watched carried on.
+SUSPEND_GAP_SECONDS=60
+# As in the driver, a clock read that is not a number (a failed `date`) is skipped, never kept: read as 0 it would
+# move the deadline out by decades. The first numeric read in the loop sets the deadline.
+wait_last=""
+deadline=""
 dead_observations=0
 
 is_alive() {
@@ -251,7 +259,8 @@ PY
       if [ "$outcome" = failed ]; then
         echo "round $ROUND invocation $INVOCATION failed${detail:+: $detail}" >&2
         python3 -m json.tool "$STATUS" | sed 's/^/  /' >&2
-        case "$detail" in *interrupted*) rerun_hint ;; esac
+        # 2.7.11: a quorum failure is resumable the same way (the driver journaled a critique_round_failed pause)
+        case "$detail" in *interrupted*|"exact role quorum failed"*) rerun_hint ;; esac
         exit 1
       fi
       if [ "$outcome" = quorum_complete_adjudication_failed ]; then
@@ -317,7 +326,16 @@ PY
     exit 4
   fi
 
-  if [ "$(date +%s)" -ge "$deadline" ]; then
+  wait_now=$(date +%s)
+  case $wait_now in ''|*[!0-9]*) sleep "$POLL_SECONDS"; continue ;; esac
+  if [ -z "$wait_last" ]; then
+    deadline=$(( wait_now + TIMEOUT_MIN * 60 ))
+  elif [ $(( wait_now - wait_last )) -gt $(( POLL_SECONDS + SUSPEND_GAP_SECONDS )) ]; then
+    deadline=$(( deadline + wait_now - wait_last ))
+    echo "  [sleep] no poll for $(( wait_now - wait_last ))s (host asleep?); not counted against the ${TIMEOUT_MIN} min wait" >&2
+  fi
+  wait_last=$wait_now
+  if [ "$wait_now" -ge "$deadline" ]; then
     echo "TIMEOUT: round $ROUND invocation ${INVOCATION:-not-yet-published} did not finish within ${TIMEOUT_MIN} min." >&2
     echo "  The driver was not killed; inspect $OUT and the invocation-scoped status." >&2
     exit 3

@@ -216,6 +216,9 @@ python3 "$SCRIPT_DIR/generate_finding_artifacts.py" "$A" --check || {
   echo "  FAIL: canonical finding projections are missing or divergent" >&2; exit 1
 }
 
+# 2.7.11: the synced folder strips pkg/'s read-only mode and the archive gate below refuses it; give the mode back
+# when every file still matches the intake manifest (modes only)
+python3 "$SCRIPT_DIR/refreeze_pkg.py" "$A" || true
 # finalize requires the last round's post-delta receipt to be current; staging first and learning it at finalize cost a
 # whole restage (a registry or report change since the gates ran, e.g. a late integration's approve/project/settled)
 python3 - "$A" "$SCRIPT_DIR" <<'PYGATES' || { rmdir "$R" 2>/dev/null || true; exit 1; }
@@ -252,6 +255,14 @@ if rounds and rounds[-1] > 1:
         run_post_delta_gates.verify_receipt(audit, audit / f"critique/round_{last}/POST_DELTA_GATES.json", require_current=True)
     except Exception as exc:   # noqa: BLE001 -- any failure means the receipt does not cover what would be staged
         q = lambda value: shlex.quote(str(value))
+        if "not read-only: pkg/" in str(exc):   # modes only: rebuilding the packet or re-running the gates is wrong here
+            print(f"  FAIL: round {last}'s post-delta gates are not current ({exc}). The synced folder strips pkg/'s "
+                  "read-only mode, and refreeze_pkg.py (above) gives it back only when every file still matches "
+                  "package_manifest.json: resolve the file it names, or make pkg/ read-only "
+                  f"(chmod -R a-w {q(audit / 'pkg')}), and stage again. Do not rebuild the packet or re-run the "
+                  "gates for this: on a finalized audit that journals a gate event and stales its receipt.",
+                  file=sys.stderr)
+            raise SystemExit(1)
         prior = audit / f"critique/round_{last - 1}"
         # the before-files the round's packet was built from (older audits used other paths than the step-1 copies)
         before_report, before_findings = prior / "REPORT_BEFORE_INTEGRATION.md", prior / "FINDINGS_BEFORE_INTEGRATION.jsonl"
@@ -305,6 +316,27 @@ if render.get("mode") != "executed" or render.get("exit_status") != 0:
     raise SystemExit("verification was not produced by a successful notebook execution")
 print("  ok: report, comment, summary and notebook match the verification manifest")
 PYBIND
+
+stage "the claims script runs on its own"
+# 2.7.10: the notebook runs every check inside knitr with its own setup; the claims script is what a replicator
+# runs, on its own. Releases before 2.7.10 never ran it, and about half of them stopped with an error. 2.7.11: a
+# pre-2.7.10 script the audit already published is restaged as it was sent (--release: a warning, never a refusal).
+CLAIMS_STATUS=0; bash "$SCRIPT_DIR/check_claims_script.sh" --release "$A" "${CLAIMS[0]}" || CLAIMS_STATUS=$?
+if [ "$CLAIMS_STATUS" -ne 0 ]; then
+  if [ "$CLAIMS_STATUS" -eq 2 ]; then
+    echo "FATAL: the claims-script check could not run (see above: R, the deposit folder, the claims file); fix that and stage again"
+  else
+    echo "FATAL: the claims script must run on its own before release. By cause:"
+    echo "  - a package that is not installed on this host: install it, then stage again;"
+    echo "  - a check that fails or reads a file outside the deposit and the article: edit its SOURCE, the path in the"
+    echo "    finding row's verification_snippet (e.g. work/snippets/F<n>.R; never verification_snippets/C-<n>.R, which"
+    echo "    --apply regenerates), or verification_snippets/_prelude.R, then rebuild and re-verify:"
+    echo "        python3 scripts/generate_finding_artifacts.py \"\$AUDIT_DIR\" --apply && bash scripts/run_verification.sh \"\$AUDIT_DIR\""
+    echo "  - a claims script built before 2.7.10: the --apply line alone rebuilds it;"
+    printf '  then remove this rejected directory (rm -r %q) and stage again.\n' "$R"
+  fi
+  exit 1
+fi
 
 stage "checking the report to be staged is the current one"
 # A stale REPORT_final.md was staged once, silently, because this script copied whatever file had
@@ -394,6 +426,11 @@ done; then
   echo "FATAL: executable source staging failed" >&2
   exit 1
 fi
+# 2.7.11: the staged files are copies, never the audit's records. cp keeps a source's mode, and the critique driver
+# freezes its round projections 0444, so a staged critic record (or a work/ file copied out of a frozen snapshot) was
+# read-only, and the steps below that rewrite a staged copy (path neutralisation, checks 3d and 3c) stopped on
+# "Permission denied"; check 3c then called it a release it could not inspect. Owner write on the staged copies only.
+chmod -R u+w "$R" || { echo "FATAL: could not make the staged copies writable" >&2; exit 1; }
 
 stage "pruning verbatim copies of the authors' files"
 # Auditors copy the authors' scripts into scratch directories to test running them as shipped,
@@ -526,6 +563,21 @@ else
   echo "  ok: data-file detector self-tested (.rds control caught, .md control ignored)"
 fi
 rm -rf "$__st"
+
+# 3d. HOME PATHS, E-MAIL ADDRESSES AND CODE-PAIRED DATES IN RECORDS NOBODY CAN REWORD (2.7.6; 2.7.8).
+# Runs BEFORE check 3 since 2.7.8: check 3 refuses a line pairing a participant-code shape with a timestamp,
+# and a Phase-1 detector self-test fixture ("participant 7 (night of 2000-01-01)") in a hash-bound evidence
+# script could never be reworded, so the staged copy gets <date> for the timestamp first. Check 4 refuses any home
+# path and any address the byline and the article do not print. A critic quoting the authors'
+# setwd("C:/Users/<name>/..."), or a Phase-1 evidence script naming a deposit path, is a hash-bound or
+# model-written record, so "reword it" had no remedy and the audit could never stage. As check 3c does
+# for deposit values, the STAGED copy of such a record (check_deposit_values.record_file) gets <user-dir>
+# for the account segment and [e-mail address] for the address, and every rewrite is listed in
+# RELEASE_PATH_NEUTRALISATION.txt. The audit's files are untouched; the comment's own outputs are not
+# records, so a path or address there still refuses below. The step lives in release_record_masking.py:
+# every post-delta receipt binds check_release_privacy.py's bytes, so that file is read, never changed.
+python3 "$SCRIPT_DIR/release_record_masking.py" "$R" "$A/paper/paper.txt" \
+  || { echo "  FAIL: check 3d could not mask the staged records" >&2; viol=1; }
 
 # 3. Per-participant result listings and code/timestamp pairings. Both self-tested.
 #
@@ -681,18 +733,6 @@ else
   echo "  FAIL: the deposit-value detector failed its self-test, so check 3c cannot certify this release"
   viol=1
 fi
-
-# 3d. HOME PATHS AND E-MAIL ADDRESSES IN RECORDS NOBODY CAN REWORD (2.7.6). Check 4 refuses any home
-# path and any address the byline and the article do not print. A critic quoting the authors'
-# setwd("C:/Users/<name>/..."), or a Phase-1 evidence script naming a deposit path, is a hash-bound or
-# model-written record, so "reword it" had no remedy and the audit could never stage. As check 3c does
-# for deposit values, the STAGED copy of such a record (check_deposit_values.record_file) gets <user-dir>
-# for the account segment and [e-mail address] for the address, and every rewrite is listed in
-# RELEASE_PATH_NEUTRALISATION.txt. The audit's files are untouched; the comment's own outputs are not
-# records, so a path or address there still refuses below. The step lives in release_record_masking.py:
-# every post-delta receipt binds check_release_privacy.py's bytes, so that file is read, never changed.
-python3 "$SCRIPT_DIR/release_record_masking.py" "$R" "$A/paper/paper.txt" \
-  || { echo "  FAIL: check 3d could not mask the staged records" >&2; viol=1; }
 
 # 4. Inspect every shipped text/code suffix plus PDF and DOCX text and metadata.
 # PDF extraction is deliberately fail-closed: a corrupt/encrypted document, or

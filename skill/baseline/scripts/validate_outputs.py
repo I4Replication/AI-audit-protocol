@@ -7,7 +7,8 @@ runner runs it again afterwards and records the result. No model call, stdlib on
 Checks: the closed output set; findings.json against FINDINGS_FORMAT.md; the comment's structure (the rules
 i4r-audit's check_consistency.sh section 3 applies: Abstract <= 250 words and prose only, no findings table before the
 appendix, no Recommendations section, both protocol citations, no process narration); Appendix A agreeing with
-findings.json; captions; front matter; and publication hygiene (no absolute path, no participant-code token, no
+findings.json; captions; front matter; one verification snippet per finding, and the claims script the pipeline's own
+builder makes from them, run against the deposit with every check passing (claims.py); and publication hygiene (no absolute path, no participant-code token, no
 participant identifier beside a date or clock time, no e-mail address outside the byline). The hygiene patterns are
 i4r-audit 2.7.7's (provider_safety.RAW_PARTICIPANT_CODE / ROW_PARTICIPANT_CODE, phase1_runtime.participant_date_linked).
 Exit 0 when there is no error, 1 otherwise.
@@ -22,6 +23,8 @@ import os
 import pathlib
 import re
 import sys
+
+import claims
 
 REQUIRED = ("front_matter.md", "REPORT_final.md", "captions.txt", "findings.json")
 IMPACT = ("none", "unverifiable", "value_wrong", "conclusion_narrowed", "conclusion_unsupported",
@@ -149,9 +152,35 @@ def read_text(path: pathlib.Path, rep: "Report", label: str) -> str:
         return data.decode("utf-8", errors="replace")
 
 
-def hygiene(rep: Report, label: str, text: str, exempt: set[str], *, strict: bool) -> None:
+def claims_hygiene(rep: Report, label: str, text: str, exempt: set[str]) -> None:
+    """The verification snippets and the claims script. Code gets the hygiene rules every file gets; the comment
+    writer's rules (a participant code beside a date, placeholders) apply to their prose only: a .judgement or
+    .unverifiable file, and the claims script's comment lines, which quote the findings. In R code a token like P50
+    beside a date is a percentile or a period, as the pipeline also treats it."""
+    hygiene(rep, label, text, exempt, strict=True)
+    if label.endswith((".judgement", ".unverifiable")):
+        hygiene(rep, label, text, exempt, strict=True, comment_strength=True)
+    elif label.endswith("claims_script.R"):
+        prose = "\n".join(line for line in text.splitlines() if line.lstrip().startswith("##"))
+        probe = Report()
+        hygiene(probe, label, prose, exempt, strict=True, comment_strength=True)
+        for msg in probe.errors:
+            if "participant code and a date" in msg or "TODO" in msg:
+                rep.error(f"{msg} (in a claim quoted by the claims script)")
+
+
+def _clean(text: str, exempt: set[str]) -> bool:
+    """True when text passes the hygiene check under the comment writer's rules too."""
+    rep = Report()
+    hygiene(rep, "text", text, exempt, strict=True, comment_strength=True)
+    return not rep.errors
+
+
+def hygiene(rep: Report, label: str, text: str, exempt: set[str], *, strict: bool, comment_strength: bool = False) -> None:
+    """comment_strength: also apply the comment writer's rules (placeholders, a participant code beside a date) to
+    a file that carries comment text outside the four comment files: the verification snippets and claims script."""
     flag = rep.error if strict else rep.warn
-    comment = pathlib.PurePath(label).name in COMMENT_FILES and "/" not in label
+    comment = (pathlib.PurePath(label).name in COMMENT_FILES and "/" not in label) or comment_strength
     if comment and PLACEHOLDER.search(text):
         flag(f"{label}: a line that is only TODO, TBD, PLACEHOLDER or an insert marker; finish it")
     units = text.splitlines()
@@ -393,7 +422,12 @@ def check_report(rep: Report, text: str, findings: list[dict]) -> None:
         rep.warn(f"REPORT_final.md: about {words} words before the appendix; unlikely to fit ten pages")
 
 
-def validate(out: pathlib.Path, pkg: pathlib.Path | None = None, exempt: set[str] | None = None) -> dict:
+def validate(out: pathlib.Path, pkg: pathlib.Path | None = None, exempt: set[str] | None = None,
+             keep_claims: pathlib.Path | None = None, claims_output: bool = False,
+             confine_claims: dict | None = None) -> dict:
+    """keep_claims: a folder to receive the built claims_script.R and claims_map.tsv. claims_output: also return the
+    claims script's FAIL lines and, when it stopped, the end of its output (for the agent's console only; a record
+    keeps counts, claim ids and key names). confine_claims: the runner's run of the agent's R (claims.build_and_run)."""
     rep = Report()
     if exempt is None:
         exempt = deposit_headers(pkg)
@@ -414,7 +448,7 @@ def validate(out: pathlib.Path, pkg: pathlib.Path | None = None, exempt: set[str
                     ev_files.append(path)
     if not ev_files:
         rep.error("evidence/ holds no file; every quantitative claim needs a script that reproduces it")
-    extras = sorted(p.name for p in out.iterdir() if p.name not in (*REQUIRED, "evidence")
+    extras = sorted(p.name for p in out.iterdir() if p.name not in (*REQUIRED, "evidence", claims.SNIPPETS)
                     and p.name not in (".DS_Store",)) if out.is_dir() else []
     if extras:
         rep.warn(f"files outside the output contract will not be kept: {', '.join(extras)}")
@@ -447,6 +481,35 @@ def validate(out: pathlib.Path, pkg: pathlib.Path | None = None, exempt: set[str
     for name in COMMENT_FILES:
         if (out / name).is_file() and not (out / name).is_symlink():
             hygiene(rep, name, (out / name).read_bytes().decode("utf-8", errors="replace"), exempt, strict=True)
+    claims_result = None
+    if findings:
+        snippet_errors: list[str] = []
+        kinds = claims.snippets(out, findings, snippet_errors)
+        for msg in snippet_errors:
+            rep.error(msg)
+        snippet_dir = out / claims.SNIPPETS
+        if snippet_dir.is_dir() and not snippet_dir.is_symlink():
+            for path in sorted(snippet_dir.iterdir()):
+                if path.is_file() and not path.is_symlink() and path.name != ".DS_Store":
+                    rel = f"{claims.SNIPPETS}/{path.name}"
+                    claims_hygiene(rep, rel, read_text(path, rep, rel), exempt)
+        if snippet_errors:
+            rep.error("the claims script is built only when every finding has a valid snippet")
+        else:
+            claims_result = claims.build_and_run(out, findings, kinds, pkg, keep_claims, confine=confine_claims)
+            if claims_result.get("script_text") is not None:
+                claims_hygiene(rep, "claims_script.R", claims_result["script_text"], exempt)
+            withheld_key = "[key withheld: it fails the hygiene check]"
+            for c in claims_result.get("claims", {}).values():   # a key can be built from deposit values at run time
+                for field in ("failing", "unchecked"):
+                    if c.get(field):
+                        c[field] = [k if _clean(k, exempt) else withheld_key for k in c[field]]
+            for msg in claims.errors_from(claims_result):
+                check = Report()
+                hygiene(check, "claims message", msg, exempt, strict=True, comment_strength=True)
+                rep.error(msg if not check.errors else
+                          "a claims-script check FAILed under a key name that fails the hygiene check; run the "
+                          "checker and read its output")
     for path in ev_files:
         rel = path.relative_to(out)
         suffix = path.suffix.lower()
@@ -472,8 +535,13 @@ def validate(out: pathlib.Path, pkg: pathlib.Path | None = None, exempt: set[str
         elif suffix not in IMAGE_SUFFIXES:
             rep.error(f"{rel}: a file type that cannot be checked ({suffix or 'no extension'}); it stays out of the "
                       f"shared tree")
-    return {"ok": not rep.errors, "errors": rep.errors, "warnings": rep.warnings,
-            "counts": {"findings": len(findings), "evidence_files": len(ev_files)}}
+    result = {"ok": not rep.errors, "errors": rep.errors, "warnings": rep.warnings,
+              "counts": {"findings": len(findings), "evidence_files": len(ev_files)},
+              "claims_script": claims.summary(claims_result) if claims_result else None}
+    if claims_output:
+        result["claims_fail_lines"] = (claims_result or {}).get("fail_lines", [])
+        result["claims_error_tail"] = (claims_result or {}).get("error_tail")
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -488,13 +556,24 @@ def main(argv: list[str] | None = None) -> int:
         settings = json.loads(config.read_text())
         pkg = pkg or pathlib.Path(settings["pkg"])
         exempt = set(settings["exempt"]) if "exempt" in settings else None
-    result = validate(args.out.resolve(), pkg, exempt)
+    result = validate(args.out.resolve(), pkg, exempt, claims_output=True)
+    fail_lines = result.pop("claims_fail_lines", [])
+    error_tail = result.pop("claims_error_tail", None)
     if args.json:
         args.json.write_text(json.dumps(result, indent=1) + "\n")
     for msg in result["errors"]:
         print("ERROR  " + msg)
     for msg in result["warnings"]:
         print("WARN   " + msg)
+    cs = result.get("claims_script")
+    if cs:
+        print(f"claims script: {cs['code_claims']} code claim(s), {cs['judgement_claims']} judgement, "
+              f"{cs['unverifiable_claims']} unverifiable; {cs['checks']} checks, {cs['pass']} PASS, {cs['fail']} FAIL")
+        for line in fail_lines:
+            print("       " + line)
+        if error_tail:
+            print("the end of the claims script's output:")
+            print("\n".join("       " + l for l in error_tail.splitlines()))
     print(f"{'OK' if result['ok'] else 'FAIL'}: {len(result['errors'])} error(s), {len(result['warnings'])} warning(s), "
           f"{result['counts']['findings']} finding(s)")
     return 0 if result["ok"] else 1
