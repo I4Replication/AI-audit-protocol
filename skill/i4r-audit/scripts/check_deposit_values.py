@@ -289,8 +289,16 @@ _BIRTH_WORDS = {"birth", "birthdate", "birthdates", "birthday", "birthdays", "do
                 "datanascimento", "geboorte", "geboortedatum", "verjaardag"}
 # Abbreviations that mean "birth" only beside a date word ("fecha_nac", "data_nasc", "dt_nasc").
 _BIRTH_ABBREVIATIONS = {"nac", "nasc"}
+# Attributes a birth word qualifies without naming a date (sex or gender assigned at birth, birth weight or
+# order, country or place of birth).
+_BIRTH_ATTRIBUTE_WORDS = {"sex", "gender", "assigned", "weight", "order", "country", "place", "city",
+                          "nation", "nationality", "region", "province", "length", "height", "rank"}
 _DATE_WORDS = {"date", "datum", "fecha", "data", "dt", "dat", "day", "jour", "tag", "dag", "dia",
                "día", "giorno"}
+# Date-format hints ("Birth (dd/mm/yyyy) and sex", birth_ddmmyyyy_country): beside a birth word they keep a
+# birth-attribute header a date of birth (2.7.11; used by that rule only).
+_DATE_FORMAT_WORDS = {"dd", "mm", "yy", "yyyy", "ddmmyyyy", "mmddyyyy", "yyyymmdd", "ddmmyy", "mmddyy", "mmyyyy",
+                      "tt", "jj", "jjjj", "aaaa", "month", "year"}
 # A birth word that names a birth NAME when a name word stands beside it ("birth name",
 # "nom de naissance").
 _BIRTH_NAME_WORDS = {"birth", "geburt", "naissance", "nacimiento", "nascita", "nascimento",
@@ -351,6 +359,14 @@ def classify_header(header: str, *, label: bool = False) -> tuple[str, str] | No
     named = words & _NAME_WORDS or windows & (_NAME_STRONG_FIRST | _NAME_STRONG_LAST | _NAME_STRONG_FULL)
     if birth and named and birth <= _BIRTH_NAME_WORDS and not words & _DATE_WORDS:
         return ("name", "last")                        # a birth (maiden) name, not a date
+    # 2.7.11: a birth word that qualifies another attribute (a sex-assigned-at-birth item,
+    # gender_at_birth, birth_weight, country_of_birth, birth order) names no date: one audit's
+    # staging and publication listed its 'Sex' columns as dates of birth. A date word beside it still does, and so
+    # does a date-format hint (dd/mm/yyyy, ddmmyyyy, month/year) and a word that is itself a date of birth (dob,
+    # birthdate, birthday, Geburtsdatum, ...).
+    if (birth and birth <= _BIRTH_NAME_WORDS and not words & (_DATE_WORDS | _DATE_FORMAT_WORDS)
+            and words & _BIRTH_ATTRIBUTE_WORDS):
+        birth = set()
     if (birth or ("date", "of") in pairs and "birth" in words
             or ("datum", "der") in pairs and "geburt" in words
             or any(a in _DATE_WORDS and b in _BIRTH_ABBREVIATIONS for a, b in pairs)):
@@ -1780,6 +1796,20 @@ def _suffix(name: str) -> str:
     return pathlib.PurePosixPath(name).suffix.lower()
 
 
+_FORMAT_LABEL = re.compile(r"\A\.(?=[a-z0-9]*[a-z])[a-z0-9]{1,10}\Z")
+
+
+def _format_label(relative: str) -> str:
+    """A deposit file's format as printed in the coverage line: its suffix when that is a plain short suffix
+    (.xls, .omv, .h5), else "other". A suffix is never a value, but a name like "x.2001-01-01" has no format."""
+    suffix = _suffix(relative)
+    if suffix in {".gz", ".gzip"}:
+        inner = _suffix(pathlib.PurePosixPath(relative).stem)
+        if _FORMAT_LABEL.match(inner):
+            return inner + suffix
+    return suffix if _FORMAT_LABEL.match(suffix) else "other"
+
+
 def _merge(report: FileReport, member: FileReport, member_label: str) -> None:
     report.tables += member.tables
     for cls, count in member.pii_columns.items():
@@ -1906,12 +1936,16 @@ def read_deposit_file(path: pathlib.Path, relative: str, collector: Collector,
 
 
 def deposit_root(audit: pathlib.Path) -> tuple[pathlib.Path | None, str]:
-    """The frozen deposit copy staging can rely on: pkg/, else the newest Phase-1 snapshot copy."""
+    """The frozen deposit copy staging can rely on: pkg/, else the newest Phase-1 snapshot copy.
+
+    2.7.9: never a hidden ``.<sha>.<pid>.tmp`` directory, which freeze_and_publish stages beside a snapshot and
+    a refused rename can leave behind half-built; the glob matched it, and the newest one won.
+    """
     pkg = audit / "pkg"
     if pkg.is_dir() and not pkg.is_symlink():
         return pkg, "pkg"
     snapshots = [path for path in (audit / "phase1/snapshots").glob("*/raw/pkg")
-                 if path.is_dir() and not path.is_symlink()]
+                 if not path.parent.parent.name.startswith(".") and path.is_dir() and not path.is_symlink()]
     if snapshots:
         return max(snapshots, key=lambda path: path.stat().st_mtime), "phase1 snapshot"
     return None, "none"
@@ -2014,8 +2048,10 @@ def build_store(audit: pathlib.Path, *, key: bytes | None = None) -> dict[str, A
             "source": origin,
             "files": len(files),
             "scanned": sum(1 for report in reports if report.status == "scanned"),
-            "not_scanned": [{"file": report.file, "reason": report.reason}
-                            for report in reports if report.status == "not_scanned"],
+            # 2.7.11: each row also names its format (a suffix only, never a name), for the coverage line.
+            "not_scanned": [{"file": report.file, "reason": report.reason, "format": _format_label(relative)}
+                            for (relative, _), report in zip(files, reports)
+                            if report.status == "not_scanned"],
             "truncated": [{"file": report.file, "reason": "; ".join(report.truncated)}
                           for report in reports if report.truncated],
             "skipped": sum(1 for report in reports if report.status == "skipped"),
@@ -2970,9 +3006,38 @@ def run_check(audit: pathlib.Path, release: pathlib.Path, *, json_path: pathlib.
         if any(not comment_output(name) and not record_file(name) for name in files):
             out(f"    Remedy: {OTHER_REMEDY} (for any other staged file).")
         return 1
+    gap = coverage_gap(deposit)
+    if gap:
+        # 2.7.11: a clean verdict that read only part of the deposit said "ok" like one that read all of it. A file
+        # it cannot read still never refuses (the deposit is audited, not withheld); the verdict says what it missed.
+        out(f"  ok, within what it could read: no deposit value, e-mail address or IP address in {result.texts} "
+            f"release text(s) and {result.documents} document(s)")
+        out(f"    NOT COVERED (never a refusal): {gap}. A value that only those files hold was never looked for: "
+            "check by hand that no finding, record or script in the release quotes one.")
+        return 0
     out(f"  ok: no deposit value, e-mail address or IP address in {result.texts} release text(s) "
         f"and {result.documents} document(s)")
     return 0
+
+
+def coverage_gap(deposit: dict[str, Any]) -> str:
+    """What of the deposit this check did not read, by format and count (never a name or value); "" when it read it
+    all. A deposit file it cannot read, or read only in part, never refuses: the verdict says what it missed."""
+    if deposit.get("source") == "none":
+        return "no frozen deposit copy was found (pkg/ or a Phase-1 snapshot), so no deposit file was read"
+    parts = []
+    not_read = deposit.get("not_scanned") or []
+    if not_read:
+        formats: dict[str, int] = {}
+        for row in not_read:
+            label = row.get("format") or "other"
+            formats[label] = formats.get(label, 0) + 1
+        listed = ", ".join(f"{label} {count}" for label, count in sorted(formats.items(), key=lambda kv: (-kv[1], kv[0])))
+        parts.append(f"{len(not_read)} deposit file(s) not read ({listed})")
+    partial = deposit.get("truncated") or []
+    if partial:
+        parts.append(f"{len(partial)} read only in part")
+    return "; ".join(parts)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -3581,6 +3646,12 @@ def main(argv: list[str] | None = None) -> int:
                   "a staged directory outside the audit", file=sys.stderr)
             return 2
         return run_check(audit, release, json_path=args.json, mask=args.mask_records)
+    except InspectionFailure as exc:
+        # 2.7.11: the self-test meets this when the host's pdfinfo is older than Poppler 21.06 (no -custom) and said
+        # "internal error ... report the error class". Its message names a release path and an extractor, no value.
+        print(f"  FAIL (not inspectable): {exc}; Remedy: {INSPECTION_REMEDY} (Poppler 21.06 or newer)",
+              file=sys.stderr)
+        return 2
     except Exception as exc:  # noqa: BLE001 -- never a traceback: it could quote a value
         # Only the exception's class is printed: a message could quote a cell or a line.
         print(f"  FAIL (internal error): check 3c stopped on {exc.__class__.__name__}; "

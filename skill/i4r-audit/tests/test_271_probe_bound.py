@@ -133,6 +133,14 @@ def reconstructed_legacy_policy_bytes() -> bytes:
     lock_leaf = '\n    "critic_route_lock": {\n      "model": "gpt-6.1-sol",\n      "since": "2.7.5"\n    },'
     assert text.count(lock_leaf) == 1
     text = text.replace(lock_leaf, "")
+    # 2.7.11 added the critic snapshot-evidence rule; every audit before 2.7.11 froze none
+    evidence_leaf = '\n    "snapshot_evidence": "cited_plus_deposit_1",'
+    assert text.count(evidence_leaf) == 1
+    text = text.replace(evidence_leaf, "")
+    # 2.7.11 also added the Claude reasoning-token parse and the claims-script harness; 2.7.0 froze neither
+    for leaf in ('\n    "claude_reasoning_tokens": "thinking_tokens",', ',\n    "claims_script_harness": "portable_1"'):
+        assert text.count(leaf) == 1, leaf
+        text = text.replace(leaf, "")
     # 2.7.4 added the critique ceiling leaf; every audit before 2.7.4 froze none
     critique_leaf = '\n    "provider_timeout_seconds": 5400,\n    "max_attempts_per_role_operator_ceiling"'
     assert text.count(critique_leaf) == 1
@@ -140,6 +148,14 @@ def reconstructed_legacy_policy_bytes() -> bytes:
     rule_leaf = ',\n        "claim_change_rule": "substantive_specialists_1"'
     assert text.count(rule_leaf) == 1
     text = text.replace(rule_leaf, "")
+    # 2.7.9 added the pre-dispatch rule and raised the preflight leaf to its 600 s ceiling; every audit before froze
+    # no rule and 60
+    scaling_leaf = ('\n        "pre_dispatch_deadline_scaling": {\n          "package_bytes_per_second": 10000000,\n'
+                    '          "package_files_per_second": 5,\n          "max_seconds": 600\n        },')
+    assert text.count(scaling_leaf) == 1
+    text = text.replace(scaling_leaf, "")
+    assert text.count('"maximum_seconds": 600,') == 1
+    text = text.replace('"maximum_seconds": 600,', '"maximum_seconds": 60,')
     # 2.7.2 raised new audits' Phase-1 timeout; a 2.7.0 audit froze 2700 s in both leaves
     for leaf in ('"timeout_seconds": ', '"provider_timeout_seconds": '):
         assert text.count(f"{leaf}5400,") == 1, leaf
@@ -156,12 +172,20 @@ def on_shipped_claude_routes(policy: dict) -> dict:
     Claude routes for init to reach its probe-bound check: 2.7.0's own routes (Sonnet 5.5 at max) are an older
     skill's since 2.7.3, and init refuses such a leftover on its route first (tests/test_273_sonnet_effort.py).
     2.7.5: and with the shipped critic-route lock, since init refuses a leftover that predates the lock before its
-    probe-bound check (tests/test_275_critic_route_lock.py)."""
+    probe-bound check (tests/test_275_critic_route_lock.py). 2.7.9: and with the shipped pre-dispatch rule (and its
+    600 s preflight ceiling), since init refuses a leftover without the rule (tests/test_279_preflight.py). 2.7.11:
+    and with the shipped reasoning-token parse, which init also requires of a leftover."""
     models = policy["models"]
     for entry in (models["coordinator"], models["post_fan_out_verifier"], *models["phase_1_auditors"].values(),
                   policy["phase_1"]["capability_probe"]):
         entry["reasoning_effort"] = claude_routes.SHIPPED["reasoning_effort"]
-    policy["critique"]["critic_route_lock"] = json.loads(shipped_policy_bytes())["critique"]["critic_route_lock"]
+    shipped = json.loads(shipped_policy_bytes())
+    policy["critique"]["critic_route_lock"] = shipped["critique"]["critic_route_lock"]
+    policy["phase_1"]["runtime"]["pre_dispatch_deadline_scaling"] = \
+        shipped["phase_1"]["runtime"]["pre_dispatch_deadline_scaling"]
+    policy["phase_1"]["provider_free_preflight"]["maximum_seconds"] = \
+        shipped["phase_1"]["provider_free_preflight"]["maximum_seconds"]
+    policy["metadata"]["claude_reasoning_tokens"] = shipped["metadata"]["claude_reasoning_tokens"]
     return policy
 
 
@@ -929,7 +953,7 @@ class DriftPinsTheShippedBound(unittest.TestCase):
     def test_the_named_control_is_rejected_by_each_pin(self) -> None:
         checker = load_checker(SKILL / "config/check_policy_drift.py")
         found: list[str] = []
-        self.assertEqual(checker.check_negative_controls(checker.load_policy(), found), 20)
+        self.assertEqual(checker.check_negative_controls(checker.load_policy(), found), 22)
         self.assertEqual(found, [], "negative control: the unmodified checker")
         for dropped in (self.RUNTIME_PIN, self.LEAF_PIN):
             with self.subTest(loosened=dropped):
@@ -1007,7 +1031,7 @@ class DriftPinsTheShippedBound(unittest.TestCase):
                     self.assertNotIn(message, result.stdout)
         result = self.drift({})
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("twenty planted drifts were rejected", result.stdout)
+        self.assertIn("twenty-two planted drifts were rejected", result.stdout)
 
 
 if __name__ == "__main__":

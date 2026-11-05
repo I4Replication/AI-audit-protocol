@@ -167,6 +167,12 @@ check_skill_version_pin () {
   echo "       Run the scripts from the canonical copy, or reinstall it (its ZIP sits beside it)." >&2
   echo "       To proceed anyway, set I4R_ALLOW_SKILL_VERSION_MISMATCH=1; the mismatch is then" >&2
   echo "       recorded in protocol_version, not hidden." >&2
+  # 2.7.11: intake (new_audit.sh, setup_workspace.sh) refuses the same mismatch before it reserves; one that ran
+  # before the canonical copy changed (or from an older install) has already reserved the paper and copied the deposit
+  echo "       Nothing has run yet. If new_audit.sh already reserved the paper and copied the deposit, that intake stays" >&2
+  echo "       valid: once the copy is right, run init_run.sh again on this AUDIT_DIR (new_audit.sh refuses a second" >&2
+  echo "       intake). To give the paper up instead: reserve_paper.sh release <data/Journal/Paper>, then move its" >&2
+  echo "       runs/<Journal>/<Paper> folder under old_runs/." >&2
   return 1
 }
 # One digest over every file that decides whether a release passes, used by BOTH provenance
@@ -220,8 +226,12 @@ sys.path.insert(0, str(scripts))
 import claude_routes
 import probe_bounds
 import phase1_timeouts
+import pre_dispatch_deadlines
 import critique_timeouts
 import claim_change_rules
+import claims_harness
+import claude_thinking_tokens
+import snapshot_evidence_rules
 import record_invocation
 
 
@@ -299,6 +309,13 @@ if not force and (snapshot.exists() or snapshot.is_symlink()):
         refuse(f"{snapshot} freezes a Phase-1 timeout this skill does not run: timeout_seconds {timeout} is not a "
                f"packaged Phase-1 timeout ({phase1_timeouts.describe()}), so Phase 1 would refuse the audit before "
                f"any call. {remedy}")
+    # 2.7.9: and for the pre-dispatch rule (scripts/pre_dispatch_deadlines.py); a leftover without the leaf is refused
+    # last, below.
+    try:
+        scaling = pre_dispatch_deadlines.frozen_scaling(section(section(policy, "phase_1"), "runtime"))
+    except pre_dispatch_deadlines.PreDispatchScalingError as exc:
+        refuse(f"{snapshot} freezes a pre-dispatch rule this skill does not run: {exc}, so Phase 1 would refuse the "
+               f"audit before any call. {remedy}")
     # 2.7.4: and for the per-call critique ceiling (scripts/critique_timeouts.py); a leftover without the leaf is an
     # older skill's and its routes decide it above.
     try:
@@ -312,6 +329,18 @@ if not force and (snapshot.exists() or snapshot.is_symlink()):
     except claim_change_rules.RuleError as exc:
         refuse(f"{snapshot} freezes a claim-change rule this skill does not run: {exc}, so make_diff_packet.py would "
                f"refuse every later round. {remedy}")
+    # 2.7.11: and for the claims-script harness (scripts/claims_harness.py); a leftover without the leaf keeps 2.7.10's
+    try:
+        claims_harness.harness_of(policy)
+    except claims_harness.HarnessError as exc:
+        refuse(f"{snapshot} freezes a claims-script harness this skill does not build: {exc}, so make_claims_script.sh "
+               f"would refuse the release. {remedy}")
+    # 2.7.11: and for the critic snapshot-evidence rule (scripts/snapshot_evidence_rules.py)
+    try:
+        snapshot_evidence_rules.rule_of(policy)
+    except snapshot_evidence_rules.RuleError as exc:
+        refuse(f"{snapshot} freezes a snapshot-evidence rule this skill does not run: {exc}, so run_critique.sh would "
+               f"refuse every round. {remedy}")
     # 2.7.5: and for the critic route. A leftover frozen on another critic model (the snapshot of an audit re-pinned
     # to Terra, say) would give a new audit that route for life; every audit initialised now runs its critique on the
     # shipped route, and a leftover that predates critique.critic_route_lock (frozen by 2.7.4 or earlier) is refused
@@ -326,6 +355,25 @@ if not force and (snapshot.exists() or snapshot.is_symlink()):
         refuse(f"{snapshot} " + (f"freezes a critic-route lock this skill does not ship ({lock})" if lock else
                "predates the critic-route lock (critique.critic_route_lock, 2.7.5), so the audit's critic route "
                "would not be locked") + f". {remedy}")
+    # 2.7.9 (re-review RC-2): a leftover with no pre-dispatch rule was frozen by 2.7.8 or earlier (an init that did not
+    # finish, or record_invocation.py --init-policy), and its audit would keep the fixed 60 s pre-dispatch deadline
+    # for life, whatever its deposit. Refused, as the 2.7.5 rule refuses an unlocked leftover: nothing has run, and
+    # removing a leftover costs nothing. Checked last, so an older leftover keeps the refusal it had. An audit whose
+    # init finished has a run.json (refuse_existing_run) or a journal (refuse_initialised_audit) and never gets here.
+    if scaling is None:
+        refuse(f"{snapshot} predates the pre-dispatch rule (phase_1.runtime.{pre_dispatch_deadlines.LEAF}, 2.7.9), so "
+               f"the audit would keep the fixed 60 s pre-dispatch deadline for its whole life, whatever its deposit. "
+               f"Every audit initialised now freezes the rule. {remedy}")
+    # 2.7.11: and for the Claude reasoning-token parse (scripts/claude_thinking_tokens.py). A leftover with no leaf was
+    # frozen by 2.7.10 or earlier, and its audit would record no Claude thinking tokens for life. Checked last too.
+    try:
+        thinking = claude_thinking_tokens.rule_of(policy)
+    except claude_thinking_tokens.RuleError as exc:
+        refuse(f"{snapshot} freezes a reasoning-token parse this skill does not run: {exc}. {remedy}")
+    if not thinking:
+        refuse(f"{snapshot} predates the Claude reasoning-token parse (metadata.claude_reasoning_tokens, 2.7.11), so the "
+               f"audit would record no Claude thinking tokens for its whole life. Every audit initialised now freezes "
+               f"it. {remedy}")
 critique, coordinator = section(policy, "critique"), section(section(policy, "models"), "coordinator")
 for value in (critique.get("round_target"), critique.get("round_cap"), coordinator.get("requested_model"),
               coordinator.get("provider"), coordinator.get("reasoning_effort")):
@@ -757,12 +805,16 @@ EOF
   echo "  critique rounds:   target $TARGET, hard cap $CAP"
   echo "  probe bound:       ${PROBE_BOUND:-<none frozen>} normalized tokens"
   echo "  phase-1 timeout:   $(jq -r '.policy.phase_1.runtime.timeout_seconds // "<none frozen>"' "$DIR/pipeline-policy.snapshot.json") seconds per auditor call"
+  # 2.7.9: the pre-dispatch rule the snapshot froze (an older audit froze none: 60 s, whatever its deposit)
+  echo "  pre-dispatch:      $(jq -r '.policy.phase_1.runtime.pre_dispatch_deadline_scaling as $s | if $s then "60 s + 1 s per \($s.package_bytes_per_second) package bytes and per \($s.package_files_per_second) files, at most \($s.max_seconds) s" else "60 s (none frozen)" end' "$DIR/pipeline-policy.snapshot.json")"
   # 2.7.4: the critique ceiling the snapshot froze (an older audit froze none and runs at 2700)
   echo "  critique timeout:  $(jq -r '.policy.critique.provider_timeout_seconds // "<none frozen: 2700>"' "$DIR/pipeline-policy.snapshot.json") seconds per critic or adjudicator call"
   # 2.7.5: the critic route the snapshot froze, and whether it is locked
   echo "  critic route:      $(jq -r '"critics \(.policy.models.critics.requested_model) at \(.policy.models.critics.reasoning_effort), adjudicator \(.policy.models.targeted_adjudicator.requested_model) at \(.policy.models.targeted_adjudicator.reasoning_effort)" + (if .policy.critique.critic_route_lock.model then "; locked (2.7.5)" else "; not locked" end)' "$DIR/pipeline-policy.snapshot.json")"
   # 2.7.4: which later-round findings the specialists re-review (an older audit froze none: every changed finding)
   echo "  later rounds:      specialists re-review $(jq -r 'if .policy.critique.later_rounds.routing_manifest.claim_change_rule == "substantive_specialists_1" then "substantive changes only; completeness every changed finding" else "every changed finding" end' "$DIR/pipeline-policy.snapshot.json")"
+  # 2.7.11: what a critic snapshot carries (an older audit froze no leaf: the cited files only)
+  echo "  critic evidence:   $(jq -r 'if .policy.critique.snapshot_evidence == "cited_plus_deposit_1" then "cited files plus the deposit (bounded; the rest listed as withheld)" else "cited files only" end' "$DIR/pipeline-policy.snapshot.json")"
   echo "  package:           $(printf '%s' "$PKGJSON" | jq -r '.file_count') files, $(printf '%s' "$PKGJSON" | jq -r '.total_bytes') bytes"
   echo "  package manifest:  work/pkg_manifest.txt (sha256 $(printf '%s' "$PKGJSON" | jq -r '.manifest_sha256 // "n/a"' | cut -c1-16)...)"
   echo "  written:           $RUN"
@@ -771,6 +823,7 @@ EOF
   echo "      with log_event.sh as they happen. Nothing here can be reconstructed afterwards."
   warn_probe_bound
   warn_critique_leaves
+  warn_snapshot_evidence_leaf
   return 0
 }
 
@@ -818,6 +871,33 @@ warn_critique_leaves () {
       echo "         audits to 2.7.4). The --force command above freezes the shipped policy, these leaves included."
     else
       echo "         audits to 2.7.4). To freeze the shipped policy instead, re-initialise it now, before Phase 1:"
+      printf '           bash %q %q --force --audit-id %q' "$SCRIPT_DIR/init_run.sh" "$DIR" "$AUDIT_ID"
+      [ -z "$DOI" ] || printf ' --doi %q' "$DOI"
+      [ -z "$TITLE" ] || printf ' --paper-title %q' "$TITLE"
+      printf '\n'
+    fi
+  } >&2
+  return 0
+}
+
+# 2.7.11: a reused leftover frozen by 2.7.10 or earlier has no critique.snapshot_evidence leaf, so the new audit's critic
+# snapshots would carry the cited files only, for life (no verification snippets, no uncited deposit files).
+warn_snapshot_evidence_leaf () {
+  [ "${SNAPSHOT_CREATED:-0}" -eq 1 ] && return 0
+  local snap="$DIR/pipeline-policy.snapshot.json" above=0
+  jq -e '.policy.critique | has("snapshot_evidence")' "$snap" > /dev/null 2>&1 && return 0
+  # the re-init command is printed once: warn_probe_bound or warn_critique_leaves printed it if either warned
+  [ "$PROBE_BOUND" != "$SHIPPED_PROBE_BOUND" ] && above=1
+  jq -e '.policy.critique | has("provider_timeout_seconds")' "$snap" > /dev/null 2>&1 || above=1
+  jq -e '.policy.critique.later_rounds.routing_manifest | has("claim_change_rule")' "$snap" > /dev/null 2>&1 || above=1
+  {
+    echo ""
+    echo "WARNING: this init reused a policy snapshot that froze no critique.snapshot_evidence, so this audit's critic"
+    echo "         snapshots carry the cited files only for its whole life (INSTALL.md, Critic snapshots and the critic"
+    if [ "$above" -eq 1 ]; then
+      echo "         sandbox). The --force command above freezes the shipped policy, this leaf included."
+    else
+      echo "         sandbox). To freeze the shipped policy instead, re-initialise it now, before Phase 1:"
       printf '           bash %q %q --force --audit-id %q' "$SCRIPT_DIR/init_run.sh" "$DIR" "$AUDIT_ID"
       [ -z "$DOI" ] || printf ' --doi %q' "$DOI"
       [ -z "$TITLE" ] || printf ' --paper-title %q' "$TITLE"
@@ -1147,6 +1227,42 @@ PY
     else echo "  ok: a leftover at Claude effort $effort is refused and left as it was"; fi
   done
 
+  # 16. (2.7.9) a leftover 2.7.8 froze (record_invocation.py --init-policy, or an init that did not finish: the shipped
+  #     policy without phase_1.runtime.pre_dispatch_deadline_scaling, its preflight maximum at 60) is refused untouched
+  #     with the rm remedy, so no new audit keeps the fixed 60 s deadline; after the rm, init freezes the rule.
+  mkdir -p "$T/p278/pkg"
+  python3 - "$SCRIPT_DIR" "$T/p278" <<'PY' || { echo "  FAIL: could not plant a 2.7.8 leftover snapshot"; fails=1; }
+import json, pathlib, sys
+sys.path.insert(0, sys.argv[1])
+import record_invocation
+policy = json.loads(record_invocation.POLICY.read_text(encoding="utf-8"))
+del policy["phase_1"]["runtime"]["pre_dispatch_deadline_scaling"]
+policy["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60
+envelope = {"snapshot_version": "1", "policy_sha256": record_invocation.policy_hash(policy), "policy": policy}
+(pathlib.Path(sys.argv[2]) / record_invocation.POLICY_SNAPSHOT).write_text(
+    json.dumps(envelope, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+  before=$(shasum -a 256 "$T/p278/pipeline-policy.snapshot.json" 2>/dev/null | cut -d' ' -f1)
+  "$SELF" "$T/p278" --audit-id t-leftover-278 > "$T/out-p278.txt" 2>&1
+  rc=$?
+  if [ "$rc" -ne 2 ] || [ -e "$T/p278/run.json" ] || [ -z "$before" ] ||
+     [ "$(shasum -a 256 "$T/p278/pipeline-policy.snapshot.json" 2>/dev/null | cut -d' ' -f1)" != "$before" ] ||
+     ! grep -q "predates the pre-dispatch rule (phase_1.runtime.pre_dispatch_deadline_scaling, 2.7.9)" "$T/out-p278.txt" ||
+     ! grep -q "remove it (rm " "$T/out-p278.txt"; then
+    echo "  FAIL: a 2.7.8 leftover without the pre-dispatch rule should be refused, untouched, naming the file (exit $rc)"
+    cat "$T/out-p278.txt"; fails=1
+  else echo "  ok: a 2.7.8 leftover without the pre-dispatch rule is refused and left as it was"; fi
+  rm -f "$T/p278/pipeline-policy.snapshot.json"
+  "$SELF" "$T/p278" --audit-id t-leftover-278 > "$T/out-p278b.txt" 2>&1
+  rc=$?
+  if [ "$rc" -ne 0 ] ||
+     [ "$(jq -cS '.policy.phase_1.runtime.pre_dispatch_deadline_scaling' "$T/p278/pipeline-policy.snapshot.json" 2>/dev/null)" != \
+       "$(jq -cS '.phase_1.runtime.pre_dispatch_deadline_scaling' "$SCRIPT_DIR/../config/pipeline-policy-v2.json")" ] ||
+     ! grep -q "^  pre-dispatch:      60 s + 1 s per " "$T/out-p278b.txt"; then
+    echo "  FAIL: init after removing the 2.7.8 leftover should freeze the shipped pre-dispatch rule (exit $rc)"
+    cat "$T/out-p278b.txt"; fails=1
+  else echo "  ok: init after removing it freezes the shipped pre-dispatch rule"; fi
+
   rm -rf "$T"
   if [ "$fails" -ne 0 ]; then echo "SELF-TEST FAILED"; return 1; fi
   echo "SELF-TEST PASSED"
@@ -1161,5 +1277,28 @@ rc=$?
 if [ $rc -eq 0 ] && [ -n "${DIR:-}" ] && [ -f "$DIR/run.json" ]; then
   bash "$(cd "$(dirname "$0")" && pwd)/capture_environment.sh" "$DIR" ||
     echo "WARNING: the environment was not recorded (see above); fix the cause and run: bash scripts/capture_environment.sh \"$DIR\""
+fi
+# 2.7.11: what intake did with entries beside an archive package (new_audit.sh --loose) is journaled once, as counts
+# and extensions (the names stay in paper_source.json). An audit intaken before 2.7.11 has no such record: no note.
+# (Init refuses an audit that already has run.json unless --force, which archives the journal and starts a new one.)
+if [ $rc -eq 0 ] && [ -n "${DIR:-}" ] && [ -f "$DIR/run.json" ] && [ -f "$DIR/paper_source.json" ]; then
+  intake_note="$(python3 - "$DIR/paper_source.json" <<'PYNOTE' 2>/dev/null
+import collections, json, os, sys
+beside = (json.load(open(sys.argv[1], encoding="utf-8")).get("package") or {}).get("beside_archive") or {}
+entries, choice = beside.get("entries") or [], beside.get("choice")
+if entries and choice in ("include", "exclude"):
+    kinds = collections.Counter("folder" if e.endswith("/") else (os.path.splitext(e)[1].lower() or "no extension")
+                                for e in entries)
+    shown = ", ".join(f"{k} x{n}" if n > 1 else k for k, n in sorted(kinds.items()))
+    where = "added under pkg/beside_archive/" if choice == "include" else "left out of the package"
+    print(f"choice={choice}\ntext=intake: {len(entries)} entries beside the package archive ({shown}) {where} "
+          f"(new_audit.sh --loose {choice}); their names are in paper_source.json")
+PYNOTE
+)"
+  if [ -n "$intake_note" ]; then
+    bash "$(cd "$(dirname "$0")" && pwd)/log_event.sh" --run "$DIR/run.json" note kind=intake_package \
+      "$(printf '%s\n' "$intake_note" | sed -n '1p')" "$(printf '%s\n' "$intake_note" | sed -n '2p')" >/dev/null ||
+      echo "WARNING: the intake package choice was not journaled; paper_source.json still records it"
+  fi
 fi
 exit $rc

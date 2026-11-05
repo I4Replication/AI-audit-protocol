@@ -55,7 +55,7 @@
  },
  "work_root": "~/.i4r_baseline_work",
  "output_dir": "baseline_comments",
- "source_pipeline": "i4r-audit 2.7.7 (reference files and launch contract copied from it)",
+ "source_pipeline": "i4r-audit 2.7.7 (reference files and launch contract copied from it); i4r-audit 2.7.9 (verification_guide.md and make_claims_script.sh, baseline 1.2.0)",
  "extra_deny_read": [],
  "cache_write_usd_per_mtok": {
   "claude-sonnet-5-5": {

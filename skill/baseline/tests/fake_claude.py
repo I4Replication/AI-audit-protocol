@@ -212,6 +212,29 @@ findings = dict(FINDINGS)
 if MODE == "invalid":
     findings = {"schema_version": "wrong"}
 (out / "findings.json").write_text(json.dumps(findings))
+SNIPPET = ('expect("C-1", mean_x = 2, tol = 0.05, note = "deposit mean of x, Section 3; printed to one decimal")\n'
+           'check("C-1", mean_x = mean(read_deposit("data.csv")$x))\n')
+if MODE != "claims_missing":
+    (out / "verification_snippets").mkdir(exist_ok=True)
+    (out / "verification_snippets" / "C-1.R").write_text(
+        SNIPPET.replace("mean_x = 2,", "mean_x = 2.5,") if MODE == "claims_fail" else
+        'writeLines("x", file.path(Sys.getenv("HOME"), "escaped.txt"))\n' + SNIPPET if MODE == "claims_escape" else
+        SNIPPET)
+if MODE == "judgement_coord":
+    (out / "verification_snippets" / "C-1.R").unlink()
+    (out / "verification_snippets" / "C-1.judgement").write_text("P12 tested 2021-03-04 in the lab.\nBasis.\n")
+if MODE == "claims_read_tree":
+    (out / "verification_snippets" / "C-1.R").write_text(
+        'expect("C-1", tree_readable = FALSE)\n'
+        f'check("C-1", tree_readable = file.exists(file.path("{os.environ["I4R_TREE"]}", "data")))\n')
+if MODE == "findings_coord":
+    filler = " ".join(["the item wording in the deposited codebook differs from the printed table"] * 2)
+    (out / "findings.json").write_text(json.dumps(findings).replace(
+        "Table 2 mean differs from the deposit", f"Participant P12 is described as {filler} on 2021-03-04"))
+if MODE == "snippet_stray":
+    (out / "verification_snippets" / "frame.csv").write_text("x,y\n1,2\n3,4\n")
+if MODE == "findings_pii":
+    (out / "findings.json").write_text(json.dumps(findings).replace("Table 2 mean differs", "SUBJ_P12 mean differs"))
 if MODE == "pii":
     (out / "evidence" / "rows.csv").write_text("id,score\nSUBJ_P12,3.4\n")
 if MODE == "report_pii":

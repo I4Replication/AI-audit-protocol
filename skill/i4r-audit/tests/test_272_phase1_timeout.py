@@ -340,6 +340,11 @@ class AcrossVersions(SnapshotFixture):
         as_271["critique"].pop("provider_timeout_seconds", None)  # 2.7.4's leaves, which 2.7.1 never froze
         as_271["critique"]["later_rounds"]["routing_manifest"].pop("claim_change_rule", None)
         as_271["critique"].pop("critic_route_lock", None)   # 2.7.5's lock
+        as_271["phase_1"]["runtime"].pop("pre_dispatch_deadline_scaling", None)   # 2.7.9's pre-dispatch rule
+        as_271["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60     # and its 600 s ceiling
+        as_271["critique"].pop("snapshot_evidence", None)   # and 2.7.11's three leaves
+        as_271["metadata"].pop("claude_reasoning_tokens", None)
+        as_271["publication"].pop("claims_script_harness", None)
         admitted = probe_only(self.audit("old-on-271", as_271))
         self.assertEqual(admitted.returncode, 3, admitted.stdout + admitted.stderr)
         self.assertIn("PAUSED: Phase-1 local preflight failed", admitted.stderr)
@@ -396,7 +401,7 @@ class DriftPinsTheShippedTimeout(unittest.TestCase):
         with tempfile.TemporaryDirectory() as base:
             result = self.run_checker(self.copied_tree(pathlib.Path(base)))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("twenty planted drifts were rejected", result.stdout)
+        self.assertIn("twenty-two planted drifts were rejected", result.stdout)
 
     def test_each_revert_on_disk_is_rejected_by_its_own_pin(self) -> None:
         with tempfile.TemporaryDirectory() as base:

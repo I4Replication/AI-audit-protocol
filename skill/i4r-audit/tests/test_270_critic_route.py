@@ -111,6 +111,18 @@ def reconstructed_2610_policy() -> dict:
     policy["critique"].pop("provider_timeout_seconds", None)
     policy["critique"]["later_rounds"]["routing_manifest"].pop("claim_change_rule", None)
     policy["critique"].pop("critic_route_lock", None)   # 2.7.5 added the critic-route lock; 2.6.10 froze none
+    policy["phase_1"]["runtime"].pop("pre_dispatch_deadline_scaling", None)   # 2.7.9's pre-dispatch rule
+    policy["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60     # and its 600 s ceiling
+    drop_2711_leaves(policy)
+    return policy
+
+
+def drop_2711_leaves(policy: dict) -> dict:
+    """``policy`` without the three leaves 2.7.11 added (the critic snapshot-evidence rule, the Claude reasoning-token
+    parse and the claims-script harness); every audit initialised before 2.7.11 froze none of them."""
+    policy["critique"].pop("snapshot_evidence", None)
+    policy["metadata"].pop("claude_reasoning_tokens", None)
+    policy["publication"].pop("claims_script_harness", None)
     return policy
 
 

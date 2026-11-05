@@ -111,6 +111,10 @@ def policy_on(route: dict[str, str], *, probe_bound: int | None = None) -> dict:
         policy["phase_1"]["provider_timeout_seconds"] = 2700
         # 2.7.4 added the critique ceiling leaf; 2.6.10 froze none
         policy["critique"].pop("provider_timeout_seconds", None); policy["critique"]["later_rounds"]["routing_manifest"].pop("claim_change_rule", None); policy["critique"].pop("critic_route_lock", None)
+        policy["phase_1"]["runtime"].pop("pre_dispatch_deadline_scaling", None)  # 2.7.9's pre-dispatch rule
+        policy["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60   # and its 600 s ceiling
+        # 2.7.11's three leaves (critic snapshot evidence, reasoning-token parse, claims harness); none frozen before
+        policy["critique"].pop("snapshot_evidence", None); policy["metadata"].pop("claude_reasoning_tokens", None); policy["publication"].pop("claims_script_harness", None)
     if probe_bound is not None:
         policy["phase_1"]["runtime"]["probe_max_normalized_tokens"] = probe_bound
         policy["phase_1"]["capability_probe"]["maximum_normalized_tokens"] = probe_bound
@@ -119,6 +123,10 @@ def policy_on(route: dict[str, str], *, probe_bound: int | None = None) -> dict:
         policy["phase_1"]["runtime"]["timeout_seconds"] = 2700
         policy["phase_1"]["provider_timeout_seconds"] = 2700
         policy["critique"].pop("provider_timeout_seconds", None); policy["critique"]["later_rounds"]["routing_manifest"].pop("claim_change_rule", None); policy["critique"].pop("critic_route_lock", None)  # 2.7.0 froze no critique ceiling
+        policy["phase_1"]["runtime"].pop("pre_dispatch_deadline_scaling", None)  # 2.7.9's pre-dispatch rule
+        policy["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60   # and its 600 s ceiling
+        # 2.7.11's three leaves (critic snapshot evidence, reasoning-token parse, claims harness); none frozen before
+        policy["critique"].pop("snapshot_evidence", None); policy["metadata"].pop("claude_reasoning_tokens", None); policy["publication"].pop("claims_script_harness", None)
     return policy
 
 

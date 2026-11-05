@@ -9,6 +9,7 @@ the small transition API lets runners persist each boundary before continuing.
 from __future__ import annotations
 
 import argparse
+import contextvars
 import copy
 import datetime as dt
 import fcntl
@@ -21,8 +22,9 @@ import os
 import pathlib
 import sys
 import tempfile
+import types
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from contextlib import contextmanager
 from typing import Any, Iterable, Iterator
 
@@ -33,6 +35,7 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import verifier_contract  # noqa: E402
+import fs_retry  # noqa: E402  -- 2.7.9: a rename a Windows program refuses is retried
 
 
 SCHEMA_VERSION = "2.1.0"
@@ -40,6 +43,19 @@ JOURNAL_NAME = "run.events.jsonl"
 RUN_NAME = "run.json"
 INVOCATIONS_NAME = "invocations.jsonl"
 LOCK_NAME = ".run.events.lock"
+# 2.7.9: what one journal-lock hold may spend in all its rename retries together (fs_retry), as a share of
+# LOCK_TIMEOUT: 5 s at the default 60. fs_retry gives each rename up to 15.75 s, and a projection writes six or
+# seven files, so a hold could otherwise outlast a waiting writer's LOCK_TIMEOUT. The share is per hold, and holds
+# queue: Phase 1 starts five writers at once and a sixth (its main thread, a log_event.sh) can wait behind them, so
+# 1/12 keeps six holds' retries within half of a waiter's LOCK_TIMEOUT (a quarter made each refused hold about
+# 13.6 s, so five of them ran 68 s). journal_lock also restarts a waiter's LOCK_TIMEOUT each time the journal
+# grows. A write outside any hold (a test, a tool) keeps fs_retry's own tries.
+LOCK_RETRY_SHARE = 1 / 12
+_HOLD_RETRY_BUDGET: contextvars.ContextVar[Any] = contextvars.ContextVar("journal_hold_retry_budget", default=None)
+# 2.7.9: how often a writer waiting for the journal lock reads the journal's size. Half a second keeps the stat
+# traffic on a synced folder low; a waiter sees a growth at most this (and one 0.05 s poll) after it happened, so it
+# is refused at most that much later than LOCK_TIMEOUT after the journal last grew.
+LOCK_PROGRESS_SAMPLE_SECONDS = 0.5
 HASH_RE = __import__("re").compile(r"^[0-9a-f]{64}$")
 
 ATTEMPT_KINDS = {
@@ -140,7 +156,14 @@ def _atomic_write(path: pathlib.Path, data: bytes) -> None:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        budget = _HOLD_RETRY_BUDGET.get()
+        try:
+            fs_retry.replace_with_retry(temporary, path, budget)
+        except PermissionError:
+            if budget is not None:
+                # a rename refused to the end spends the hold's budget: a later write in the hold fails at once
+                budget.expires_at = min(budget.expires_at, time.monotonic())
+            raise
         directory_fd = os.open(path.parent, os.O_RDONLY)
         try:
             os.fsync(directory_fd)
@@ -161,6 +184,15 @@ def lock_timeout_seconds() -> float:
     return value if value > 0 else 60.0
 
 
+def _journal_size(root: pathlib.Path) -> int | None:
+    """The canonical journal's size, which every append raises (only _append_locked writes it, appending); None while
+    there is none. Not its mtime: a touch, or a sync client replacing the file, journals nothing."""
+    try:
+        return (root / JOURNAL_NAME).stat().st_size
+    except OSError:
+        return None
+
+
 @contextmanager
 def journal_lock(root: pathlib.Path) -> Iterator[None]:
     """Serialize sequence, hash, and attempt allocation with one OS lock.
@@ -170,27 +202,48 @@ def journal_lock(root: pathlib.Path) -> Iterator[None]:
     write on a synced folder -- and an unbounded LOCK_EX then blocks every later journal write
     forever with no message. Poll instead, and refuse after LOCK_TIMEOUT seconds so the caller
     exits with the documented refusal rather than hanging.
+
+    2.7.9: LOCK_TIMEOUT counts from the later of the wait's start and the last time the journal
+    grew. Every writer appends its event before it projects, so a queue of writers whose renames a
+    sync client refuses, each retrying within its hold's budget, raises the journal's size once per
+    hold. A waiter reads that size every LOCK_PROGRESS_SAMPLE_SECONDS and, when it passed the largest
+    size seen in this wait, starts LOCK_TIMEOUT again from then: a queue that keeps journaling never
+    times it out, a holder that appended and then stalled gets it refused LOCK_TIMEOUT (plus at most
+    one sampling interval) after that append, and a holder that journals nothing gets it refused
+    after LOCK_TIMEOUT, as before. A changed mtime, or the journal replaced by a file no larger than
+    the largest seen (or gone and back), is not progress.
     """
     root.mkdir(parents=True, exist_ok=True)
     lock_path = root / LOCK_NAME
     timeout = lock_timeout_seconds()
     with lock_path.open("a+b") as handle:
         deadline = time.monotonic() + timeout
+        size, sample_at = _journal_size(root), time.monotonic() + LOCK_PROGRESS_SAMPLE_SECONDS
         while True:
             try:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
-                if time.monotonic() >= deadline:
+                now = time.monotonic()
+                if now >= sample_at or now >= deadline:
+                    grown = _journal_size(root)
+                    if grown is not None and (size is None or grown > size):
+                        size, deadline = grown, now + timeout
+                    sample_at = now + LOCK_PROGRESS_SAMPLE_SECONDS
+                if now >= deadline:
                     raise JournalError(
                         f"journal lock {lock_path} is held by another process and was not "
                         f"released within LOCK_TIMEOUT={timeout:g}s; the holder is alive (an OS "
                         "lock dies with its process) -- find it before retrying"
                     )
                 time.sleep(0.05)
+        # one retry budget for the whole hold, read by _atomic_write (fs_retry reads only its expires_at)
+        previous = _HOLD_RETRY_BUDGET.get()
+        _HOLD_RETRY_BUDGET.set(types.SimpleNamespace(expires_at=time.monotonic() + timeout * LOCK_RETRY_SHARE))
         try:
             yield
         finally:
+            _HOLD_RETRY_BUDGET.set(previous)
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
@@ -316,6 +369,14 @@ TOOL_ONLY_EVENTS = {
     AMEND_EVENT: "python3 scripts/amend_round_cap.py <audit-dir> --to <cap> --reason '<why>'",
     REOPEN_EVENT: "python3 scripts/reopen_audit.py <audit-dir> --reason '<why>' (or amend_round_cap.py --reopen)",
     ENVIRONMENT_EVENT: "bash scripts/capture_environment.sh <audit-dir> (it measures the machine it runs on)",
+}
+# 2.7.11: the events that open, anchor and close a journal are written only by their tools, through the Python API.
+# A hand-logged finalize closed the audit (status complete, an ended_at) without one finalize gate having run; init
+# and migration_anchor were inert. The CLI appends refuse all three, as they refuse the types above.
+LIFECYCLE_TOOL_EVENTS = {
+    "init": "bash scripts/init_run.sh <audit-dir> (it opens the journal)",
+    "migration_anchor": "python3 scripts/migrate_metadata_2_1.py (it anchors a migrated audit's journal)",
+    "finalize": "bash scripts/finalize_run.sh <audit-dir> (it closes the audit once every finalize gate passes)",
 }
 # The type a pre-2.7.4 operator logged by hand (three journals hold one). The projection never read it and never
 # will: those audits keep the run.json they have. A new one is refused and pointed at the capture.
@@ -549,7 +610,10 @@ def record_environment(root: pathlib.Path, environment: dict[str, Any]) -> dict[
         return events[-1]
 
 
-def _append_locked(root: pathlib.Path, specs: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def _append_locked(root: pathlib.Path, specs: Iterable[dict[str, Any]], *,
+                   check: Any = None) -> list[dict[str, Any]]:
+    """``check(events, projected, additions)``, when given, may refuse the batch after the projection proof and
+    before anything is written (append_cli_events passes _refuse_unfinalizable_hand_events, 2.7.11)."""
     events = load_events(root)
     previous_hash = events[-1]["event_hash"] if events else None
     additions: list[dict[str, Any]] = []
@@ -593,6 +657,8 @@ def _append_locked(root: pathlib.Path, specs: Iterable[dict[str, Any]]) -> list[
             if event["type"] in ROUND_COUNT_EVENTS
             and any(key in event["payload"] for key in ROUND_COUNT_KEYS)
         })
+        if check is not None:
+            check(events, projected, additions)
         path = root / JOURNAL_NAME
         with path.open("ab") as handle:
             handle.write(b"".join(canonical_bytes(event) + b"\n" for event in additions))
@@ -920,6 +986,9 @@ def check_hand_payload(event_type: Any, payload: Any) -> None:
         # 2.6.9: a raised cap or a reopened audit is an operator act with a reason, written by its tool
         raise JournalError(f"{event_type} events are written only by their tool, never logged by hand: "
                            f"{TOOL_ONLY_EVENTS[event_type]}")
+    if event_type in LIFECYCLE_TOOL_EVENTS:
+        raise JournalError(f"{event_type} events are written only by their tool, never logged by hand: "
+                           f"{LIFECYCLE_TOOL_EVENTS[event_type]}")
     if event_type == LEGACY_ENVIRONMENT_EVENT:
         raise JournalError(f"{LEGACY_ENVIRONMENT_EVENT} is not a journal event run.json reads: the software "
                            f"environment is journaled as {ENVIRONMENT_EVENT}, only by "
@@ -1191,15 +1260,150 @@ def append_cli_events(root: pathlib.Path, specs: list[dict[str, Any]]) -> list[d
         raise JournalError("event batch is empty")
     root = root.resolve()
     _refuse_unknown_types(specs)
+    _refuse_json_text_lists(specs)
     _refuse_private_operator_text(specs)
     with journal_lock(root):
         current = load_events(root)
         _check_redactions(current, specs)
         _refuse_raw_verifier_events(current, specs)
         _refuse_hand_logged_rounds(root, current, specs)
-        events = _append_locked(root, specs)
+        events = _append_locked(root, specs, check=_refuse_unfinalizable_hand_events)
         project_all_locked(root, events)
         return events[-len(specs):]
+
+
+# 2.7.11: the run.json subtrees, as JSON pointers, that each hand-loggable event type's projection writes (every
+# event also writes its own /events entry; _hand_event_writes narrows the merging types to the keys they write).
+# finalize validates run.json against run.schema.json (its step 3) and the journal is append-only, so a hand-logged
+# value that only finalize judged could be overridden only by a hand metadata_correction: failure kinds
+# output_validation, environment and intake_flatten_permission, and model source=requested_only (an invocation's
+# identity_assurance, not a model source), on four audits in October 2026. compliance is re-derived at finalize except
+# its gate log, so a gate owns only /compliance/gates_run.
+HAND_EVENT_WRITES: dict[str, tuple[str, ...]] = {
+    "model": ("/model_assignments",), "tokens": ("/tokens",), "cost": ("/costs",),
+    "failure": ("/failure_events",), "brief_correction": ("/brief_corrections",),
+    "records": ("/records_retained", "/records_retained_checked_at"),
+    "gate": ("/compliance/gates_run", "/post_delta_gates_passed", "/rounds"),
+    "delivery": ("/delivery",),
+    "review_scope": tuple("/" + key for key in REVIEW_SCOPE_FIELDS),
+    "pause_start": ("/status", "/pause_reason"), "pause_end": ("/status", "/pause_reason"),
+    **{name: ("/rounds", "/status", "/pause_reason") for name in ROUND_EVENT_TYPES},
+}
+HAND_VALUE_HINTS = (
+    (re.compile(r"^/model_assignments/\d+/source: "),
+     "a model's source is how its identity was learned: observed (the provider echoed it), declared (the id that "
+     "was requested) or inferred; requested_only is an invocation record's identity_assurance, and is "
+     "source=declared here"),
+    (re.compile(r"^/failure_events/\d+/kind: "),
+     "a failure kind outside the list is kind=other, with what failed in detail="),
+    (re.compile(r"^/events/\d+/at: "),
+     "give at= as an RFC 3339 time with seconds and a zone, e.g. 2026-10-27T10:33:05Z"),
+)
+
+
+def _hand_event_writes(spec: dict[str, Any]) -> tuple[str, ...]:
+    """The pointers one hand event writes: the merging projections own only the keys their payload names."""
+    kind = spec.get("type")
+    payload = spec.get("payload") if isinstance(spec.get("payload"), dict) else {}
+    if kind == "metadata_correction":
+        keys = payload.get("set") if isinstance(payload.get("set"), dict) else {}
+        writes: tuple[str, ...] = tuple("/" + str(key) for key in keys)
+    elif kind in ("phase_start", "phase_end"):
+        writes = (f"/phases/{payload.get('phase')}",) + (("/status",) if kind == "phase_start" else ())
+    elif kind == "human_effort":
+        writes = tuple(pointer for pointer, given in (
+            (f"/human_effort/person_minutes_by_phase/{payload.get('phase')}", payload.get("phase") is not None),
+            ("/human_effort/notes", payload.get("notes") is not None),
+            ("/human_effort/people_involved", payload.get("people_involved") is not None)) if given)
+    elif kind in ("settled", "package"):
+        base = "/settled_facts" if kind == "settled" else "/package"
+        writes = tuple(f"{base}/{key}" for key in payload if key != "at")
+    elif kind == "publication_redaction":
+        writes = ("/publication_redaction/fields_requiring_removal",) + (
+            ("/publication_redaction/note",) if payload.get("note") else ())
+    else:
+        writes = HAND_EVENT_WRITES.get(str(kind), ())
+    return writes + ("/events",)
+
+
+def _owned(error: str, pointers: tuple[str, ...]) -> bool:
+    """An error at or below a written pointer, or the parent's refusal of a key the event wrote."""
+    where, _, message = error.partition(": ")
+    for pointer in pointers:
+        if where == pointer or where.startswith(pointer + "/"):
+            return True
+        parent, _, leaf = pointer.rpartition("/")
+        if (parent or "/") == where and message == f"unexpected property {leaf!r}":
+            return True
+    return False
+
+
+def _schema_errors_under(run: dict[str, Any], pointers: Iterable[str], context: Any) -> list[str]:
+    """run.schema.json errors the written pointers own (validate_json_schema, finalize's own validator)."""
+    import validate_json_schema
+    pointers = tuple(pointers)
+    properties = context.root.schema.get("properties", {})
+    errors: list[str] = []
+    for key in sorted({pointer.split("/")[1] for pointer in pointers}):
+        if key not in run:
+            continue
+        if key not in properties:
+            errors.append(f"/: unexpected property {key!r}")
+            continue
+        errors.extend(error for error in validate_json_schema.validate(
+            run[key], properties[key], context, context.root, "/" + key) if _owned(error, pointers))
+    return errors
+
+
+_ARRAY_INDEX = re.compile(r"/\d+(?=/|$)")
+
+
+def _introduced_errors(before: list[str], after: list[str]) -> list[str]:
+    """The errors in ``after`` that ``before`` does not account for. An error still at its own pointer is matched
+    first; one an existing row already had, moved to another array index (rounds are kept sorted, so a row created
+    for round 1 after round 2's shifts round 2's), is matched by its index-free shape. What is left was introduced."""
+    def shape(error: str) -> str:
+        where, separator, message = error.partition(": ")
+        return _ARRAY_INDEX.sub("/*", where) + separator + message
+    exact = Counter(before)
+    unmatched: list[str] = []
+    for error in after:
+        if exact[error]:
+            exact[error] -= 1
+        else:
+            unmatched.append(error)
+    moved = Counter(shape(error) for error in exact.elements())
+    introduced: list[str] = []
+    for error in unmatched:
+        if moved[shape(error)]:
+            moved[shape(error)] -= 1
+        else:
+            introduced.append(error)
+    return sorted(set(introduced))
+
+
+def _refuse_unfinalizable_hand_events(events: list[dict[str, Any]], projected: dict[str, Any],
+                                      additions: list[dict[str, Any]]) -> None:
+    """2.7.11: refuse a hand-logged batch that would put into run.json a value finalize's schema check refuses.
+
+    Only errors the batch introduces count, judged under the subtrees its events write: a value journaled before
+    2.7.11 (and the hand metadata_correction that overrode it) blocks nothing later, and nothing already journaled
+    is re-judged. The rule has one statement, run.schema.json, read by finalize's own validator."""
+    import validate_json_schema
+    pointers = sorted({pointer for event in additions for pointer in _hand_event_writes(event)})
+    if not pointers:
+        return
+    context = validate_json_schema.Context(pathlib.Path(_SCRIPTS_DIR).parent / "schemas" / "run.schema.json")
+    introduced = _introduced_errors(
+        _schema_errors_under(project_run(events), pointers, context) if events else [],
+        _schema_errors_under(projected, pointers, context))
+    if introduced:
+        hints = [hint for pattern, hint in HAND_VALUE_HINTS if any(pattern.match(error) for error in introduced)]
+        kinds = ", ".join(sorted({str(event["type"]) for event in additions}))
+        raise JournalError(
+            f"{kinds} would put into run.json what finalize's schema check (run.schema.json) refuses, and the "
+            f"journal is append-only: {'; '.join(introduced[:5])}"
+            + (f" ({'; '.join(hints)})" if hints else "") + ". Nothing was journaled; log it again with a valid value")
 
 
 def _refuse_unknown_types(specs: Iterable[dict[str, Any]]) -> None:
@@ -1214,6 +1418,28 @@ def _refuse_unknown_types(specs: Iterable[dict[str, Any]]) -> None:
         if kind not in known:
             raise JournalError(f"unknown event type {kind!r}: the journal accepts only "
                                f"schemas/v2/lifecycle-event.schema.json's types (log_event.sh lists them)")
+
+
+# 2.7.11: the payload keys the projection reads as id lists (_listify). A string there is split on commas
+# and spaces, so `unresolved_blocking_item_ids='[]'` (`=` where `:=` was meant) projected as ["[]"], one
+# phantom unresolved item, and a JSON array typed as text became ids such as '["F1"' (audit A63;
+# an archived 2.4.11 audit). The journal is append-only, so the slip is refused here.
+LIST_KEYS = {
+    "review_scope": ("changed_claim_ids", "rereviewed_claim_ids", "unresolved_blocking_item_ids",
+                     "unresolved_conclusion_critical_item_ids", "unreviewed_sections"),
+    "publication_redaction": ("fields_requiring_removal",),
+}
+
+
+def _refuse_json_text_lists(specs: Iterable[dict[str, Any]]) -> None:
+    for spec in specs:
+        payload = spec.get("payload") if isinstance(spec.get("payload"), dict) else {}
+        for key in LIST_KEYS.get(str(spec.get("type")), ()):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip()[:1] in {"[", "{", '"'}:
+                raise JournalError(
+                    f"{spec.get('type')} {key} is the text {value.strip()[:40]!r}, not a list: pass a JSON array "
+                    f"with {key}:='[...]' (note the colon), or a comma-separated list with {key}=F1,F2")
 
 
 def _strings(value: Any, where: str) -> Iterator[tuple[str, str]]:

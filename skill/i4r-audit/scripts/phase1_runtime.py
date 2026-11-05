@@ -29,7 +29,7 @@ import time
 import unicodedata
 import uuid
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, Union
 
 import sys as _sys
@@ -39,6 +39,7 @@ if str(_SCRIPTS_DIR) not in _sys.path:
     _sys.path.insert(0, str(_SCRIPTS_DIR))
 import provider_safety  # noqa: E402  -- the participant-code rule shared with run_coordinator
 import email_scan  # noqa: E402  -- 2.7.6: linear-time e-mail matching
+import fs_retry  # noqa: E402  -- 2.7.9: renames retried while a Windows program holds the file
 
 
 PHASE1_VERSION = "i4r-phase1-2"
@@ -305,6 +306,9 @@ class MonotonicDeadline:
     """One shared wall-clock budget for every provider-free preparation operation."""
 
     expires_at: float
+    # 2.7.9: what the last check was doing. The SIGALRM handler reports it: the alarm fires inside a blocking
+    # syscall, where no label is at hand. One mutable slot, so the dataclass stays frozen and compares as before.
+    last_label: list[str] = field(default_factory=lambda: ["pre-dispatch preparation"], compare=False, repr=False)
 
     @classmethod
     def after(cls, seconds: float) -> "MonotonicDeadline":
@@ -313,6 +317,7 @@ class MonotonicDeadline:
         return cls(time.monotonic() + float(seconds))
 
     def remaining(self, label: str, *, cap: float | None = None) -> float:
+        self.last_label[0] = label
         remaining = self.expires_at - time.monotonic()
         if remaining <= 0:
             raise Phase1Error(f"Phase-1 pre-dispatch deadline exceeded during {label}")
@@ -369,7 +374,9 @@ def sha256_file(path: pathlib.Path, deadline: MonotonicDeadline | None = None) -
     return digest.hexdigest()
 
 
-def atomic_write(path: pathlib.Path, data: bytes, mode: int = 0o600) -> None:
+def atomic_write(
+    path: pathlib.Path, data: bytes, mode: int = 0o600, *, deadline: MonotonicDeadline | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
@@ -378,7 +385,7 @@ def atomic_write(path: pathlib.Path, data: bytes, mode: int = 0o600) -> None:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        fs_retry.replace_with_retry(temporary, path, deadline)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -492,9 +499,26 @@ def source_files(
     return rows
 
 
+def _file_digest(
+    path: pathlib.Path, deadline: MonotonicDeadline | None, digests: dict[pathlib.Path, str] | None,
+) -> str:
+    """sha256_file, read once per preflight (2.7.9): ``digests`` holds every file already hashed.
+
+    2.7.8 read a large deposit file about seven times in one preflight -- the manifest check, the inventory, the
+    workbook, code and archive rows, the copy and a hash of the copy -- and on a teammate's WSL host that alone
+    outran the pre-dispatch deadline (CHANGELOG, 2.7.9). The rows still record the same digest.
+    """
+    if digests is None:
+        return sha256_file(path, deadline)
+    if path not in digests:
+        digests[path] = sha256_file(path, deadline)
+    return digests[path]
+
+
 def verify_package_manifest(
     root: pathlib.Path, files: list[tuple[str, pathlib.Path]],
     deadline: MonotonicDeadline | None = None,
+    digests: dict[pathlib.Path, str] | None = None,
 ) -> dict[str, Any]:
     manifest_path = regular_file(root / "package_manifest.json", "package manifest")
     manifest = strict_json(manifest_path)
@@ -522,7 +546,7 @@ def verify_package_manifest(
     for relative, (digest, size) in expected.items():
         check_deadline(deadline, "validating package hashes")
         path = actual_paths[relative]
-        if path.stat().st_size != size or sha256_file(path, deadline) != digest:
+        if path.stat().st_size != size or _file_digest(path, deadline, digests) != digest:
             raise Phase1Error(f"package manifest hash/size mismatch: pkg/{relative}")
     declared_tree = manifest.get("package_sha256")
     if declared_tree is not None:
@@ -537,8 +561,27 @@ def verify_package_manifest(
     return manifest
 
 
+def package_manifest_extent(root: pathlib.Path) -> tuple[int, int]:
+    """(bytes, files) that package_manifest.json declares, for the pre-dispatch deadline (2.7.9).
+
+    Read before the deadline is armed, so it never refuses: a manifest it cannot read counts as empty, and
+    verify_package_manifest refuses it inside the deadline exactly as before. Every size counted here is checked
+    against its deposit file there too, so a manifest cannot buy itself time it then passes with. Any failure
+    counts as unreadable, a manifest nested too deep for the JSON parser (RecursionError) included.
+    """
+    try:
+        rows = strict_json(regular_file(root / "package_manifest.json", "package manifest")).get("files")
+        sizes = [row.get("size", row.get("bytes")) for row in rows if isinstance(row, dict)] \
+            if isinstance(rows, list) else []
+        sizes = [size for size in sizes if isinstance(size, int) and not isinstance(size, bool) and size >= 0]
+        return sum(sizes), len(sizes)
+    except Exception:  # noqa: BLE001 -- read before the deadline is armed; the manifest check names the fault
+        return 0, 0
+
+
 def file_inventory(
     files: list[tuple[str, pathlib.Path]], deadline: MonotonicDeadline | None = None,
+    digests: dict[pathlib.Path, str] | None = None,
 ) -> dict[str, Any]:
     types: collections.Counter[str] = collections.Counter()
     rows: list[dict[str, Any]] = []
@@ -549,7 +592,7 @@ def file_inventory(
         rows.append({
             "path": relative,
             "bytes": path.stat().st_size,
-            "sha256": sha256_file(path, deadline),
+            "sha256": _file_digest(path, deadline, digests),
             "extension": suffix,
         })
     return {
@@ -642,6 +685,7 @@ WORKBOOK_SUFFIXES = frozenset({".csv", ".tsv", ".xlsx", ".xls", ".ods"})
 
 def workbook_summaries(
     files: list[tuple[str, pathlib.Path]], deadline: MonotonicDeadline | None = None,
+    digests: dict[pathlib.Path, str] | None = None,
 ) -> dict[str, Any]:
     books: list[dict[str, Any]] = []
     scan_deadline = MonotonicDeadline(time.monotonic() + WORKBOOK_SUMMARY_TOTAL_SECONDS)
@@ -659,14 +703,15 @@ def workbook_summaries(
         status = "summarized"
         reason: str | None = None
         # Row-by-row summarisation has no natural bound: a 1.19 GB CSV in one deposit takes 178 s
-        # against a 60-second pre-dispatch deadline that cannot be raised, so the whole audit
-        # pauses at preflight after the paper is already reserved and pkg/ already frozen. The
-        # file is still inventoried and hashed; only the deterministic row summary is skipped,
-        # and the role is told so rather than guessing.
+        # against a 60-second pre-dispatch deadline (an audit initialised before 2.7.9 keeps it; a
+        # newer one's grows with the deposit, pre_dispatch_deadlines.py, but not by 178 s), so the
+        # whole audit pauses at preflight after the paper is already reserved and pkg/ already
+        # frozen. The file is still inventoried and hashed; only the deterministic row summary is
+        # skipped, and the role is told so rather than guessing.
         size = path.stat().st_size
         if size > WORKBOOK_SUMMARY_MAX_BYTES:
             books.append({
-                "path": relative, "sha256": sha256_file(path, deadline),
+                "path": relative, "sha256": _file_digest(path, deadline, digests),
                 "format": suffix.lstrip("."), "status": "unavailable",
                 "unavailable_reason": (
                     "oversize for a deterministic summary "
@@ -719,7 +764,7 @@ def workbook_summaries(
             status, reason, summaries = "unavailable", f"{type(exc).__name__}: {exc}", []
         books.append({
             "path": relative,
-            "sha256": sha256_file(path, deadline),
+            "sha256": _file_digest(path, deadline, digests),
             "format": suffix.lstrip("."),
             "status": status,
             "unavailable_reason": reason,
@@ -730,6 +775,7 @@ def workbook_summaries(
 
 def code_entrypoints(
     files: list[tuple[str, pathlib.Path]], deadline: MonotonicDeadline | None = None,
+    digests: dict[pathlib.Path, str] | None = None,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for relative, path in files:
@@ -755,7 +801,7 @@ def code_entrypoints(
                 reasons.append("orchestrates_other_files")
         rows.append({
             "path": relative,
-            "sha256": sha256_file(path, deadline),
+            "sha256": _file_digest(path, deadline, digests),
             "language": language,
             "entrypoint_signals": sorted(set(reasons)),
         })
@@ -808,13 +854,14 @@ def environment_fingerprint(
 
 def archive_licence_metadata(
     files: list[tuple[str, pathlib.Path]], deadline: MonotonicDeadline | None = None,
+    digests: dict[pathlib.Path, str] | None = None,
 ) -> dict[str, Any]:
     archives: list[dict[str, Any]] = []
     licences: list[dict[str, Any]] = []
     for relative, path in files:
         check_deadline(deadline, "indexing archives and licences")
         row = {
-            "path": relative, "sha256": sha256_file(path, deadline),
+            "path": relative, "sha256": _file_digest(path, deadline, digests),
             "bytes": path.stat().st_size,
         }
         if path.suffix.lower() in ARCHIVE_SUFFIXES:
@@ -909,17 +956,21 @@ def paper_text(
 def build_common_evidence(
     root: pathlib.Path, destination: pathlib.Path,
     deadline: MonotonicDeadline | None = None,
+    digests: dict[pathlib.Path, str] | None = None,
 ) -> tuple[dict[str, Any], list[tuple[str, pathlib.Path]]]:
     files = source_files(root, deadline)
-    verify_package_manifest(root, files, deadline)
+    # 2.7.9: each source file is hashed once, by the manifest check (pkg/) or the inventory (paper/); ``digests``
+    # (materialize_snapshot's) keeps them for the copy to be checked against.
+    digests = {} if digests is None else digests
+    verify_package_manifest(root, files, deadline, digests)
     text, text_origin = paper_text(root, deadline)
     payloads: dict[str, bytes] = {
         "pdf_text.txt": text,
-        "file_inventory.json": pretty_bytes(file_inventory(files, deadline)),
-        "workbook_summaries.json": pretty_bytes(workbook_summaries(files, deadline)),
-        "code_entrypoints.json": pretty_bytes(code_entrypoints(files, deadline)),
+        "file_inventory.json": pretty_bytes(file_inventory(files, deadline, digests)),
+        "workbook_summaries.json": pretty_bytes(workbook_summaries(files, deadline, digests)),
+        "code_entrypoints.json": pretty_bytes(code_entrypoints(files, deadline, digests)),
         "environment_fingerprint.json": pretty_bytes(environment_fingerprint(deadline)),
-        "archive_licence_metadata.json": pretty_bytes(archive_licence_metadata(files, deadline)),
+        "archive_licence_metadata.json": pretty_bytes(archive_licence_metadata(files, deadline, digests)),
         "privacy_scan.json": pretty_bytes(privacy_scan(files, deadline)),
     }
     destination.mkdir(parents=True, exist_ok=False)
@@ -927,7 +978,7 @@ def build_common_evidence(
     for name in sorted(payloads):
         check_deadline(deadline, "writing common evidence")
         path = destination / name
-        atomic_write(path, payloads[name])
+        atomic_write(path, payloads[name], deadline=deadline)
         artifacts.append({
             "path": name, "sha256": sha256_file(path, deadline),
             "bytes": path.stat().st_size,
@@ -940,15 +991,21 @@ def build_common_evidence(
         "pdf_text_origin": text_origin,
         "artifacts": artifacts,
     }
-    atomic_write(destination / "evidence_index.json", pretty_bytes(index))
+    atomic_write(destination / "evidence_index.json", pretty_bytes(index), deadline=deadline)
     return index, files
 
 
 def _copy_regular(
     source: pathlib.Path, destination: pathlib.Path,
     deadline: MonotonicDeadline | None = None,
-) -> None:
+) -> str:
+    """Copy ``source`` to a new read-only ``destination``; returns the sha256 of the bytes written.
+
+    2.7.9: hashed while copying. The copy used to be read back for its hash; materialize_snapshot's
+    _verify_published still reads every published file back against the manifest before it returns.
+    """
     destination.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
     with source.open("rb") as reader, destination.open("xb") as writer:
         while True:
             check_deadline(deadline, f"copying {source.name}")
@@ -956,9 +1013,11 @@ def _copy_regular(
             if not block:
                 break
             writer.write(block)
+            digest.update(block)
         writer.flush()
         os.fsync(writer.fileno())
     os.chmod(destination, 0o444)
+    return digest.hexdigest()
 
 
 def freeze_tree(path: pathlib.Path, deadline: MonotonicDeadline | None = None) -> None:
@@ -993,10 +1052,11 @@ def freeze_and_publish(
     staged = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     if staged.exists():
         shutil.rmtree(staged, ignore_errors=True)
-    os.replace(temporary, staged)
+    # 2.7.9: both renames are retried while a Windows program holds a file inside (fs_retry).
+    fs_retry.replace_with_retry(temporary, staged, deadline)
     try:
         freeze_tree(staged, deadline)
-        os.replace(staged, target)
+        fs_retry.replace_with_retry(staged, target, deadline)
     except BaseException:
         for path in [staged, *staged.rglob("*")] if staged.exists() else []:
             try:
@@ -1033,15 +1093,20 @@ def materialize_snapshot(
     try:
         check_deadline(deadline, "starting source snapshot")
         evidence_dir = temporary / "evidence"
-        evidence_index, files = build_common_evidence(root, evidence_dir, deadline)
+        digests: dict[pathlib.Path, str] = {}
+        evidence_index, files = build_common_evidence(root, evidence_dir, deadline, digests)
         source_rows = []
         for relative, source in files:
             check_deadline(deadline, "copying source snapshot")
             destination = temporary / "raw" / relative
-            _copy_regular(source, destination, deadline)
+            digest = _copy_regular(source, destination, deadline)
+            # 2.7.9: the evidence rows record the digest the manifest check (or the inventory) read; a file
+            # rewritten since (a sync client replacing it) would publish evidence that disagrees with its own copy
+            if digests.get(source, digest) != digest:
+                raise Phase1Error(f"deposit file changed during the preflight: {relative}")
             source_rows.append({
                 "path": relative,
-                "sha256": sha256_file(destination, deadline),
+                "sha256": digest,
                 "bytes": destination.stat().st_size,
             })
         package_manifest = root / "package_manifest.json"
@@ -1068,7 +1133,7 @@ def materialize_snapshot(
         }
         snapshot_hash = sha256_bytes(canonical_bytes(manifest))
         manifest["snapshot_sha256"] = snapshot_hash
-        atomic_write(temporary / "snapshot_manifest.json", pretty_bytes(manifest))
+        atomic_write(temporary / "snapshot_manifest.json", pretty_bytes(manifest), deadline=deadline)
         snapshots = phase_root / "snapshots"
         validate_destination(root, snapshots, "snapshot store")
         snapshots.mkdir(parents=True, exist_ok=True)
@@ -1865,8 +1930,9 @@ def findings_elements_missing(finding_text: str) -> list[str]:
 class OutputContract:
     """How one role class's output is admitted and frozen for a focused repair.
 
-    ``validate(output, role, snapshot_manifest, *, expected_scientific_projection=None)`` returns
-    a ValidatedRoleOutput or raises OutputValidationError; ``projection(output, role,
+    ``validate(output, role, snapshot_manifest, *, expected_scientific_projection=None,
+    set_aside=None)`` returns a ValidatedRoleOutput or raises OutputValidationError (``set_aside``:
+    see check_output_tree); ``projection(output, role,
     snapshot_manifest)`` returns the byte-frozen surface a repair must preserve. The auditor
     contract below is exactly validate_role_output / scientific_projection. The 2.6.4 verifier
     builds its own contract (scripts/run_verifier.py) from the generic admission checks that
@@ -2025,10 +2091,127 @@ def check_evidence_manifest(
     return manifest
 
 
-def check_output_tree(output: pathlib.Path, manifest: dict[str, Any]) -> set[str]:
+# 2.7.9: where an attempt's files outside the closed output contract are set aside (see
+# check_output_tree), beside output.partial in the attempt directory, with a record of the same name
+# plus ".json". Neither is ever promoted, hashed into a receipt or shown to another attempt.
+NON_CONTRACT_SCRATCH = "non_contract_scratch"
+NON_CONTRACT_SCRATCH_VERSION = "i4r-phase1-non-contract-scratch-1"
+
+
+def _printable(name: str) -> str:
+    """A file name as an error or a record may hold it (2.7.9). A Linux name that is not UTF-8
+    arrives as a lone surrogate, which no UTF-8 writer accepts (the journal, status.json, the
+    record): such a character is written as its escape. Every other name is unchanged."""
+    return name.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
+def _named(paths: list[str], limit: int = 5) -> str:
+    """Up to ``limit`` output-relative paths for an error. The error is journaled into run.json,
+    which the coordinator refuses to read with a participant-code-shaped token in it, so a name of
+    that shape (a per-participant file copied from the deposit, say) is withheld."""
+    shown = ", ".join(
+        "<code-shaped name withheld>" if provider_safety.has_participant_code(path) else _printable(path)
+        for path in paths[:limit]
+    )
+    return shown + (f" and {len(paths) - limit} more" if len(paths) > limit else "")
+
+
+# chmod without following a symlink where the host can (macOS); elsewhere the lstat before it decides.
+_NO_FOLLOW = {"follow_symlinks": False} if os.chmod in os.supports_follow_symlinks else {}
+
+
+def _move_whole(entry: pathlib.Path, target: pathlib.Path) -> None:
+    """One top-level entry into the set-aside folder (2.7.9).
+
+    fs_retry.replace_with_retry, as for every other rename the runner makes: Windows refuses to
+    rename a directory while a sync client or scanner holds a file inside it, which is the moment
+    right after the role wrote it. No deadline: admission runs after the call. A directory moved to
+    another parent needs its own write bit, and `cp -R` from the frozen snapshot keeps the
+    snapshot's 0555, so a read-only directory is made owner-writable first (lstat: a symlink never
+    gets here, check_output_tree refused it).
+    """
+    mode = entry.lstat().st_mode
+    if stat.S_ISDIR(mode) and not mode & stat.S_IWUSR:
+        os.chmod(entry, stat.S_IMODE(mode) | stat.S_IWUSR, **_NO_FOLLOW)
+    fs_retry.replace_with_retry(entry, target)
+
+
+def set_aside_non_contract(output: pathlib.Path, set_aside: pathlib.Path, extras: list[str]) -> None:
+    """Move every top-level entry of ``output`` outside the contract into ``set_aside``; record it.
+
+    The caller has proved that the contract files are all present and that every extra file lies
+    outside evidence/, so these entries hold nothing but extras. Each moves whole (_move_whole),
+    so a run killed part-way leaves the rest to the next admission of the same attempt, and the
+    record describes everything the folder holds. A move, a name collision or a record the host
+    refuses puts back what this call moved and gives the 2.7.8 refusal: this sample is
+    re-sampled with output.partial as the model left it, never a runner crash. Only if putting an
+    entry back fails too is the record written for what the folder then holds.
+    """
+    refusal = f"role output contains files outside the closed output contract ({_named(extras)})"
+    if set_aside.is_symlink() or (set_aside.exists() and not set_aside.is_dir()):
+        raise OutputValidationError(
+            f"{refusal}; the set-aside folder {set_aside.name} is unsafe", rule="closed_file_set")
+    record_path = set_aside.with_name(set_aside.name + ".json")
+
+    def record() -> None:
+        held = sorted(path for path in set_aside.rglob("*") if path.is_file() and not path.is_symlink())
+        atomic_write(record_path, pretty_bytes({
+            "schema_version": NON_CONTRACT_SCRATCH_VERSION,
+            "directory": set_aside.name,
+            "reason": "files outside the closed output contract, none under evidence/, set aside "
+                      "before admission; never promoted",
+            "files": [
+                {"path": _printable(path.relative_to(set_aside).as_posix()), "bytes": path.stat().st_size,
+                 "sha256": sha256_file(path)}
+                for path in held
+            ],
+        }))
+
+    created = not set_aside.exists()
+    moved: list[tuple[pathlib.Path, pathlib.Path]] = []
+    try:
+        set_aside.mkdir(exist_ok=True)
+        for entry in sorted(output.iterdir()):
+            if entry.name in ("REPORT.md", "result.json", "evidence"):
+                continue
+            target = set_aside / entry.name
+            if target.exists() or target.is_symlink():
+                raise OutputValidationError(
+                    f"{refusal}; {set_aside.name}/{_named([entry.name])} already exists",
+                    rule="closed_file_set")
+            _move_whole(entry, target)
+            moved.append((entry, target))
+        record()
+    except (OSError, UnicodeError, OutputValidationError) as exc:
+        stranded = False
+        for entry, target in reversed(moved):
+            try:
+                fs_retry.replace_with_retry(target, entry)
+            except OSError:
+                stranded = True
+        with contextlib.suppress(OSError, UnicodeError):
+            if stranded:
+                record()
+            elif created:
+                set_aside.rmdir()
+        if isinstance(exc, OutputValidationError):
+            raise
+        # Never the absolute path (an OSError's text): this message reaches status.json.
+        reason = (exc.strerror if isinstance(exc, OSError) else None) or type(exc).__name__
+        raise OutputValidationError(
+            f"{refusal}; setting them aside failed: {reason}", rule="closed_file_set") from exc
+
+
+def check_output_tree(
+    output: pathlib.Path, manifest: dict[str, Any], *, set_aside: pathlib.Path | None = None,
+) -> set[str]:
     """No symlink or special file; every artifact row exact; closure; the closed file set.
 
-    Returns the evidence-relative artifact paths the manifest lists.
+    Returns the evidence-relative artifact paths the manifest lists. With ``set_aside`` (the runner
+    passes <attempt>/non_contract_scratch for a provider's own output.partial), files outside the
+    contract are moved there instead of refusing the output, when none of them is under evidence/
+    and every contract file is present (2.7.9). Without it -- the verifier's re-admission of a
+    promoted tree -- they are refused as before, now by name.
     """
     evidence_root = output / "evidence"
     for path in output.rglob("*"):
@@ -2077,8 +2260,20 @@ def check_output_tree(output: pathlib.Path, manifest: dict[str, Any]) -> set[str
         f"evidence/{name}" for name in seen
     ]])
     if top_files != expected_files:
-        raise OutputValidationError(
-            "role output contains files outside the closed output contract", rule="closed_file_set")
+        # Three complete roles were re-run from scratch because their final cleanup,
+        # `cd <output.partial> && rm ...`, was refused by the CLI, which checks a compound command
+        # part by part. The leftovers were never promoted (promotion copies only the contract), so
+        # refusing them protected nothing. An extra under evidence/ is still refused: it would be
+        # promoted with the evidence, and the manifest does not bind it.
+        extras = sorted(set(top_files) - set(expected_files))
+        if (
+            set_aside is None or not extras or not set(expected_files) <= set(top_files)
+            or any(name.startswith("evidence/") for name in extras)
+        ):
+            raise OutputValidationError(
+                "role output contains files outside the closed output contract"
+                + (f": {_named(extras)}" if extras else ""), rule="closed_file_set")
+        set_aside_non_contract(output, set_aside, extras)
     return seen
 
 
@@ -2089,6 +2284,7 @@ def validate_role_output(
     *,
     expected_scientific_projection: dict[str, Any] | None = None,
     deposit_exemptions: Iterable[str] = frozenset(),
+    set_aside: pathlib.Path | None = None,
 ) -> ValidatedRoleOutput:
     """Admit one role output, or reject it as an invalid sample.
 
@@ -2102,7 +2298,7 @@ def validate_role_output(
         return _validated_role_output(
             output, role, snapshot_manifest,
             expected_scientific_projection=expected_scientific_projection,
-            deposit_exemptions=deposit_exemptions,
+            deposit_exemptions=deposit_exemptions, set_aside=set_aside,
         )
     except OutputValidationError:
         raise
@@ -2117,6 +2313,7 @@ def _validated_role_output(
     *,
     expected_scientific_projection: dict[str, Any] | None = None,
     deposit_exemptions: Iterable[str] = frozenset(),
+    set_aside: pathlib.Path | None = None,
 ) -> ValidatedRoleOutput:
     report, result_path, evidence_manifest_path, report_text, result = read_role_output(output)
     scientific = result.get("scientific_fields")
@@ -2163,7 +2360,7 @@ def _validated_role_output(
     known = source_hashes(snapshot_manifest)
     bindings = check_report_joins(report_text, known)
     manifest = check_evidence_manifest(evidence_manifest_path, role, snapshot_manifest, known)
-    check_output_tree(output, manifest)
+    check_output_tree(output, manifest, set_aside=set_aside)
     if expected_scientific_projection is not None:
         observed_projection = scientific_projection(output, role, snapshot_manifest)
         if canonical_bytes(observed_projection) != canonical_bytes(expected_scientific_projection):

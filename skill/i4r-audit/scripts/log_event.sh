@@ -20,6 +20,9 @@
 #   log_event.sh failure kind=quota_exhausted role=critic_fairness round=3 retries=3 \
 #                      detail='429 insufficient_quota on all attempts' \
 #                      substitution='re-ran on the auditor family; round 3 is not independent'
+#   (kind: api_error quota_exhausted rate_limit timeout network_outage tool_crash empty_output gate_failure other;
+#    model source: observed declared inferred. A value run.schema.json does not list is refused when logged.
+#    init, migration_anchor and finalize are written only by their tools, never logged by hand.)
 #   log_event.sh brief_correction raised_by=auditor_privacy_archive field='file count' \
 #                      description='brief said 198, pkg/ holds 213'
 #   log_event.sh round_result round=3 blocking_items=3 comment_defects=3 paper_defects=0 \
@@ -40,7 +43,7 @@
 #
 # Values are typed automatically: bare integers and decimals become numbers, true/false become
 # booleans, `null` and the empty string become null, everything else is a string. Use `key:=<json>`
-# to pass raw JSON (arrays, objects).
+# to pass raw JSON (arrays, objects); an id list typed as JSON text (key='[...]') is refused.
 #
 # Batch input has exactly one JSON object per nonblank line:
 #   {"type":"phase_start","at":"2026-07-14T10:00:00Z","payload":{"phase":"fan_out"}}
@@ -205,6 +208,9 @@ for number, line in enumerate(lines, 1):
     if event_type in ("policy_amendment", "audit_reopened"):
         raise SystemExit(f"FATAL: event batch line {number}: {event_type} is written only by its tool "
                          "(scripts/amend_round_cap.py, scripts/reopen_audit.py), never logged by hand")
+    if event_type in ("init", "migration_anchor", "finalize"):
+        raise SystemExit(f"FATAL: event batch line {number}: {event_type} is written only by its tool "
+                         "(init_run.sh, migrate_metadata_2_1.py, finalize_run.sh), never logged by hand")
     if event_type in ("environment_captured", "environment"):
         raise SystemExit(f"FATAL: event batch line {number}: the software environment is journaled only by "
                          "scripts/capture_environment.sh (as environment_captured), never logged by hand")
@@ -560,7 +566,7 @@ main () {
     case "$1" in
       --run) [ $# -ge 2 ] || die "--run requires a path"; RUN="$2"; shift 2 ;;
       --batch) [ $# -ge 2 ] || die "--batch requires a JSONL path"; BATCH="$2"; shift 2 ;;
-      -h|--help) sed -n '2,48p' "$0"; exit 0 ;;
+      -h|--help) sed -n '2,51p' "$0"; exit 0 ;;
       *) break ;;
     esac
   done
@@ -583,6 +589,8 @@ main () {
       audit_reopened) die "audit_reopened is written only by scripts/reopen_audit.py (or amend_round_cap.py --reopen), never logged by hand" ;;
       # 2.7.4: a live measurement of this machine; run.json's environment is the projection of the latest one
       environment_captured|environment) die "the software environment is journaled only by scripts/capture_environment.sh <audit-dir> (as environment_captured), never logged by hand" ;;
+      # 2.7.11: the events that open, anchor and close a journal (a hand-logged finalize closed the audit ungated)
+      init|migration_anchor|finalize) die "$TYPE is written only by its tool (init_run.sh, migrate_metadata_2_1.py, finalize_run.sh), never logged by hand" ;;
     esac
     in_list "$TYPE" "$TYPES" || die "unknown event type '$TYPE' (one of: $TYPES)"
 
@@ -786,9 +794,11 @@ self_test () {
 
   # 10. BATCH TRANSACTION. Ordered JSONL is projected under one lock and appears contiguously.
   local BATCH="$T/events.jsonl" before_journal after_journal before_hash after_hash
+  # (2.7.11: package projects every payload key into run.json's closed package object, so this one carries a key
+  # run.schema.json defines; a batch_index there is refused like any value finalize would refuse.)
   printf '%s\n' \
     '{"type":"note","at":"2026-07-14T17:00:00Z","payload":{"batch_index":1,"text":"first"}}' \
-    '{"type":"package","at":"2026-07-14T17:00:01Z","payload":{"batch_index":2,"inventory":"captured"}}' \
+    '{"type":"package","at":"2026-07-14T17:00:01Z","payload":{"source_url":"https://example.org/batch-2"}}' \
     '{"type":"records","at":"2026-07-14T17:00:02Z","payload":{"batch_index":3,"artifact":"batch-test","present":true}}' \
     > "$BATCH"
   before=$(jq -r '.events | length' "$RUN")
@@ -797,13 +807,13 @@ self_test () {
   rc=$?
   after=$(jq -r '.events | length' "$RUN")
   after_journal=$(wc -l < "$T/a/run.events.jsonl" | tr -d ' ')
-  n=$(jq -r '[.events[-3:][] | .payload.batch_index] | join(",")' "$RUN")
+  n=$(jq -r '[.events[-3:][] | .payload.batch_index // .payload.source_url] | join(",")' "$RUN")
   if [ "$rc" -ne 0 ] || [ "$after" != "$((before + 3))" ] || \
-     [ "$after_journal" != "$((before_journal + 3))" ] || [ "$n" != "1,2,3" ]; then
+     [ "$after_journal" != "$((before_journal + 3))" ] || [ "$n" != "1,https://example.org/batch-2,3" ]; then
     echo "  FAIL: ordered batch transaction rc=$rc events=$before->$after journal=$before_journal->$after_journal order=$n"; fails=1
   else echo "  ok: three-event batch projected and journaled once, in order"; fi
-  n=$(jq -r '.package.inventory + "/" + .records_retained[-1].artifact' "$RUN")
-  if [ "$n" != "captured/batch-test" ]; then echo "  FAIL: batch typed projections gave '$n'"; fails=1
+  n=$(jq -r '.package.source_url + "/" + .records_retained[-1].artifact' "$RUN")
+  if [ "$n" != "https://example.org/batch-2/batch-test" ]; then echo "  FAIL: batch typed projections gave '$n'"; fails=1
   else echo "  ok: batch events update the same typed projections as single events"; fi
   printf '%s\n' \
     '{"type":"phase_start","at":"2026-07-14T18:00:00Z","payload":{"phase":"adjudication"}}' \
@@ -865,6 +875,23 @@ self_test () {
   bash "$SELF" --run "$RUN" --batch > /dev/null 2>&1
   if [ $? -ne 2 ]; then echo "  FAIL: --batch without a JSONL path was accepted"; fails=1
   else echo "  ok: --batch without a path refused (exit 2)"; fi
+  # 2.7.11: a value finalize's schema check refuses is refused when it is logged (audits A67, A61)
+  before_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
+  bash "$SELF" --run "$RUN" model role=critic_stats role_class=critic round=1 model_id=gpt-x model_family=gpt \
+       provider=openai source=requested_only > /dev/null 2>"$T/enum.err"; rc=$?
+  bash "$SELF" --run "$RUN" failure kind=output_validation detail='validator rejected the output' \
+       > /dev/null 2>>"$T/enum.err"; rc=$((rc * 10 + $?))
+  after_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
+  if [ "$rc" -ne 22 ] || [ "$before_hash" != "$after_hash" ] || ! grep -q "requested_only" "$T/enum.err" \
+     || ! grep -q "output_validation" "$T/enum.err"; then
+    echo "  FAIL: a model source or failure kind outside run.schema.json was journaled (rc $rc)"; fails=1
+  else echo "  ok: a model source or failure kind finalize refuses is refused when logged (exit 2, nothing written)"; fi
+  # 2.7.11: finalize (and init, migration_anchor) are written only by their tools; a hand one closed the audit ungated
+  bash "$SELF" --run "$RUN" finalize status=complete > /dev/null 2>"$T/final.err"; rc=$?
+  after_hash=$(shasum -a 256 "$RUN" "$T/a/run.events.jsonl")
+  if [ "$rc" -ne 2 ] || [ "$before_hash" != "$after_hash" ] || ! grep -q "finalize_run.sh" "$T/final.err"; then
+    echo "  FAIL: a hand-logged finalize was journaled (rc $rc)"; fails=1
+  else echo "  ok: a hand-logged finalize is refused (exit 2, nothing written)"; fi
 
   # 12. the LIVE lock: a holder that will not let go is refused after LOCK_TIMEOUT with exit 2,
   #     and a write goes through once it is released. (This used to plant a <run.json>.lock

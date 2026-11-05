@@ -48,6 +48,9 @@ case "$DIR_ABS|$DIR" in
     exit 2 ;;
 esac
 . "$(cd "$(dirname "$0")" && pwd -P)/tree_layout.sh"
+# 2.7.11: no Poppler, no article text (paper/paper.txt), and Phase 1 would read PAPER.txt instead: refuse before
+# anything is reserved or copied. A PDF that pdftotext cannot read (a scan) still gets the note at the end.
+i4r_intake_needs_pdftotext setup_workspace.sh || exit 2
 if i4r_audit_is_inside_data "$DIR_ABS"; then
   echo "FATAL: the audit dir is under data/, which holds inputs only: $DIR_ABS" >&2
   echo "       Audits live at <root>/runs/<Journal>/<Paper>/audit. Run" >&2
@@ -74,8 +77,9 @@ fi
 # ("write error (disk full?). Continue? (y/n/^C)") instead of failing. One deposit in this tree
 # is truncated short of its own central directory.
 if [ -f "$PKG" ]; then
-  case "$PKG" in
-    *.zip|*.ZIP)
+  # 2.7.11: any case of .zip (pkg.Zip), as new_audit.sh finds archives (-iname) and as the copy below unzips them
+  case "$(printf '%s' "$PKG" | tr '[:upper:]' '[:lower:]')" in
+    *.zip)
       # `zipinfo -t`, not `unzip -t`. What this guard is for is a *structurally* broken archive
       # -- a truncated deposit, which both tools reject with 3. `unzip -t` additionally
       # inflates every member, and exits 2 on another deposit over a single zero-length entry
@@ -111,10 +115,20 @@ CONFLICTS=""
 # is both guarded and allowed to fail without killing the script. Scanning only $DIR was close
 # to useless: at intake the audit dir is normally empty or absent, and the copies that actually
 # reach a manifest come in with the deposit. Scan the source being copied as well.
-for SCAN_ROOT in "$DIR" "$PKG"; do
+BESIDE="${I4R_PACKAGE_BESIDE:-}"   # 2.7.11: entries beside an archive package, added under pkg/beside_archive/
+if [ -n "$BESIDE" ] && { [ ! -d "$BESIDE" ] || [ ! -f "$PKG" ]; }; then
+  echo "FATAL: I4R_PACKAGE_BESIDE must be a folder, and the package an archive (new_audit.sh --loose include)" >&2
+  exit 2
+fi
+for SCAN_ROOT in "$DIR" "$PKG" ${BESIDE:+"$BESIDE"}; do
   [ -d "$SCAN_ROOT" ] || continue
   FOUND="$(find "$SCAN_ROOT" -name "*conflicted copy*" 2>/dev/null | head -5 || true)"
   [ -n "$FOUND" ] || continue
+  if [ -n "$BESIDE" ] && [ "$SCAN_ROOT" = "$BESIDE" ]; then
+    # 2.7.11: name the entry in the paper folder beside the archive, not new_audit.sh's staging copy (removed on exit)
+    FOUND="$(printf '%s\n' "$FOUND" | while IFS= read -r hit; do
+      printf '%s/%s\n' "$(dirname "$PKG")" "${hit#"$BESIDE"/}"; done)"
+  fi
   CONFLICTS="${CONFLICTS:+$CONFLICTS
 }$FOUND"
 done
@@ -178,6 +192,11 @@ else
   PDIR="$(i4r_paper_dir_of_audit "$DIR_ABS")"
   [ -d "$PDIR" ] || PDIR="$(cd "$(dirname "$DIR")" 2>/dev/null && pwd || true)"
 fi
+# 2.7.11: init_run.sh's skill-version pin, checked before the claim and the copy (new_audit.sh checks it too)
+PIN_ROOT="${PDIR:+$(i4r_root_of_paper "$PDIR")}"
+if [ -n "$PIN_ROOT" ] && i4r_is_tree_root "$PIN_ROOT"; then
+  i4r_intake_version_pin "$PIN_ROOT" "$(cd "$(dirname "$0")/.." && pwd -P)" setup_workspace.sh || exit 2
+fi
 if [ "${I4R_SKIP_RESERVE:-0}" != "1" ]; then
   RROOT="${PDIR:+$(i4r_root_of_paper "$PDIR")}"
   RESV="$(cd "$(dirname "$0")" && pwd)/reserve_paper.sh"
@@ -218,14 +237,19 @@ mkdir -p "$DIR"/{pkg,paper,work,report,critique}
 # the true names now, while they are known. Names only, never the absolute path: this file sits
 # in the audit tree and an absolute path here would be a private-path leak into a release.
 if [ -n "${PDIR:-}" ]; then
-  python3 - "$DIR/paper_source.json" "$PDIR" <<'PYSRC'
+  # 2.7.11: new_audit.sh adds what the package is ("package": kind, name, and the choice made for entries beside an
+  # archive), names only; readers take journal and paper with .get(), so the extra key changes nothing for them
+  python3 - "$DIR/paper_source.json" "$PDIR" "${I4R_INTAKE_PACKAGE:-}" <<'PYSRC'
 import json, os, sys
-dest, pdir = sys.argv[1], sys.argv[2].rstrip("/")
-json.dump({
+dest, pdir, package = sys.argv[1], sys.argv[2].rstrip("/"), sys.argv[3]
+record = {
     "schema_version": "i4r-paper-source-1",
     "journal": os.path.basename(os.path.dirname(pdir)),
     "paper": os.path.basename(pdir),
-}, open(dest, "w"), indent=2, sort_keys=True)
+}
+if package:
+    record["package"] = json.loads(package)
+json.dump(record, open(dest, "w"), indent=2, sort_keys=True)
 open(dest, "a").write("\n")
 PYSRC
 fi
@@ -371,14 +395,29 @@ if [ "$copy_rc" -eq 0 ]; then
     fi
   fi
 fi
+# 2.7.11: the entries beside an archive package (new_audit.sh --loose include) go under pkg/beside_archive/, after the
+# archive's own checks and wrapper flatten, so the archive's paths are those a plain archive intake gives it
+if [ "$copy_rc" -eq 0 ] && [ -n "$BESIDE" ]; then
+  if [ -e "$DIR/pkg/beside_archive" ] || [ -L "$DIR/pkg/beside_archive" ]; then
+    copy_rc=6
+    cause="the archive itself holds a top-level beside_archive entry; put the archive's contents and the entries beside it in one folder and pass it with --package <folder>"
+  elif ! { mkdir "$DIR/pkg/beside_archive" && cp -R "$BESIDE"/. "$DIR/pkg/beside_archive/"; }; then
+    copy_rc=6
+    cause="could not copy the entries beside the archive into pkg/beside_archive (see the error above)"
+  else
+    chmod -R u+rwX "$DIR/pkg/beside_archive" 2>/dev/null || true
+  fi
+fi
 # names with control bytes (Finder/Dropbox "Icon\r") cannot be cited in a report (the citation parser strips them)
 # and differ from what unzip writes for the same package zipped: renamed the way unzip would name them. A clash is
 # judged on the deposit itself (a re-intake finds the previous run's renamed copy, which is simply replaced).
-if [ "$copy_rc" -eq 0 ] && [ -d "$PKG" ]; then
+if [ "$copy_rc" -eq 0 ] && { [ -d "$PKG" ] || [ -n "$BESIDE" ]; }; then
   rename_control_names () {   # a function: bash 3.2 misparses some heredocs inside $(...)
-    python3 - "$DIR/pkg" "$PKG" <<'PYCTRL' || true
+    # <copy> <source> <1 when the source's single wrapper folder was flattened away>
+    python3 - "$1" "$2" "$3" <<'PYCTRL' || true
 import os, stat, sys, unicodedata
 root, source = os.fsencode(sys.argv[1]), os.fsencode(sys.argv[2])
+flatten = sys.argv[3] == "1"
 def clean(name):
     return bytes(b for b in name if b >= 0x20 and b != 0x7f)
 def show(path, top):
@@ -387,7 +426,7 @@ clashes = []
 def key(name):   # APFS ignores case and Unicode normalisation too
     return unicodedata.normalize("NFD", name.decode("utf-8", "replace")).casefold()
 top = os.listdir(source)
-flattened_away = top[0] if len(top) == 1 and os.path.isdir(os.path.join(source, top[0])) \
+flattened_away = top[0] if flatten and len(top) == 1 and os.path.isdir(os.path.join(source, top[0])) \
     and not os.path.islink(os.path.join(source, top[0])) else None   # the single wrapper the flatten removed
 for base, dirs, files in os.walk(source):
     names = set(dirs + files)
@@ -424,7 +463,8 @@ if not clashes:
                 print(f"{show(os.path.join(base, name), root)} (could not rename: {exc.strerror})")
 PYCTRL
   }
-  control_clash="$(rename_control_names)"
+  if [ -d "$PKG" ]; then control_clash="$(rename_control_names "$DIR/pkg" "$PKG" 1)"
+  else control_clash="$(rename_control_names "$DIR/pkg/beside_archive" "$BESIDE" 0)"; fi
   if [ -n "$control_clash" ]; then
     copy_rc=4
     cause="names with control characters (like Finder's Icon<CR> file) that cannot be renamed safely: $(printf '%s\n' "$control_clash" | sed -n '1,3p' | tr '\n' ' ')- rename them in the deposit"

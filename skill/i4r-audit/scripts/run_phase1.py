@@ -47,8 +47,10 @@ import run_coordinator
 import lifecycle_journal
 import verifier_contract
 import claude_routes
+import claude_thinking_tokens
 import probe_bounds
 import phase1_timeouts
+import pre_dispatch_deadlines
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 try:
@@ -66,6 +68,9 @@ except ImportError:  # a standalone copy (e.g. a release's scripts/) without its
 # (phase1_timeout); this name is kept for callers that still import it and is the legacy value.
 DEFAULT_TIMEOUT_SECONDS = phase1_timeouts.LEGACY_PHASE1_TIMEOUT
 MAXIMUM_TIMEOUT_SECONDS = max(phase1_timeouts.LIVE_PHASE1_TIMEOUTS)
+# The pre-dispatch deadline's base, and every audit initialised before 2.7.9's whole deadline. 2.7.9: a newer
+# audit froze phase_1.runtime.pre_dispatch_deadline_scaling, which adds time for its deposit's bytes and files
+# (scripts/pre_dispatch_deadlines.py); each run reads its own audit's deadline (pre_dispatch_deadline).
 DEFAULT_PRE_DISPATCH_DEADLINE_SECONDS = 60
 DEFAULT_MAX_BUDGET_USD = "15"
 # The capability probe's normalized-token bound, for the --safe-mode (non-bare) dispatch above.
@@ -184,6 +189,8 @@ class ProviderExecution:
     # both assumed Sonnet 5.
     route: dict[str, Any]
     requested_session_id: str | None = None
+    # 2.7.11: whether this audit's snapshot reads Claude thinking as reasoning_tokens (claude_thinking_tokens)
+    thinking: bool = False
 
 
 @dataclass(frozen=True)
@@ -295,14 +302,17 @@ def role_identity(role: str) -> tuple[str, int | None]:
 
 def packaged_runtime(
     bound: int, timeout: int = phase1_timeouts.LEGACY_PHASE1_TIMEOUT,
+    scaling: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """The packaged phase_1.runtime contract of an audit whose snapshot froze probe ``bound`` and
-    per-call ``timeout``.
+    """The packaged phase_1.runtime contract of an audit whose snapshot froze probe ``bound``,
+    per-call ``timeout`` and pre-dispatch ``scaling``.
 
     For LEGACY_PROBE_BOUND and LEGACY_PHASE1_TIMEOUT it is the dict 2.7.0 required; for
     SHIPPED_PROBE_BOUND and LEGACY_PHASE1_TIMEOUT the dict 2.7.1 required. Only those two leaves differ.
+    2.7.9: with ``scaling`` None (every audit initialised before 2.7.9) the dict has no scaling leaf, so
+    such an audit is judged against exactly the 2.7.8 dict.
     """
-    return {
+    runtime_contract = {
         "orchestrator": "scripts/run_phase1.py",
         "timeout_seconds": timeout,
         "pre_dispatch_deadline_seconds": DEFAULT_PRE_DISPATCH_DEADLINE_SECONDS,
@@ -318,6 +328,34 @@ def packaged_runtime(
         "session_persistence": False,
         "parallelism": 5,
     }
+    if scaling is not None:
+        runtime_contract[pre_dispatch_deadlines.LEAF] = dict(scaling)
+    return runtime_contract
+
+
+def pre_dispatch_scaling(policy: dict[str, Any]) -> dict[str, int] | None:
+    """The pre-dispatch rule this audit's snapshot froze (2.7.9), or None for an audit initialised earlier.
+
+    load_policy calls it, so a snapshot load_policy admitted names a live rule or none; one outside
+    LIVE_PRE_DISPATCH_SCALINGS is named here, before any call.
+    """
+    phase_1 = policy.get("phase_1") if isinstance(policy, dict) else None
+    section = phase_1.get("runtime") if isinstance(phase_1, dict) else None
+    try:
+        return pre_dispatch_deadlines.frozen_scaling(section if isinstance(section, dict) else {})
+    except pre_dispatch_deadlines.PreDispatchScalingError as exc:
+        raise RunnerError(
+            f"audit-scoped phase_1.runtime differs from the packaged execution contract: {exc}"
+        ) from exc
+
+
+def pre_dispatch_deadline(policy: dict[str, Any], root: pathlib.Path) -> float:
+    """This audit's pre-dispatch deadline in seconds (2.7.9): exactly DEFAULT_PRE_DISPATCH_DEADLINE_SECONDS for an
+    audit initialised before 2.7.9; for a newer one, its frozen rule applied to the bytes and files its
+    package_manifest.json declares. ``--pre-dispatch-deadline-seconds`` may only tighten it."""
+    package_bytes, package_files = runtime.package_manifest_extent(root)
+    return pre_dispatch_deadlines.deadline_seconds(
+        pre_dispatch_scaling(policy), DEFAULT_PRE_DISPATCH_DEADLINE_SECONDS, package_bytes, package_files)
 
 
 def phase1_timeout(policy: dict[str, Any]) -> int:
@@ -390,10 +428,18 @@ def load_policy(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any]]:
     # value: the one this audit froze (probe_bound refuses any other, before any call). A legacy
     # snapshot is therefore judged against exactly the 2.7.0 dict. 2.7.2: likewise the per-call
     # timeout, any LIVE_PHASE1_TIMEOUTS value (phase1_timeout), so a 2.7.1 snapshot gets the 2.7.1 dict.
-    if observed_runtime != packaged_runtime(probe_bound(policy), phase1_timeout(policy)):
+    # 2.7.9: and the pre-dispatch rule, a live one or none (pre_dispatch_scaling): a 2.7.8 snapshot gets
+    # the 2.7.8 dict.
+    if observed_runtime != packaged_runtime(
+        probe_bound(policy), phase1_timeout(policy), pre_dispatch_scaling(policy),
+    ):
         raise RunnerError(
             "audit-scoped phase_1.runtime differs from the packaged execution contract"
         )
+    try:   # 2.7.11: a value the usage parse cannot honour is refused here, before any call, not after one
+        claude_thinking_tokens.rule_of(policy)
+    except claude_thinking_tokens.RuleError as exc:
+        raise RunnerError(str(exc)) from exc
     # 2.7.0: each auditor is bound to one of the packaged Claude routes (claude_routes.LIVE_ROUTES)
     # as this audit's own snapshot froze it -- Sonnet 5 before 2.7.0, Sonnet 5.5 after -- and never
     # to config/. All five share it: one capability probe and one portable probe key, both on the
@@ -448,7 +494,9 @@ def hard_pre_dispatch_deadline(deadline: runtime.MonotonicDeadline):
     previous_timer = signal.getitimer(signal.ITIMER_REAL)
 
     def expired(_signum: int, _frame: Any) -> None:
-        raise RunnerError("Phase-1 pre-dispatch deadline exceeded")
+        # 2.7.9: name the step, as the cooperative check does: the last one the deadline was checked in, which
+        # is the step blocked in the syscall the alarm interrupted (a block read, an fsync, a rename).
+        raise RunnerError(f"Phase-1 pre-dispatch deadline exceeded during {deadline.last_label[0]}")
 
     signal.signal(signal.SIGALRM, expired)
     signal.setitimer(
@@ -788,7 +836,7 @@ def response_payload(result: dict[str, Any]) -> dict[str, Any]:
     raise RunnerError("provider result lacks one structured JSON response")
 
 
-def usage_by_model(result: dict[str, Any]) -> list[dict[str, Any]]:
+def usage_by_model(result: dict[str, Any], *, thinking: bool = False) -> list[dict[str, Any]]:
     rows = []
     raw = result.get("modelUsage")
     if not isinstance(raw, dict):
@@ -798,7 +846,7 @@ def usage_by_model(result: dict[str, Any]) -> list[dict[str, Any]]:
         "output_tokens": "outputTokens",
         "cached_input_tokens": "cacheReadInputTokens",
         "cache_creation_input_tokens": "cacheCreationInputTokens",
-        "reasoning_tokens": "reasoningTokens",
+        "reasoning_tokens": "thinkingTokens" if thinking else "reasoningTokens",
     }
     for model, counts in raw.items():
         if not isinstance(model, str) or not isinstance(counts, dict):
@@ -828,7 +876,7 @@ def usage_by_model(result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def usage_attribution(
-    result: dict[str, Any], aggregate: dict[str, Any],
+    result: dict[str, Any], aggregate: dict[str, Any], *, thinking: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Partition usage only where provider telemetry supports an exact arithmetic split.
 
@@ -837,7 +885,7 @@ def usage_attribution(
     non-negative residuals; components that cannot be subtracted honestly remain explicitly
     unavailable rather than being assigned to the requested model.
     """
-    partitions = usage_by_model(result)
+    partitions = usage_by_model(result, thinking=thinking)
     if not partitions:
         return partitions, json.loads(json.dumps(aggregate))
     components = (
@@ -1175,6 +1223,12 @@ def inference_evidence(result: dict[str, Any]) -> bool:
     return result.get("is_error") is False and result.get("subtype") not in {"error", "failed"}
 
 
+# 2.7.11: an HTTP status counts only as a token of its own, as in run_coordinator.TRANSIENT_STATUS (plus 500 here).
+# A substring test found "500" inside a request id (req_...5004...) or a sha256 and recorded a pre-inference failure
+# that was no rejection as provider_request_status "rejected" instead of "unknown".
+REJECTION_STATUS = re.compile(r"(?<![0-9a-z])(?:429|500|502|503|504)(?![0-9a-z])")
+
+
 def rejected_provider_request(result: dict[str, Any], stderr: str) -> bool:
     """Classify explicit pre-inference provider rejection versus unknown transport loss."""
     if not isinstance(result, dict) or not result:
@@ -1185,8 +1239,8 @@ def rejected_provider_request(result: dict[str, Any], stderr: str) -> bool:
     return any(token in message for token in (
         "authentication", "authorization", "unauthorized", "forbidden", "quota",
         "billing", "unsupported model", "model not found", "schema", "capability",
-        "429", "throttl", "rate limit", "overloaded", "500", "502", "503", "504",
-    ))
+        "throttl", "rate limit", "overloaded",
+    )) or REJECTION_STATUS.search(message) is not None
 
 
 def unavailable_usage() -> dict[str, Any]:
@@ -1259,7 +1313,7 @@ def make_terminal_record(
         if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost >= 0 else None
     )
     turns = execution.result.get("num_turns", execution.result.get("turn_count"))
-    partitions, unattributed = usage_attribution(execution.result, execution.usage)
+    partitions, unattributed = usage_attribution(execution.result, execution.usage, thinking=execution.thinking)
     role_class, round_number = role_identity(role)
     record: dict[str, Any] = {
         "invocation_id": execution.reservation["invocation_id"],
@@ -1287,8 +1341,9 @@ def make_terminal_record(
         "output_sha256": output_hash,
         "usage": execution.usage,
         # Journaled and projected into run.json, which is later provider-visible: never let an
-        # absolute path through (see run_coordinator.redact_private_paths).
-        "error": run_coordinator.redact_private_paths(
+        # absolute path or (2.7.9) a participant-code-shaped token through
+        # (see run_coordinator.provider_safe_text).
+        "error": run_coordinator.provider_safe_text(
             error, *([execution.attempt_dir.parents[4]] if len(execution.attempt_dir.parents) >= 5 else []),
         ) if error else error,
         "error_class": error_class,
@@ -1378,6 +1433,9 @@ def run_process(
     route: dict[str, Any],
     source_invocation_id: str | None = None,
 ) -> ProviderExecution:
+    # 2.7.11: the audit's frozen reasoning-token parse (claude_thinking_tokens), read before any reservation or call
+    # so an unreadable snapshot refuses here and never after a paid response.
+    thinking = claude_thinking_tokens.frozen(root)
     reservation = lifecycle_reserve(
         root, role, attempt_kind, input_hash, prompt_hash,
         route=route, source_invocation_id=source_invocation_id,
@@ -1482,7 +1540,7 @@ def run_process(
             "invocation_id": reservation["invocation_id"], "attempt_kind": attempt_kind,
             "attempt": None, "provider_request_status": "not_requested",
             "inference_start_status": "not_started", "requested_session_id": session_id,
-            "error": str(exc),
+            "error": run_coordinator.provider_safe_text(str(exc), root),
             "ended_at": iso(ended_at),
         }))
         terminal_append(root, make_terminal_record(
@@ -1505,7 +1563,8 @@ def run_process(
         # only --recover-stranded could close it, as a pre-inference request.
         pass
     observed, observed_ids, _count = run_coordinator.observed_models(result)
-    usage, cache = run_coordinator.extract_usage(result) if result else (unavailable_usage(), "none")
+    usage, cache = (run_coordinator.extract_usage(result, thinking=thinking) if result
+                    else (unavailable_usage(), "none"))
     if metadata_21(root):
         if inference_evidence(result) or workspace_writes(cwd, preexisting):
             attempt = lifecycle_started(root, reservation)
@@ -1549,7 +1608,7 @@ def run_process(
         started_at=started_at, ended_at=ended_at, result=result,
         observed_model=observed, observed_model_ids=observed_ids, usage=usage,
         cache_usage=cache, output=cwd, attempt_dir=cwd.parent, route=route,
-        requested_session_id=session_id,
+        requested_session_id=session_id, thinking=thinking,
     )
     # Denials no longer fail the role, so surface them beside the attempt instead. The
     # invocation-record schema is closed, and claude_stdout.json already holds the raw
@@ -1977,7 +2036,7 @@ Do not inspect any audit content.
             "served_model": execution.observed_model,
             "served_model_ids": execution.observed_model_ids,
             "usage": execution.usage,
-            "usage_by_model": usage_by_model(execution.result),
+            "usage_by_model": usage_by_model(execution.result, thinking=execution.thinking),
             "normalized_total_tokens": total,
             "turn_count": execution.result.get("num_turns"),
         }
@@ -2186,6 +2245,8 @@ def append_failure(
     *,
     source_invocation_id: str | None = None,
 ) -> None:
+    # 2.7.9: the attempt's status.json carries the terminal record's own text (make_terminal_record).
+    message = run_coordinator.provider_safe_text(message, root)
     terminal_append(root, make_terminal_record(
         execution, role, attempt_kind, input_hash, prompt_hash,
         status="timed_out" if execution.timed_out else "failed",
@@ -2487,6 +2548,7 @@ Return only a short completion notice.
                 repair.output, role, snapshot_manifest,
                 expected_scientific_projection=projection,
                 deposit_exemptions=deposit_exemptions,
+                set_aside=repair.attempt_dir / runtime.NON_CONTRACT_SCRATCH,
             )
         except runtime.OutputValidationError as exc:
             append_failure(
@@ -2605,9 +2667,12 @@ def run_role(
                     frozen["expected_scientific_projection"] = recovered_repair_projection(
                         phase_root, role, input_hash, source_invocation_id,
                     )
+                # 2.7.9: leftovers outside the contract and outside evidence/ are set aside in
+                # the attempt directory rather than costing a fresh sample (check_output_tree).
                 validated = targets.output.validate(
                     execution.output, role, snapshot_manifest, **frozen,
                     deposit_exemptions=deposit_exemptions,
+                    set_aside=execution.attempt_dir / runtime.NON_CONTRACT_SCRATCH,
                 )
             except runtime.OutputValidationError as exc:
                 append_failure(
@@ -2826,7 +2891,9 @@ def recover_received_role_attempt(
     except Exception:
         pass
     observed, observed_ids, _ = run_coordinator.observed_models(result)
-    usage, cache = run_coordinator.extract_usage(result) if result else (unavailable_usage(), "none")
+    thinking = claude_thinking_tokens.frozen(root)
+    usage, cache = (run_coordinator.extract_usage(result, thinking=thinking) if result
+                    else (unavailable_usage(), "none"))
     execution = ProviderExecution(
         reservation={"invocation_id": invocation_id},
         attempt=status.get("attempt"),
@@ -2851,6 +2918,7 @@ def recover_received_role_attempt(
             status.get("requested_session_id")
             if isinstance(status.get("requested_session_id"), str) else None
         ),
+        thinking=thinking,
     )
     return None, execution
 
@@ -3211,11 +3279,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--probe-cache-dir", type=pathlib.Path, default=None)
     # 2.7.2: default None = this audit's frozen timeout (phase1_timeout); an explicit value must equal it.
     parser.add_argument("--timeout-seconds", type=bounded_timeout, default=None)
+    # 2.7.9: default None = this audit's own deadline (pre_dispatch_deadline), never under 60 s, so an explicit
+    # value, which bounded_pre_dispatch_deadline keeps at 60 s or less, can only tighten it.
     parser.add_argument(
         "--pre-dispatch-deadline-seconds",
         type=bounded_pre_dispatch_deadline,
-        default=DEFAULT_PRE_DISPATCH_DEADLINE_SECONDS,
-        help="provider-free preparation deadline; may only tighten the canonical 60-second cap",
+        default=None,
+        help="provider-free preparation deadline; may only tighten the audit's own deadline (60 seconds, or "
+             "more for a large deposit in an audit initialised on 2.7.9 or later)",
     )
     parser.add_argument("--max-budget-usd", type=bounded_budget, default=DEFAULT_MAX_BUDGET_USD)
     parser.add_argument(
@@ -3266,6 +3337,8 @@ def main(argv: list[str] | None = None) -> int:
             audit_timeout = phase1_timeout(policy)
             if args.timeout_seconds is None:
                 args.timeout_seconds = audit_timeout
+            if args.pre_dispatch_deadline_seconds is None:
+                args.pre_dispatch_deadline_seconds = pre_dispatch_deadline(policy, root)
             run = load_run(root)
             if (
                 args.timeout_seconds != audit_timeout
@@ -3317,11 +3390,16 @@ def main(argv: list[str] | None = None) -> int:
                         root, snapshot, facts, "preflight"),
                 )
             except Exception as exc:
+                # 2.7.9: status.json and the journaled pause_start (projected into run.json, which
+                # the coordinator refuses to read with an account path or a code-shaped token in
+                # it) take the provider-safe text, as failures[role] below does; an OSError names
+                # its absolute path, a manifest mismatch or the deadline's step label a deposit file.
+                detail = run_coordinator.provider_safe_text(str(exc), root)
                 write_status(phase_root, {
                     "status": "paused", "pause_reason": "local_preflight_failed",
-                    "auditor_inferences_started": 0, "error": str(exc),
+                    "auditor_inferences_started": 0, "error": detail,
                 })
-                journal_pause(root, phase_root, "local_preflight_failed", str(exc))
+                journal_pause(root, phase_root, "local_preflight_failed", detail)
                 print(f"PAUSED: Phase-1 local preflight failed: {exc}", file=sys.stderr)
                 return 3
             journal_resume(root)
@@ -3338,13 +3416,14 @@ def main(argv: list[str] | None = None) -> int:
                     bound=bound,
                 )
             except Exception as exc:
+                detail = run_coordinator.provider_safe_text(str(exc), root)
                 write_status(phase_root, {
                     "status": "paused", "pause_reason": "capability_probe_failed",
                     "auditor_inferences_started": 0,
                     "source_snapshot_sha256": snapshot_manifest["snapshot_sha256"],
-                    "error": str(exc),
+                    "error": detail,
                 })
-                journal_pause(root, phase_root, "capability_probe_failed", str(exc))
+                journal_pause(root, phase_root, "capability_probe_failed", detail)
                 print(f"PAUSED: Phase-1 capability probe failed: {exc}", file=sys.stderr)
                 return 4
             journal_resume(root)
@@ -3397,7 +3476,7 @@ def main(argv: list[str] | None = None) -> int:
                     except Exception as exc:
                         # status.json is provider-visible and a release artefact; this path
                         # bypasses make_terminal_record, which is where redaction used to live.
-                        failures[role] = run_coordinator.redact_private_paths(str(exc), root)
+                        failures[role] = run_coordinator.provider_safe_text(str(exc), root)
                         if isinstance(exc, EnvironmentFaultError):
                             environment_faults[role] = failures[role]
                         elif isinstance(exc, runtime.SnapshotIntegrityError):
@@ -3501,7 +3580,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except Exception as exc:
             write_status(phase_root, {
-                "status": "failed", "pause_reason": None, "error": str(exc),
+                "status": "failed", "pause_reason": None,
+                "error": run_coordinator.provider_safe_text(str(exc), root),
             })
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1

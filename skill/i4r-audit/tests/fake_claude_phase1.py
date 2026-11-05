@@ -14,7 +14,8 @@ hash), ``verifier_binding_unbound`` (the same in the evidence manifest's source_
 ``verifier_evidence_unhashable`` (a list as evidence source_path), ``verifier_contradicting_section``
 (a second "## Hypotheses tested" naming H1 REFUTED), ``verifier_repair_flip`` (an honest REFUTED
 with a bad report hash, whose focused repair flips H1 to CONFIRMED), and ``verifier_refuted_invalid``
-(EVERY sample: H1 REFUTED plus a stray file, so no sample is ever admitted).
+(EVERY sample: H1 REFUTED plus a stray evidence file the manifest does not list, so no sample is
+ever admitted; 2.7.9 sets a stray outside evidence/ aside instead of refusing the sample).
 
 2.7.0: the fake serves the model the route asks for. ``--model sonnet`` (a Sonnet 5 audit, every
 audit initialised before 2.7.0) is served ``claude-sonnet-5-20260801``, exactly what every earlier
@@ -331,7 +332,7 @@ def verifier_defect(cwd: pathlib.Path, scenario: str, count: int) -> None:
         write_json(result_path, result)
     if scenario == "verifier_refuted_invalid":
         # An unrepairable defect: the sample is never admitted and stays under phase1/roles.
-        (cwd / "scratch_notes.txt").write_text("left behind\n", encoding="utf-8")
+        (cwd / "evidence" / "scratch_notes.txt").write_text("left behind\n", encoding="utf-8")
 
 
 def verifier_repair_output(cwd: pathlib.Path, prior: pathlib.Path, scenario: str) -> None:
@@ -453,7 +454,7 @@ def envelope(payload: object, *, error: bool = False) -> dict[str, object]:
             "tool_use_id": "toolu_fake_denied",
             "tool_input": {"command": "cp ./scratch/*.json ./evidence/ && ls evidence"},
         }]
-    return {
+    body: dict[str, object] = {
         "type": "result",
         "subtype": "error" if error else "success",
         "is_error": error,
@@ -473,6 +474,16 @@ def envelope(payload: object, *, error: bool = False) -> dict[str, object]:
         "duration_api_ms": 100,
         "permission_denials": denials,
     }
+    thinking = os.environ.get("FAKE_PHASE1_THINKING")
+    if thinking:
+        # 2.7.11: the fields the real CLI writes (it never writes reasoningTokens): modelUsage.<id>.thinkingTokens and
+        # the primary path's usage.output_tokens_details.thinking_tokens. Unset, the envelope is every earlier test's.
+        counts = body["modelUsage"][SERVED_MODEL]   # type: ignore[index]
+        counts.pop("reasoningTokens")
+        counts["thinkingTokens"] = int(thinking)
+        body["usage"] = {"input_tokens": 100, "output_tokens": 40, "cache_read_input_tokens": 20,
+                         "cache_creation_input_tokens": 10, "output_tokens_details": {"thinking_tokens": int(thinking)}}
+    return body
 
 
 def rejected_envelope(message: str) -> dict[str, object]:
@@ -585,6 +596,13 @@ def main() -> int:
                         "variable.")
         body.update(subtype="success", is_error=True, terminal_reason="api_error")
         print(json.dumps(body, separators=(",", ":")))
+        state_event("end", role=role, returncode=1)
+        return 1
+    if scenario == "opaque_error_once" and matches_target(role, target) and count == 1:
+        # 2.7.11: a pre-inference error envelope whose text is FAKE_PHASE1_ERROR_MESSAGE and nothing else (no stderr):
+        # no rejection word, but perhaps digits inside a request id or a hash.
+        print(json.dumps(rejected_envelope(os.environ.get("FAKE_PHASE1_ERROR_MESSAGE") or "request failed"),
+                         separators=(",", ":")))
         state_event("end", role=role, returncode=1)
         return 1
     if scenario == "auth_failure" and matches_target(role, target):

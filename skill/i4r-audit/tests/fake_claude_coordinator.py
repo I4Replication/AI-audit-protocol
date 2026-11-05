@@ -188,6 +188,57 @@ def main() -> int:
         # 2.7.6: the model wrote into its workspace (fake_args.json above), then the CLI died with no result envelope
         return 1
     rows = load_rows(source)
+    citations = json.loads(os.environ.get("FAKE_COORDINATOR_CITE") or "[]")
+    if citations:
+        # 2.7.9: the first row also cites what the prompt says to cite, by origin with the sha256
+        # that ../source/input_manifest.json lists ({"path", "origin"}), or with a given hash
+        # ({"path", "sha256"}); {"dependency": path} adds a dependency artifact path.
+        listed = {entry["origin"]: entry["sha256"]
+                  for entry in json.loads((source / "input_manifest.json").read_text())["files"]}
+        for item in citations:
+            if "dependency" in item:
+                rows[0]["dependencies"]["artifact_paths"].append(item["dependency"])
+            else:
+                rows[0]["evidence"]["source_hashes"].append(
+                    {"path": item["path"], "sha256": item.get("sha256") or listed[item["origin"]]})
+    slips = json.loads(os.environ.get("FAKE_COORDINATOR_SLIPS") or "{}")
+    if slips:
+        # 2.7.11: the hand-copied bookkeeping slips of the live coordinator calls (A61, A62,
+        # A63, A64). "verification": add a Phase-1 confirmation whose evidence sha256 has one
+        # character changed (its "model_family" defaults to claude); "null_fingerprint": null every row's
+        # environment_fingerprint; "abbreviated_dependency": a second row (id <prefix>-<slug>) that row 0
+        # depends on by prefix ("ambiguous_dependency": two such rows); "prose_only": row 0 cites only
+        # {"path", "origin"} at the hash input_manifest.json lists.
+        if "verification" in slips:
+            spec = slips["verification"]
+            wrong = spec["sha256"][:17] + ("0" if spec["sha256"][17] != "0" else "1") + spec["sha256"][18:]
+            rows[0]["verifications"].append({
+                "reviewer_id": spec["reviewer_id"], "invocation_id": spec["invocation_id"],
+                "evidence_record": {"path": spec["path"], "sha256": wrong},
+                "model_family": spec.get("model_family", "claude"), "outcome": "confirmed"})
+        if "prose_only" in slips:
+            listed = {entry["origin"]: entry["sha256"]
+                      for entry in json.loads((source / "input_manifest.json").read_text())["files"]}
+            item = slips["prose_only"]
+            rows[0]["evidence"]["source_hashes"] = [{"path": item["path"], "sha256": listed[item["origin"]]}]
+        if slips.get("null_fingerprint"):
+            for row in rows:
+                row["dependencies"]["environment_fingerprint"] = None
+        for key, slugs in (("abbreviated_dependency", ("coordinator-merge-note",)),
+                           ("ambiguous_dependency", ("coordinator-merge-note", "coordinator-second-note"))):
+            if key not in slips:
+                continue
+            prefix = slips[key]
+            for slug in slugs:
+                extra = json.loads(json.dumps(rows[0]))
+                extra["id"] = f"{prefix}-{slug}"
+                extra["claim"] = f"A bounded comparison ({slug}) in the supplied report also holds."
+                extra["status"] = "rejected"
+                extra["ledger_disposition"] = {"status": "EXCLUDED", "target": None,
+                                               "reason": "Tested negative: the bounded check passed."}
+                extra["verifications"] = []
+                rows.append(extra)
+            rows[0]["dependencies"]["finding_ids"] = [prefix]
     if scenario == "premature_state":
         rows[0]["coordinator_approved"] = True
         rows[0]["settled"] = {"approved": False, "valid_for_report_hash": None}
@@ -227,8 +278,9 @@ def main() -> int:
     if scenario in rejection_messages or scenario == "no_served_model":
         model_usage = {}
     elif scenario == "wrong_model":
+        # 2.7.11: FAKE_WRONG_MODEL_ID names the wrong model served (default claude-opus-5); a dated id carries digits
         model_usage = {
-            "claude-opus-5": {
+            os.environ.get("FAKE_WRONG_MODEL_ID") or "claude-opus-5": {
                 "inputTokens": 100, "outputTokens": 40,
                 "cacheReadInputTokens": 10, "cacheCreationInputTokens": 5,
             }
@@ -259,6 +311,10 @@ def main() -> int:
         for usage in model_usage.values():
             usage.pop("cacheReadInputTokens", None)
             usage.pop("cacheCreationInputTokens", None)
+    if scenario == "thinking":
+        # 2.7.11: the CLI's real thinking fields, per served model (30 on the primary, 1 on the helper)
+        for model, usage in model_usage.items():
+            usage["thinkingTokens"] = 1 if model == HELPER else 30
     rejected = scenario in rejection_messages
     provider_failed = scenario in ("provider_error", "transport_error")
     failure_text = {
@@ -277,6 +333,7 @@ def main() -> int:
             "input_tokens": 100, "output_tokens": 40,
             "cache_read_input_tokens": 10, "cache_creation_input_tokens": 5,
             "total_tokens": 155,
+            **({"output_tokens_details": {"thinking_tokens": 30}} if scenario == "thinking" else {}),
         },
         "num_turns": 0 if rejected else 2,
         "duration_api_ms": 0 if rejected else 1250,

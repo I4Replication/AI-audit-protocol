@@ -1,5 +1,11 @@
 #!/bin/bash
-# new_audit.sh <data/<Journal>/<Paper>> [--paper <pdf>] [--package <zip|dir>] [--run-name <folder>]
+# new_audit.sh <data/<Journal>/<Paper>> [--paper <pdf>] [--package <zip|dir>] [--loose include|exclude]
+#              [--run-name <folder>]
+#
+# --loose (2.7.11): the package is an archive in the paper folder and other files or folders sit beside it.
+# `include` extracts the archive into pkg/ as usual and adds those entries under pkg/beside_archive/;
+# `exclude` takes the archive alone. Without it such a folder is refused, naming the archive and every entry,
+# and the choice is recorded in the audit's paper_source.json ("package").
 #
 # Start an audit of a paper that sits in the tree's data/ folder: derives the run directory
 # (runs/<Journal>/<Paper>/audit), finds the article PDF and the replication package when the
@@ -13,16 +19,19 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 . "$HERE/tree_layout.sh"
-PAPER_DIR="${1:?usage: new_audit.sh <data/<Journal>/<Paper>> [--paper <pdf>] [--package <zip|dir>] [--run-name <folder>]}"; shift
-PDF=""; PKG=""; RUN_NAME=""
+PAPER_DIR="${1:?usage: new_audit.sh <data/<Journal>/<Paper>> [--paper <pdf>] [--package <zip|dir>] [--loose include|exclude] [--run-name <folder>]}"; shift
+PDF=""; PKG=""; RUN_NAME=""; LOOSE=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --paper|--package|--run-name)
+    --paper|--package|--run-name|--loose)
       { [ $# -ge 2 ] && [ -n "$2" ] && [ "${2#--}" = "$2" ]; } || { echo "FATAL: $1 requires a value" >&2; exit 2; } ;;
   esac
   case "$1" in
     --paper) PDF="${2:-}"; shift 2 ;;
     --package) PKG="${2:-}"; shift 2 ;;
+    --loose)
+      case "$2" in include|exclude) LOOSE="$2" ;; *) echo "FATAL: --loose takes include or exclude, not: $2" >&2; exit 2 ;; esac
+      shift 2 ;;
     # the run folder under runs/<Journal>/ when the derived one belongs to another paper (a title differing only in
     # characters dropped from run folder names)
     --run-name) RUN_NAME="${2:-}"; shift 2 ;;
@@ -59,6 +68,12 @@ if [ "$(i4r_layout_of_paper "$PAPER_DIR")" != new ]; then
   exit 2
 fi
 ROOT="$(i4r_root_of_paper "$PAPER_DIR")"
+# 2.7.11: init_run.sh's skill-version pin, checked before anything is reserved, copied or paid for
+i4r_intake_version_pin "$ROOT" "$(cd "$HERE/.." && pwd -P)" new_audit.sh || exit 2
+# 2.7.11: the article text comes from Poppler's pdftotext at intake; without it intake used to note "EXTRACTION FAILED"
+# and go on, and Phase 1 would then take the operator's PAPER.txt summary for the article. Checked before the
+# critic-access call; setup_workspace.sh checks it again before its claim.
+i4r_intake_needs_pdftotext new_audit.sh || exit 2
 AUDIT_DIR="$(i4r_audit_dir_for_paper "$PAPER_DIR")"
 DERIVED_AUDIT_DIR="$AUDIT_DIR"
 if [ -n "$RUN_NAME" ]; then
@@ -68,6 +83,14 @@ if [ -n "$RUN_NAME" ]; then
   AUDIT_DIR="$(dirname "$(dirname "$AUDIT_DIR")")/$RUN_NAME/audit"
 fi
 
+# 2.7.11: an audit folder holding an intake only (pkg/, no run.json) is what init_run.sh's skill-version refusal leaves
+# when an older install ran new_audit.sh: say how to go on rather than only "resume it"
+intake_only_hint () {  # audit-dir
+  [ -d "$1/pkg" ] && [ ! -e "$1/run.json" ] || return 0
+  echo "       It holds an intake only (no run.json: init_run.sh never ran, or refused this skill copy's version): resume" >&2
+  echo "       it with init_run.sh on that AUDIT_DIR from the canonical skill, or release the paper (reserve_paper.sh" >&2
+  echo "       release <data/Journal/Paper>) and move its runs/<Journal>/<Paper> folder under old_runs/." >&2
+}
 pick_one () {  # label, then candidates (one per line) -> the single candidate, or a refusal
   local label="$1" list="$2" n flag
   n=$(printf '%s\n' "$list" | sed '/^$/d' | wc -l | tr -d ' ')
@@ -112,6 +135,51 @@ if [ -d "$PKG" ] && [ -z "$(find "$PKG" -mindepth 1 \( -name '.*' -prune \) -o -
   echo "FATAL: the package $PKG holds no files; pass the replication package with --package <zip|dir>" >&2
   exit 2
 fi
+# 2.7.11: an archive with author files or folders beside it. The archive used to win silently and the files beside it
+# were never audited: in one batch analysis files sat beside the OSF archive of several papers, and their
+# operators took the archive alone, passed the paper folder (the archive copied unextracted), or built a folder by hand three different ways.
+# Say what is meant: --loose include (the archive extracted as usual, those entries under pkg/beside_archive/) or
+# --loose exclude (the archive alone); the choice is recorded in paper_source.json. Checked before the critic-access
+# call: an input error costs no call.
+BESIDE=""
+PKG_KIND="other"
+if [ -f "$PKG" ]; then
+  # any case of .zip (pkg.Zip): the package was found with -iname '*.zip', and setup_workspace.sh unzips it
+  case "$(printf '%s' "$PKG" | tr '[:upper:]' '[:lower:]')" in *.zip) PKG_KIND="archive" ;; esac
+elif [ -d "$PKG" ]; then
+  PKG_KIND="folder"
+  [ "$PKG" -ef "$PAPER_DIR" ] && PKG_KIND="loose_files"   # -ef: the same folder however its case was typed
+fi
+if [ "$PKG_KIND" = archive ] && [ "$(dirname "$PKG")" -ef "$PAPER_DIR" ]; then
+  BESIDE="$(find "$PAPER_DIR" -mindepth 1 -maxdepth 1 ! -name '.*' ! -name '__MACOSX' ! -iname 'I4R_comment_*' \
+    ! -samefile "$PKG" \( -type d -o \( -type f ! -iname '*.pdf' \) \) | sort)"
+fi
+if [ -n "$BESIDE" ] && [ -z "$LOOSE" ]; then
+  echo "FATAL: $PAPER_DIR holds the package archive $(basename "$PKG") and, beside it:" >&2
+  printf '%s\n' "$BESIDE" | while IFS= read -r entry; do
+    if [ -d "$entry" ]; then printf '         %s/ (a folder)\n' "$(basename "$entry")"; else printf '         %s\n' "$(basename "$entry")"; fi
+  done >&2
+  echo "       Say whether they belong to the package; nothing has been reserved or copied:" >&2
+  for choice in include exclude; do
+    printf '         bash %q %q' "$HERE/new_audit.sh" "$PAPER_DIR" >&2
+    [ -n "$USER_PDF" ] && printf ' --paper %q' "$USER_PDF" >&2
+    [ -n "$USER_PKG" ] && printf ' --package %q' "$USER_PKG" >&2
+    [ -n "$RUN_NAME" ] && printf ' --run-name %q' "$RUN_NAME" >&2
+    if [ "$choice" = include ]; then printf ' --loose include   # the archive plus these, under pkg/beside_archive/\n' >&2
+    else printf ' --loose exclude   # the archive alone\n' >&2; fi
+  done
+  echo "       (or --package <folder> for any other combination). A folder that is only the archive unpacked" >&2
+  echo "       is a copy of it: move it out of data/, or choose exclude." >&2
+  exit 2
+fi
+if [ -n "$LOOSE" ] && [ -z "$BESIDE" ]; then
+  echo "note: --loose $LOOSE has no effect: the package is not an archive with other entries beside it"
+  LOOSE=""
+fi
+if [ "$PKG_KIND" = loose_files ] && [ -n "$(find "$PAPER_DIR" -mindepth 1 -maxdepth 1 -type f -iname '*.zip' -print -quit)" ]; then
+  echo "note: the paper folder is the package, so its .zip archive is copied into pkg/ as an archive, not extracted;"
+  echo "      to extract it and keep the files beside it, use --package <the .zip> --loose include"
+fi
 # one audit per paper: the derived run folder and its "<run> (n)" siblings may already hold this paper's audit (started
 # earlier with --run-name, or after the colliding paper's folder was moved away)
 existing="$(python3 -c 'import json, os, sys, unicodedata
@@ -136,6 +204,7 @@ for cand in [base] + [path for path in siblings if path != base]:
 if [ -n "$existing" ]; then
   echo "FATAL: an audit of this paper already exists: $existing" >&2
   echo "       Resume it, or move it under old_runs/ before starting again." >&2
+  intake_only_hint "$existing"
   exit 2
 fi
 if [ -e "$AUDIT_DIR" ] && [ -n "$(find "$AUDIT_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
@@ -182,6 +251,7 @@ sys.exit(0 if f(named) == f(sys.argv[2]) else 1)' "$cand/paper_source.json" "$(b
   fi
   echo "FATAL: an audit of this paper already exists: $AUDIT_DIR" >&2
   echo "       Resume it, or move it under old_runs/ before starting again." >&2
+  intake_only_hint "$AUDIT_DIR"
   exit 2
 fi
 # 2.7.5: every critique round runs on the shipped critic route (gpt-6.1-sol), and an audit can no longer be re-pinned
@@ -196,6 +266,7 @@ if [ "$access_rc" -ne 0 ]; then
   printf '         bash %q %q' "$HERE/new_audit.sh" "$PAPER_DIR" >&2
   [ -n "$USER_PDF" ] && printf ' --paper %q' "$USER_PDF" >&2
   [ -n "$USER_PKG" ] && printf ' --package %q' "$USER_PKG" >&2
+  [ -n "$LOOSE" ] && printf ' --loose %s' "$LOOSE" >&2
   [ -n "$RUN_NAME" ] && printf ' --run-name %q' "$RUN_NAME" >&2
   printf '\n' >&2
   exit 2
@@ -214,7 +285,26 @@ if [ -d "$PKG" ] && [ "$(cd "$PKG" && pwd -P)" = "$(cd "$PAPER_DIR" && pwd -P)" 
     || { echo "FATAL: could not copy the loose package files into staging (see the cp error above); fix their permissions" >&2; exit 2; }
   PKG="$STAGE"
 fi
-I4R_PAPER_DIR="$PAPER_DIR" bash "$HERE/setup_workspace.sh" "$AUDIT_DIR" "$PDF" "$PKG" || exit $?
+# 2.7.11: the entries beside the archive, staged for setup_workspace.sh to add under pkg/beside_archive/ (--loose include)
+BESIDE_STAGE=""
+if [ "$LOOSE" = include ]; then
+  BESIDE_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/i4r-beside.XXXXXX")" || exit 2
+  trap 'chmod -R u+w "$BESIDE_STAGE" 2>/dev/null; rm -rf "$BESIDE_STAGE"' EXIT
+  printf '%s\n' "$BESIDE" | while IFS= read -r entry; do cp -R "$entry" "$BESIDE_STAGE"/ || exit 1; done \
+    || { echo "FATAL: could not copy the entries beside the archive into staging (see the cp error above); fix their permissions" >&2; exit 2; }
+fi
+# the choice, as names only (paper_source.json sits in the audit: never an absolute path); only an archive with
+# entries beside it gets a record, so every other intake writes paper_source.json exactly as before
+INTAKE_PACKAGE=""
+if [ -n "$LOOSE" ]; then
+  INTAKE_PACKAGE="$(python3 -c 'import json, os, sys
+name, loose, beside = sys.argv[1], sys.argv[2], sys.argv[3]
+print(json.dumps({"kind": "archive", "name": name, "beside_archive": {"choice": loose, "entries": sorted(
+    os.path.basename(p) + ("/" if os.path.isdir(p) else "") for p in beside.splitlines() if p)}},
+    sort_keys=True), end="")' "$(basename "$PKG")" "$LOOSE" "$BESIDE")" || exit 2
+fi
+I4R_PAPER_DIR="$PAPER_DIR" I4R_INTAKE_PACKAGE="$INTAKE_PACKAGE" I4R_PACKAGE_BESIDE="$BESIDE_STAGE" \
+  bash "$HERE/setup_workspace.sh" "$AUDIT_DIR" "$PDF" "$PKG" || exit $?
 echo ""
 echo "next:"
 case "$AUDIT_DIR" in   # a name may hold $, backticks, quotes or ! (zsh history), which double quotes would expand

@@ -45,8 +45,9 @@ IGNORED = shutil.ignore_patterns(
 # critic route to gpt-5.6-terra (2.7.0), fourteen with the revert of the probe bound to 150000 (2.7.1), fifteen
 # with the revert of the Phase-1 timeout to 2700 (2.7.2), eighteen with the Claude effort restored to max and the
 # verifier or the probe alone left at max (2.7.3), nineteen with the critique ceiling
-# restored to 2700 and twenty with the claim-change rule removed (2.7.4).
-OK_LINE = "POLICY DRIFT CHECK OK: v2 policy/docs agree and twenty planted drifts were rejected"
+# restored to 2700 and twenty with the claim-change rule removed (2.7.4), twenty-one with the pre-dispatch rule
+# removed (2.7.9), twenty-two with the Claude reasoning-token parse removed (2.7.11).
+OK_LINE = "POLICY DRIFT CHECK OK: v2 policy/docs agree and twenty-two planted drifts were rejected"
 VERIFIER_POLICY = "post-fan-out verifier policy is not Sonnet 5.5 / xhigh on the Phase-1 auditor family"
 VERIFIER_ROUTE = "post-fan-out verifier route differs from the Phase-1 auditors' route"
 CONTRACT = "post-fan-out verification contract drifted"

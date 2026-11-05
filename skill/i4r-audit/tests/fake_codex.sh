@@ -92,6 +92,17 @@ if "I4R_CRITIC_ACCESS_CHECK" in prompt:
         print(json.dumps({"type": "error", "message": reason}))
         print(json.dumps({"type": "turn.failed", "error": {"message": reason}}))
         sys.exit(1)
+    if os.environ.get("FAKE_ACCESS_SCENARIO") == "capacity":   # 2.7.9: the provider's own words (audit A80)
+        reason = "Selected model is at capacity. Please try a different model."
+        print(json.dumps({"type": "thread.started", "thread_id": "fake-access"}))
+        print(json.dumps({"type": "error", "message": reason}))
+        print(json.dumps({"type": "turn.failed", "error": {"message": reason}}))
+        sys.exit(1)
+    if os.environ.get("FAKE_ACCESS_SCENARIO") == "replay":   # 2.7.9: the test's own event rows and stderr, exit 1
+        sys.stdout.write(pathlib.Path(os.environ["FAKE_ACCESS_EVENTS"]).read_text())
+        if os.environ.get("FAKE_ACCESS_STDERR"):
+            sys.stderr.write(pathlib.Path(os.environ["FAKE_ACCESS_STDERR"]).read_text())
+        sys.exit(1)
     if os.environ.get("FAKE_ACCESS_SCENARIO") == "cli_rejects":
         print("error: unexpected argument '--output-schema' found", file=sys.stderr)
         print("Usage: codex exec [OPTIONS] [PROMPT]", file=sys.stderr)
@@ -198,13 +209,37 @@ if scenario == "provider_5xx_once" and role == transient_role and count == 1:
     print(json.dumps({"type": "error", "message": "HTTP 503 service unavailable"}))
     print("HTTP 503 service unavailable", file=sys.stderr)
     raise SystemExit(75)
+# 2.7.9: a session that printed the frozen policy (whose non_retryable_error_classes name "authentication"), then
+# the provider at capacity, as audit A80's completeness critic ran; transcript_once has no error row at all.
+# capacity_late_once first runs 110 more commands, so the refusal lands past the 200 event rows failure.log keeps.
+if scenario in ("capacity_once", "transcript_once", "capacity_late_once") and role == transient_role and count == 1:
+    command = "/bin/zsh -lc 'cat source/context/PIPELINE_POLICY.json'"
+    printed = workspace / "source/context/PIPELINE_POLICY.json"
+    print(json.dumps({"type": "turn.started"}))
+    print(json.dumps({"type": "item.started", "item": {"id": "item_0", "type": "command_execution", "command": command,
+                                                        "aggregated_output": "", "exit_code": None,
+                                                        "status": "in_progress"}}))
+    print(json.dumps({"type": "item.completed", "item": {
+        "id": "item_0", "type": "command_execution", "command": command,
+        "aggregated_output": printed.read_text() if printed.is_file() else "", "exit_code": 0, "status": "completed"}}))
+    for number in range(1, 111 if scenario == "capacity_late_once" else 1):
+        item = {"id": f"item_{number}", "type": "command_execution", "command": "/bin/zsh -lc 'ls source'"}
+        print(json.dumps({"type": "item.started", "item": {**item, "aggregated_output": "", "exit_code": None,
+                                                            "status": "in_progress"}}))
+        print(json.dumps({"type": "item.completed", "item": {**item, "aggregated_output": "context\n", "exit_code": 0,
+                                                              "status": "completed"}}))
+    if scenario in ("capacity_once", "capacity_late_once"):
+        reason = "Selected model is at capacity. Please try a different model."
+        print(json.dumps({"type": "error", "message": reason}))
+        print(json.dumps({"type": "turn.failed", "error": {"message": reason}}))
+    raise SystemExit(1)
 if scenario == "permanent" and role == permanent_role:
     print(json.dumps({"type": "error", "message": "invalid_request_error: model is not supported"}))
     print("invalid_request_error: model is not supported", file=sys.stderr)
     raise SystemExit(2)
 if scenario == "slow" and role == os.environ.get("FAKE_SLOW_ROLE", "stats"):
     (state / "slow_started").write_text(f"{os.getpid()}\n")
-    time.sleep(30)
+    time.sleep(float(os.environ.get("FAKE_SLOW_SECONDS", "30")))   # 2.7.11: tests/test_2711_sleep_ceiling.py
     (state / "slow_finished").write_text("unexpected\n")
 
 def runtime_value(name: str) -> str:

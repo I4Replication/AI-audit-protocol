@@ -132,6 +132,8 @@ PROVIDER_TIMEOUT_SECONDS=$(python3 "$SCRIPT_DIR/critique_timeouts.py" "$TIMEOUT_
 if jq -e '(.policy // .).critique | has("provider_timeout_seconds")' "$TIMEOUT_POLICY_FILE" > /dev/null 2>&1; then
   echo "  [limit] provider call ceiling ${PROVIDER_TIMEOUT_SECONDS} s (this audit's critique.provider_timeout_seconds)" >&2
 fi
+# 2.7.11: a gap this long between two 0.25 s polls of a provider call is time the host was asleep (codex_exec)
+SUSPEND_GAP_SECONDS=60
 # Set when targeted adjudication fails after the critic quorum was already met. The round
 # still exits non-zero, but only after the completed critic reviews have been journaled and
 # projected: four valid, paid-for reviews must not be discarded because a later stage failed.
@@ -342,6 +344,8 @@ CODEX_TIMED_OUT=0
 IN_PROVIDER_WORKER=0
 PROVIDER_SLOT="model_probe"
 PROVIDER_PID_FILE=""
+# 2.7.11: set once this run passed every pre-dispatch refusal and resumed the round (round-resumed below)
+DISPATCH_PHASE=0
 
 write_status() {
   status_outcome="$1"
@@ -530,6 +534,14 @@ finish_run() {
       echo "FATAL: could not write atomic round status" >&2
       finish_rc=1
     fi
+  fi
+  # 2.7.11: a run that stops without its quorum journals that the round has no driver now (a run-level pause bound to
+  # this invocation's status); the next run of the round ends it. A no-op unless the journal shows the round running.
+  if [ "$FINAL_OUTCOME" = "failed" ] && [ "$DISPATCH_PHASE" -eq 1 ] && [ "$RESTORE_PRIOR_POINTER" -eq 0 ] \
+      && [ -s "$LOCAL_STATUS" ]; then
+    "$HELPER" round-stopped --workspace "$WS" --round "$ROUND" --invocation "$INVOCATION_ID" \
+      --status "$LOCAL_STATUS" >/dev/null 2>"$INV/round_stopped.stderr" \
+      || echo "  [warn ] could not journal that round $ROUND stopped ($(tail -n 1 "$INV/round_stopped.stderr" 2>/dev/null)); run.json still shows it running" >&2
   fi
   if [ "$RESTORE_PRIOR_POINTER" -eq 1 ]; then
     # The refused attempt keeps its own record under invocations/; the round's current pointer and
@@ -869,6 +881,11 @@ fi
 
 FINAL_DETAIL="snapshot ready; checking model probe"
 write_status running 0 "" || { FINAL_DETAIL="initial status write failed"; exit 1; }
+# 2.7.11: an earlier run of this round that stopped without its quorum journaled a pause; this run ends it before it
+# dispatches anything (a no-op when there is none).
+"$HELPER" round-resumed --workspace "$WS" --round "$ROUND" --invocation "$INVOCATION_ID" >/dev/null \
+  || { FINAL_DETAIL="could not journal the resumption of round $ROUND"; exit 1; }
+DISPATCH_PHASE=1
 
 record_telemetry() {
   telemetry_role="$1"
@@ -1016,7 +1033,18 @@ codex_exec() {
   trap 'codex_exec_cancel 129' HUP
   # Bounded wait. On expiry the provider group is stopped and the call reports exit 124, which the
   # driver's existing policy treats as transient, so the ordinary retry budget applies.
-  exec_deadline=$(( $(date +%s) + PROVIDER_TIMEOUT_SECONDS ))
+  # 2.7.11: the ceiling counts the time the host is awake. `date +%s` is the wall clock, which runs on
+  # while the host sleeps: a batch Mac hibernated minutes into a
+  # targeted-adjudicator call, and the call was stopped one second after the wake hours later, as if
+  # it had run all that time, at the cost of one of its three attempts. Polls are 0.25 s apart, so a gap of
+  # more than SUSPEND_GAP_SECONDS between two of them means this loop did not run at all (the host
+  # slept, or this driver was stopped); the deadline moves out by that gap. Phase 1's per-call limit
+  # already excludes sleep: Popen.communicate counts time.monotonic, which stops while the host sleeps.
+  # A clock read that is not a number (a failed `date`, e.g. fork EAGAIN) is skipped, never kept: arithmetic
+  # reads it as 0, so the next gap would be the whole epoch and the deadline would move out by decades. The
+  # first numeric read sets the deadline.
+  exec_last=""
+  exec_deadline=""
   exec_rc=""
   while :; do
     # Poll the CHILD pid, not its process group: the helper is launched with `&` from a shell
@@ -1026,7 +1054,16 @@ codex_exec() {
     if ! kill -0 "$CODEX_CHILD_PID" 2>/dev/null; then
       wait "$CODEX_CHILD_PID"; exec_rc=$?; break
     fi
-    if [ "$(date +%s)" -ge "$exec_deadline" ]; then
+    exec_now=$(date +%s)
+    case $exec_now in ''|*[!0-9]*) sleep 0.25; continue ;; esac
+    if [ -z "$exec_last" ]; then
+      exec_deadline=$(( exec_now + PROVIDER_TIMEOUT_SECONDS ))
+    elif [ $(( exec_now - exec_last )) -gt "$SUSPEND_GAP_SECONDS" ]; then
+      exec_deadline=$(( exec_deadline + exec_now - exec_last ))
+      echo "  [sleep] no poll for $(( exec_now - exec_last ))s (host asleep?); not counted against the ${PROVIDER_TIMEOUT_SECONDS}s ceiling" >&2
+    fi
+    exec_last=$exec_now
+    if [ "$exec_now" -ge "$exec_deadline" ]; then
       echo "  [tmout] provider call exceeded ${PROVIDER_TIMEOUT_SECONDS}s; stopping it" >&2
       CODEX_TIMED_OUT=1
       stop_provider_group "$CODEX_CHILD_PID"

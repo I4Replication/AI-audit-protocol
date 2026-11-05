@@ -41,6 +41,14 @@ except ImportError:  # a standalone copy (e.g. a release's scripts/) without its
 RECEIPT = "finalization_receipt.json"
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,199}$")
 CURRENT_RUN_SCHEMAS = {"2.0.0", "2.1.0"}
+# registry/<audit_id>/index_row.json: the audit's own index row, written only by its own filing (2.7.9).
+INDEX_ROW = "index_row.json"
+# Dropbox keeps the losing side of a sync conflict beside the file as
+# "index (<someone>'s conflicted copy <date>).jsonl". Read for rows, never renamed or deleted.
+INDEX_CONFLICTS = "index (*conflicted copy*"
+# The remedy for an audit's own row file that is stale or cannot be used.
+RECOVER_HINT = ("; `finalization_receipt.py registry-recover <tree>/registry <audit dir>` replaces it with the "
+                "row the receipt hashes to")
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -195,6 +203,231 @@ def validate_projection_claim_binding(root: pathlib.Path, claims_relative: str) 
         raise ValueError("claims script is not exactly bound by the finding projection manifest")
 
 
+def index_row(run: dict[str, Any], comment: dict[str, Any], *, version: str,
+              pair_manifest_sha256: str, filed_at: str) -> dict[str, Any]:
+    return {
+        "audit_id": run.get("audit_id"),
+        "filed_at": filed_at,
+        "version": version,
+        "pair_manifest_sha256": pair_manifest_sha256,
+        "doi": run.get("paper_doi"),
+        "journal": (comment.get("bibliographic") or {}).get("journal"),
+        "findings_total": (comment.get("rollup") or {}).get("findings_total"),
+        "rounds_run": run.get("rounds_run"),
+        "stopping_reason": run.get("stopping_reason"),
+        "compliance_pass": (run.get("compliance") or {}).get("compliance_pass"),
+        "token_coverage": (run.get("token_accounting") or {}).get("coverage_fraction"),
+        # coverage_fraction counts an honestly-unavailable call as covered, so 1.0 does
+        # not mean full accounting. Carry the qualifier into the row a human compares
+        # audits with, or the registry reads as though every run was fully accounted.
+        "token_totals_are_lower_bounds": (
+            run.get("token_accounting") or {}).get("totals_are_lower_bounds"),
+        "invocations_with_unavailable_total": (
+            run.get("token_accounting") or {}).get("invocations_with_unavailable_total"),
+    }
+
+
+def index_line(row: dict[str, Any]) -> bytes:
+    """One row exactly as index.jsonl and registry/<id>/index_row.json hold it."""
+    return (json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n").encode()
+
+
+def index_row_hash(row: dict[str, Any]) -> str:
+    """The receipt's index_row_sha256: the row's compact form, not the bytes on disk."""
+    return hashlib.sha256(
+        json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+
+
+def _index_file_rows(path: pathlib.Path, *, strict: bool) -> list[dict[str, Any]]:
+    """The audit rows of one index file. index.jsonl is strict, as before: a bad line refuses. A
+    conflicted copy is only a salvage source, so a line it cannot give is skipped."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        if strict:
+            raise
+        return []
+    rows: list[dict[str, Any]] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            row = validate_json_schema.strict_loads(line, source=f"{path}:{number}")
+            if not isinstance(row, dict) or not isinstance(row.get("audit_id"), str):
+                raise ValueError(f"registry index line {number} is not a valid audit row")
+        except ValueError:
+            if strict:
+                raise
+            continue
+        rows.append(row)
+    return rows
+
+
+def _own_row(path: pathlib.Path) -> tuple[dict[str, Any] | None, str | None]:
+    """registry/<id>/index_row.json, or why it cannot be used (naming no path: the reason reaches logs)."""
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None, "is a symlink or not a regular file"
+        text = path.read_text(encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        return None, f"cannot be read ({getattr(exc, 'strerror', None) or type(exc).__name__})"
+    try:
+        row = validate_json_schema.strict_loads(text, source=INDEX_ROW)
+    except ValueError:
+        return None, "is empty" if not text.strip() else "is not valid JSON (truncated?)"
+    if not isinstance(row, dict) or row.get("audit_id") != path.parent.name:
+        return None, "does not hold that audit's row"
+    return row, None
+
+
+def _pointer_problem(path: pathlib.Path) -> str | None:
+    """Why registry/<id>/current.json cannot be used, read as strict_json reads it (naming no path), or None.
+    registry-audit and registry-recover need it to tell which row is the audit's current filing; `check` too, except
+    that it follows a symlink that stays inside the registry (status.py says the same)."""
+    try:
+        if path.is_symlink():
+            return "is a symlink"
+        text = path.read_text(encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        return f"cannot be read ({getattr(exc, 'strerror', None) or type(exc).__name__})"
+    try:
+        pointer = validate_json_schema.strict_loads(text, source="current.json")
+    except ValueError as exc:
+        return ("is empty" if not text.strip() else "is not valid JSON (truncated?)"
+                if isinstance(exc.__cause__, json.JSONDecodeError) else "is not strict JSON (a repeated key, or NaN)")
+    if not isinstance(pointer, dict):
+        return "is not a JSON object"
+    if not isinstance(pointer.get("version"), str) or not isinstance(pointer.get("pair_manifest_sha256"), str):
+        return "names no filing (no version or pair_manifest_sha256 string)"
+    return None
+
+
+def index_sources(registry: pathlib.Path, *, skip: str | None = None) -> tuple[
+        list[dict[str, Any]], dict[str, dict[str, Any]], list[tuple[str, list[dict[str, Any]]]], dict[str, str]]:
+    """Every index row the registry holds: index.jsonl's, each registry/<id>/index_row.json, and
+    those in Dropbox conflicted copies of the index; and the row files that cannot be used, with why.
+
+    A row file that cannot be used (empty, truncated, unreadable) is left out rather than refused: with
+    one file per audit, one bad file would otherwise stop every filing of every audit. Nothing is lost,
+    because the view keeps index.jsonl's row for that audit, and its own `check` still refuses. `skip`
+    is the audit being filed or recovered, whose file is about to be replaced and is not read.
+    """
+    index_path = registry / "index.jsonl"
+    listed: list[dict[str, Any]] = []
+    if index_path.exists() or index_path.is_symlink():
+        if index_path.is_symlink() or not index_path.is_file():
+            raise ValueError("registry index is not a regular file")
+        listed = _index_file_rows(index_path, strict=True)
+    own: dict[str, dict[str, Any]] = {}
+    broken: dict[str, str] = {}
+    for path in sorted(registry.glob("*/" + INDEX_ROW)):
+        if path.parent.name == skip:
+            continue
+        row, problem = _own_row(path)
+        if row is None:
+            broken[path.parent.name] = str(problem)
+        else:
+            own[path.parent.name] = row
+    conflicts = [(path.name, _index_file_rows(path, strict=False))
+                 for path in sorted(registry.glob(INDEX_CONFLICTS))
+                 if path.is_file() and not path.is_symlink()]
+    return listed, own, conflicts, broken
+
+
+def _warn_broken(broken: dict[str, str]) -> None:
+    for audit_id, problem in sorted(broken.items()):
+        print(f"WARNING: registry/{audit_id}/{INDEX_ROW} {problem}, so it was left out of index.jsonl (the row "
+              "index.jsonl holds for that audit is kept). That audit's `check` refuses until it is replaced: "
+              "finalization_receipt.py registry-recover <tree>/registry <its audit dir>", file=sys.stderr)
+
+
+def _is_current_filing(registry: pathlib.Path, row: dict[str, Any],
+                       pointers: dict[str, Any] | None = None) -> bool:
+    """Whether the row describes its audit's current filing (registry/<id>/current.json)."""
+    audit_id = row.get("audit_id")
+    if not isinstance(audit_id, str) or not SAFE_ID.fullmatch(audit_id):
+        return False
+    if pointers is not None and audit_id in pointers:
+        pointer = pointers[audit_id]
+    else:
+        try:
+            pointer = strict_json(registry / audit_id / "current.json")
+        except (OSError, ValueError):
+            pointer = None
+        if pointers is not None:
+            pointers[audit_id] = pointer
+    return (isinstance(pointer, dict) and pointer.get("version") == row.get("version")
+            and pointer.get("pair_manifest_sha256") == row.get("pair_manifest_sha256"))
+
+
+def _standing(registry: pathlib.Path, row: dict[str, Any], pointers: dict[str, Any]) -> int:
+    """A row against this host's registry/<id>/current.json, which can lag the index files (Dropbox syncs file by
+    file): 1 if current.json names it; 2 if it is a later filing whose versions/ folder has not reached this host,
+    so current.json lags it; -1 if this host holds its versions/ folder and current.json names a filing stamped no
+    earlier, so it was superseded; 0 if nothing here tells (a version stamp is a host's clock)."""
+    if _is_current_filing(registry, row, pointers):
+        return 1
+    pointer, version = pointers.get(row.get("audit_id")), row.get("version")
+    if (not isinstance(pointer, dict) or not isinstance(pointer.get("version"), str)
+            or not isinstance(version, str) or not SAFE_ID.fullmatch(version)):
+        return 0
+    try:
+        here = (registry / row["audit_id"] / "versions" / version).is_dir()
+    except OSError:
+        return 0
+    if version > pointer["version"]:
+        return 0 if here else 2
+    return -1 if here else 0
+
+
+def index_view(registry: pathlib.Path, sources: tuple[Any, Any, Any],
+               filed: dict[str, Any] | None = None) -> bytes:
+    """index.jsonl as a view of the registry rather than a file each filing reads, edits and rewrites.
+
+    Filing used to rewrite index.jsonl from this host's copy, and the host-local lock cannot see
+    another machine: a host whose Dropbox copy lagged wrote an index without rows other hosts had
+    filed, and Dropbox kept one version. Eleven filed audits lost their row that way (2026-09-28 to
+    10-18) and no longer passed `check`. The view is the union of index.jsonl, every audit's own
+    index_row.json, and each conflicted copy's row that is still its audit's current filing (an
+    audit removed from the registry is not brought back); one row per audit, its current filing
+    (registry/<id>/current.json) ahead of any other, then the newest, and the audit being filed
+    replaces its own row as before. The current filing comes first because a version stamp is a
+    host's clock: a superseded row stamped by a host whose clock ran ahead sorts above the row
+    that replaced it. This host's current.json can lag its index.jsonl, though, so a row for a later
+    filing whose versions/ folder has not reached this host comes before it (`_standing`), and a
+    conflicted copy, an older index, only fills a missing row or replaces one this host knows was
+    superseded: otherwise a host that had index.jsonl but not yet current.json from a re-filing put
+    the earlier filing's row back. Ordered by filing time, so any host holding the same rows writes
+    the same bytes.
+    """
+    listed, own, conflicts = sources[:3]
+    best: dict[str, tuple[tuple[int, str, str, int], dict[str, Any]]] = {}
+    pointers: dict[str, Any] = {}
+
+    def offer(row: dict[str, Any], rank: int) -> None:
+        key = (max(_standing(registry, row, pointers), 0), str(row.get("version")), str(row.get("filed_at")), rank)
+        held = best.get(row["audit_id"])
+        if held is None or key > held[0]:
+            best[row["audit_id"]] = (key, row)
+
+    for row in listed:
+        offer(row, 1)
+    for row in own.values():
+        offer(row, 2)
+    for _, rows in conflicts:
+        for row in rows:
+            held = best.get(row["audit_id"])
+            if _is_current_filing(registry, row, pointers) and (
+                    held is None or _standing(registry, held[1], pointers) < 0):
+                offer(row, 0)
+    if filed is not None:
+        best[filed["audit_id"]] = ((3, "", "", 3), filed)
+    rows = sorted((row for _, row in best.values()),
+                  key=lambda row: (str(row.get("filed_at")), str(row.get("version")), row["audit_id"]))
+    return b"".join(index_line(row) for row in rows)
+
+
 def registry_file(root: pathlib.Path, registry: pathlib.Path, run: dict[str, Any],
                   comment: dict[str, Any]) -> dict[str, Any]:
     audit_id = run.get("audit_id")
@@ -207,18 +440,10 @@ def registry_file(root: pathlib.Path, registry: pathlib.Path, run: dict[str, Any
     with lock_path.open("a+") as lock:
         lock_wait.acquire_exclusive(lock, "the registry lock")
         index_path = registry / "index.jsonl"
-        index_rows: list[dict[str, Any]] = []
-        if index_path.exists():
-            if index_path.is_symlink() or not index_path.is_file():
-                raise ValueError("registry index is not a regular file")
-            for number, line in enumerate(index_path.read_text(encoding="utf-8").splitlines(), 1):
-                if not line.strip():
-                    continue
-                row = validate_json_schema.strict_loads(line, source=f"{index_path}:{number}")
-                if not isinstance(row, dict) or not isinstance(row.get("audit_id"), str):
-                    raise ValueError(f"registry index line {number} is not a valid audit row")
-                if row["audit_id"] != audit_id:
-                    index_rows.append(row)
+        # read (and refuse a malformed index) before anything is filed, as before; this audit's own row
+        # file is not read, because this filing replaces it
+        sources = index_sources(registry, skip=audit_id)
+        _warn_broken(sources[3])
 
         audit_dir = registry / audit_id
         versions = audit_dir / "versions"
@@ -253,32 +478,12 @@ def registry_file(root: pathlib.Path, registry: pathlib.Path, run: dict[str, Any
         # Compatibility mirrors are non-canonical; current.json + immutable version is the pair.
         atomic_bytes(audit_dir / "run.json", (final_version / "run.json").read_bytes())
         atomic_bytes(audit_dir / "comment.json", (final_version / "comment.json").read_bytes())
-        row = {
-            "audit_id": audit_id,
-            "filed_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "version": version,
-            "pair_manifest_sha256": pair_manifest_hash,
-            "doi": run.get("paper_doi"),
-            "journal": (comment.get("bibliographic") or {}).get("journal"),
-            "findings_total": (comment.get("rollup") or {}).get("findings_total"),
-            "rounds_run": run.get("rounds_run"),
-            "stopping_reason": run.get("stopping_reason"),
-            "compliance_pass": (run.get("compliance") or {}).get("compliance_pass"),
-            "token_coverage": (run.get("token_accounting") or {}).get("coverage_fraction"),
-            # coverage_fraction counts an honestly-unavailable call as covered, so 1.0 does
-            # not mean full accounting. Carry the qualifier into the row a human compares
-            # audits with, or the registry reads as though every run was fully accounted.
-            "token_totals_are_lower_bounds": (
-                run.get("token_accounting") or {}).get("totals_are_lower_bounds"),
-            "invocations_with_unavailable_total": (
-                run.get("token_accounting") or {}).get("invocations_with_unavailable_total"),
-        }
-        index_rows.append(row)
-        data = "".join(json.dumps(item, sort_keys=True, ensure_ascii=False) + "\n" for item in index_rows)
-        atomic_bytes(index_path, data.encode())
-        index_row_sha256 = hashlib.sha256(
-            json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-        ).hexdigest()
+        row = index_row(run, comment, version=version, pair_manifest_sha256=pair_manifest_hash,
+                        filed_at=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        # The audit's own row, one writer, is what `check` reads; index.jsonl is rebuilt from the rows.
+        atomic_bytes(audit_dir / INDEX_ROW, index_line(row))
+        atomic_bytes(index_path, index_view(registry, sources, filed=row))
+        index_row_sha256 = index_row_hash(row)
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     return {
         "filed": True,
@@ -400,6 +605,7 @@ def check(root: pathlib.Path, *, require_registry: bool, require_publication: bo
             mismatched[relative] = row
     bound = {row["path"]: row for row in artifacts if isinstance(row, dict)}
     appended_types: list[str] = []
+    stale = ""
     if mismatched:
         off_journal = sorted(set(mismatched) - JOURNAL_PROJECTIONS)
         if off_journal:
@@ -462,19 +668,41 @@ def check(root: pathlib.Path, *, require_registry: bool, require_publication: bo
         if not appended_types and pair.get("run_sha256") != sha256(root / "run.json"):
             raise ValueError("registry immutable pair does not match current finalized metadata")
         index_matches = []
-        index_path = registry_root / "index.jsonl"
-        for number, line in enumerate(index_path.read_text(encoding="utf-8").splitlines(), 1):
-            if not line.strip():
-                continue
-            row = validate_json_schema.strict_loads(line, source=f"{index_path}:{number}")
-            if isinstance(row, dict) and row.get("audit_id") == run.get("audit_id"):
+        own_row = pointer_path.parent / INDEX_ROW
+        legacy = ""
+        if own_row.exists() or own_row.is_symlink():
+            # Filed since 2.7.9 (or recovered): the audit's own row decides. index.jsonl is a view
+            # that a host whose Dropbox copy lags can still write without this row.
+            try:
+                row = strict_json(own_row)
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"{exc}{RECOVER_HINT}") from exc
+            if not isinstance(row, dict) or row.get("audit_id") != run.get("audit_id"):
+                raise ValueError(f"registry {INDEX_ROW} does not hold this audit's row{RECOVER_HINT}")
+            if (row.get("version") == registry.get("version")
+                    and row.get("pair_manifest_sha256") == registry.get("pair_manifest_sha256")):
                 index_matches.append(row)
-        if len(index_matches) != 1:
-            raise ValueError("registry index does not contain exactly one row for this audit")
-        row_hash = hashlib.sha256(json.dumps(index_matches[0], sort_keys=True,
-                                             separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+            else:
+                # An earlier filing's row: a host on 2.7.8 or older re-filed the audit (it does not
+                # write this file), or a sync conflict kept another filing's copy. index.jsonl decides,
+                # as for a receipt filed before 2.7.9, and its row must still hash to the receipt.
+                stale = f" (its {INDEX_ROW} is from an earlier filing{RECOVER_HINT})"
+        else:
+            legacy = (f" (filed before {INDEX_ROW} existed; `finalization_receipt.py registry-audit <tree>/registry` "
+                      "says whether its row can be recovered)")
+        if not index_matches:
+            index_path = registry_root / "index.jsonl"
+            for number, line in enumerate(index_path.read_text(encoding="utf-8").splitlines(), 1):
+                if not line.strip():
+                    continue
+                row = validate_json_schema.strict_loads(line, source=f"{index_path}:{number}")
+                if isinstance(row, dict) and row.get("audit_id") == run.get("audit_id"):
+                    index_matches.append(row)
+            if len(index_matches) != 1:
+                raise ValueError("registry index does not contain exactly one row for this audit" + (stale or legacy))
+        row_hash = index_row_hash(index_matches[0])
         if row_hash != registry.get("index_row_sha256"):
-            raise ValueError("registry index row no longer matches the finalization receipt")
+            raise ValueError("registry index row no longer matches the finalization receipt" + (stale or legacy))
     if require_publication:
         if run.get("schema_version") != "2.1.0":
             raise ValueError("new publication requires metadata schema 2.1.0")
@@ -507,7 +735,132 @@ def check(root: pathlib.Path, *, require_registry: bool, require_publication: bo
         # Not a hidden pass: say what the journal gained, so an operator sees it.
         receipt = dict(receipt)
         receipt["journal_appended"] = appended_types
+    if stale:
+        # Nor this one: the audit's own row file is an earlier filing's, and index.jsonl's row was checked.
+        receipt = dict(receipt)
+        receipt["index_row_stale"] = True
     return receipt
+
+
+def registry_folder(path: pathlib.Path) -> pathlib.Path:
+    """The registry the operator commands work on: <tree>/registry, or the tree root it sits in (status.py and
+    publish take the tree root). Anything else is refused before a lock file is opened in it: given another
+    folder, registry-audit reported "0 filed audit(s)" and registry-recover left a .registry.lock behind."""
+    resolved = path.resolve()
+    for candidate in (resolved, resolved / "registry"):
+        if candidate.is_dir() and (candidate.name == "registry" or (candidate / "index.jsonl").is_file()
+                                   or any(candidate.glob("*/current.json"))):
+            return candidate
+    raise ValueError(f"{path} is not a registry folder (no index.jsonl, no <audit_id>/current.json); "
+                     "pass <tree>/registry")
+
+
+def registry_audit(registry: pathlib.Path) -> dict[str, Any]:
+    """Read-only: filed audits that no current index row holds, those a conflicted copy can give back, and
+    audits' own row files that are stale (an earlier filing's) or cannot be used. A filed audit whose current.json
+    cannot be used is listed as that alone: without it no row can be said to hold the audit, and registry-recover
+    refuses it."""
+    registry = registry_folder(registry)
+    listed, own, conflicts, broken = index_sources(registry)
+    pointers: dict[str, Any] = {}
+    in_index = {row["audit_id"] for row in listed if _is_current_filing(registry, row, pointers)}
+    filed = sorted(path.name for path in registry.iterdir()
+                   if path.is_dir() and SAFE_ID.fullmatch(path.name) and (path / "current.json").is_file())
+    report: dict[str, Any] = {
+        "filed": len(filed), "index_rows": len(listed), "own_rows": len(own),
+        "conflicted_copies": [name for name, _ in conflicts], "missing": {}, "lagging": [],
+        "stale": {}, "broken": broken, "unusable": {},
+    }
+    for audit_id in filed:
+        problem = _pointer_problem(registry / audit_id / "current.json")
+        if problem is not None:
+            report["unusable"][audit_id] = problem
+            broken.pop(audit_id, None)
+            continue
+        if audit_id in own and not _is_current_filing(registry, own[audit_id], pointers):
+            report["stale"][audit_id] = audit_id in in_index
+            continue
+        if audit_id in own:
+            if audit_id not in in_index:
+                report["lagging"].append(audit_id)
+            continue
+        if audit_id in in_index or audit_id in broken:
+            continue
+        report["missing"][audit_id] = next(
+            (name for name, rows in conflicts for row in rows
+             if row["audit_id"] == audit_id and _is_current_filing(registry, row, pointers)), None)
+    return report
+
+
+def _rebuilt_rows(audit_dir: pathlib.Path, pointer: dict[str, Any]) -> list[dict[str, Any]]:
+    """The row the filing wrote, rebuilt from the immutable pair it filed. filed_at is the one value
+    not stored there: it is the clock a moment after the version stamp, so every second of the
+    following minute is offered, and only the receipt's hash can pick one."""
+    version = pointer.get("version")
+    version_dir = audit_dir / "versions" / str(version)
+    try:
+        stamp = dt.datetime.strptime(str(version)[:15], "%Y%m%dT%H%M%S")
+        run, comment = strict_json(version_dir / "run.json"), strict_json(version_dir / "comment.json")
+    except (OSError, ValueError):
+        return []
+    if not isinstance(run, dict) or not isinstance(comment, dict):
+        return []
+    return [index_row(run, comment, version=version,
+                      pair_manifest_sha256=pointer.get("pair_manifest_sha256"),
+                      filed_at=(stamp + dt.timedelta(seconds=offset)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+            for offset in range(60)]
+
+
+def registry_recover(registry: pathlib.Path, receipt_path: pathlib.Path) -> str:
+    """Write a filed audit's missing index_row.json, only from a row that hashes to its receipt.
+
+    The candidates are the rows index.jsonl and the conflicted copies hold for the audit, and the row
+    rebuilt from its filed pair. None is trusted: the receipt's index_row_sha256 binds every field, so
+    nothing that was not filed can pass. The receipt must be the audit's current filing. A held
+    index_row.json is replaced only when it is stale (not the current filing: a host on 2.7.8 or older
+    re-filed the audit, or a sync conflict kept another filing's copy) or cannot be used; one that
+    claims the current filing and differs is left for a person to look at.
+    """
+    registry = registry_folder(registry)
+    if receipt_path.is_dir():
+        receipt_path = receipt_path / RECEIPT
+    receipt = strict_json(receipt_path)
+    binding = receipt.get("registry") if isinstance(receipt, dict) else None
+    audit_id = receipt.get("audit_id") if isinstance(receipt, dict) else None
+    if (not isinstance(binding, dict) or binding.get("filed") is not True
+            or not isinstance(audit_id, str) or not SAFE_ID.fullmatch(audit_id)
+            or not re.fullmatch(r"[0-9a-f]{64}", str(binding.get("index_row_sha256")))):
+        raise ValueError(f"{receipt_path.name} records no registry filing")
+    audit_dir = registry / audit_id
+    wanted = binding["index_row_sha256"]
+    with (registry / ".registry.lock").open("a+") as lock:
+        lock_wait.acquire_exclusive(lock, "the registry lock")
+        pointer = strict_json(audit_dir / "current.json")
+        if (not isinstance(pointer, dict) or pointer.get("version") != binding.get("version")
+                or pointer.get("pair_manifest_sha256") != binding.get("pair_manifest_sha256")):
+            raise ValueError(f"{audit_id}: the receipt is not the audit's current registry filing; nothing written")
+        row_path = audit_dir / INDEX_ROW
+        replaced = ""
+        if row_path.exists() or row_path.is_symlink():
+            held, problem = _own_row(row_path)
+            if held is not None and index_row_hash(held) == wanted:
+                return f"{audit_id}: {INDEX_ROW} already holds the receipt's row"
+            if held is not None and _is_current_filing(registry, held):
+                raise ValueError(f"{audit_id}: {INDEX_ROW} exists and differs from the receipt; not overwritten")
+            replaced = (f" (replaced one that {problem})" if held is None else
+                        f" (replaced a stale one, from filing {held.get('version')})")
+        sources = index_sources(registry, skip=audit_id)
+        _warn_broken(sources[3])
+        listed, _, conflicts, _ = sources
+        candidates = [("index.jsonl", row) for row in listed if row["audit_id"] == audit_id]
+        candidates += [(name, row) for name, rows in conflicts for row in rows if row["audit_id"] == audit_id]
+        candidates += [(f"versions/{pointer['version']}", row) for row in _rebuilt_rows(audit_dir, pointer)]
+        for source, row in candidates:
+            if index_row_hash(row) == wanted:
+                atomic_bytes(row_path, index_line(row))
+                atomic_bytes(registry / "index.jsonl", index_view(registry, sources, filed=row))
+                return f"{audit_id}: recovered {INDEX_ROW} from {source}{replaced}"
+        raise ValueError(f"{audit_id}: no candidate row hashes to the receipt's index_row_sha256; nothing written")
 
 
 def main() -> int:
@@ -520,11 +873,60 @@ def main() -> int:
     check_parser.add_argument("audit_dir", type=pathlib.Path)
     check_parser.add_argument("--require-registry", action="store_true")
     check_parser.add_argument("--require-publication", action="store_true")
+    audit_parser = sub.add_parser(
+        "registry-audit", help="read-only: filed audits that no index row holds, stale or unusable index_row.json, "
+                               "and unusable current.json")
+    audit_parser.add_argument("registry", type=pathlib.Path)
+    recover_parser = sub.add_parser(
+        "registry-recover",
+        help="write a filed audit's missing, stale or unusable index_row.json from a row its receipt hashes to")
+    recover_parser.add_argument("registry", type=pathlib.Path)
+    recover_parser.add_argument("receipts", type=pathlib.Path, nargs="+",
+                                help="an audit directory, or a finalization_receipt.json (e.g. metadata/<J>/<P>/)")
     args = parser.parse_args()
     try:
         if args.command == "create":
             result = create(args.audit_dir, args.registry)
             print(f"finalization receipt created for {result['audit_id']}")
+        elif args.command == "registry-audit":
+            report = registry_audit(args.registry)
+            print(f"registry: {report['filed']} filed audit(s), {report['index_rows']} row(s) in index.jsonl, "
+                  f"{report['own_rows']} {INDEX_ROW}, {len(report['conflicted_copies'])} conflicted "
+                  "copies of the index")
+            recover = ("finalization_receipt.py registry-recover <registry> <its audit dir or "
+                       "finalization_receipt.json>")
+            for audit_id, copy in report["missing"].items():
+                where = (f"its current row is in '{copy}'" if copy else
+                         "no index file holds it; registry-recover also rebuilds it from versions/")
+                print(f"  MISSING {audit_id}: no index row holds its current filing ({where}). "
+                      f"Recover with: {recover}")
+            for audit_id, held in report["stale"].items():
+                meanwhile = ("index.jsonl holds its current row, which `check` uses meanwhile" if held else
+                             "index.jsonl does not hold its current row either, so `check` refuses it")
+                print(f"  STALE {audit_id}: {INDEX_ROW} is from an earlier filing (re-filed by a host on 2.7.8 or "
+                      f"older, or a sync conflict kept another filing's copy); {meanwhile}. Replace it with: {recover}")
+            for audit_id, problem in sorted(report["broken"].items()):
+                print(f"  BROKEN {audit_id}: {INDEX_ROW} {problem}; filings leave it out and `check` of that audit "
+                      f"refuses. Replace it with: {recover}")
+            for audit_id, problem in report["unusable"].items():
+                print(f"  UNUSABLE {audit_id}: current.json {problem}" + (
+                    ": check follows one that stays inside the registry, but registry-audit and registry-recover "
+                    "refuse it; replace the link with a copy of its target" if problem == "is a symlink" else
+                    "; check, registry-audit and registry-recover all need it: let Dropbox finish syncing it, or "
+                    "restore it from the folder's version history"))
+            for audit_id in report["lagging"]:
+                print(f"  lagging {audit_id}: {INDEX_ROW} holds its current row, index.jsonl not yet (the next filing "
+                      "rewrites the view)")
+            return 1 if report["missing"] or report["stale"] or report["broken"] or report["unusable"] else 0
+        elif args.command == "registry-recover":
+            failed = 0
+            for receipt in args.receipts:
+                try:
+                    print(registry_recover(args.registry, receipt))
+                except (OSError, ValueError) as exc:
+                    print(f"REFUSED: {exc}", file=sys.stderr)
+                    failed = 1
+            return failed
         else:
             result = check(args.audit_dir, require_registry=args.require_registry,
                            require_publication=args.require_publication)
@@ -535,6 +937,9 @@ def main() -> int:
                       f"{', '.join(sorted(set(appended)))})")
             else:
                 print(f"finalization receipt valid for {result['audit_id']}")
+            if result.get("index_row_stale"):
+                print(f"NOTE: registry/{result['audit_id']}/{INDEX_ROW} is from an earlier filing, so the row in "
+                      f"index.jsonl was checked{RECOVER_HINT}", file=sys.stderr)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"FATAL: {exc}", file=sys.stderr)
         return 1

@@ -320,12 +320,15 @@ now = datetime.datetime.now(datetime.timezone.utc)
 rows = sorted(RES.glob("*.json"))
 if not rows: print("(no active reservations)")
 for f in rows:
-    try: d = json.load(open(f))
+    # 2.7.11: one claim with no owner or another time format ended the whole listing with a traceback (reap held it)
+    try:
+        d = json.load(open(f))
+        t = datetime.datetime.strptime(d["claimed_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+        owner = str(d["owner"])
     except Exception: print(f"  UNREADABLE  {f.name}"); continue
-    t = datetime.datetime.strptime(d["claimed_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
     age = (now - t).days
     flag = "STALE" if age >= days else "     "
-    print(f"  {flag}  {d['owner']:<28} {age:>2}d  {f.stem[:70]}")
+    print(f"  {flag}  {owner:<28} {age:>2}d  {f.stem[:70]}")
 conf = list(RES.glob("*conflicted copy*"))
 for c in conf: print(f"  CONFLICT COPY (resolve: earliest claimed_at wins): {c.name}")
 PY
@@ -345,12 +348,40 @@ reap () {
   local RES="$ROOT/reservations"
   [ -d "$RES" ] || { echo "(no reservations directory yet)"; return 0; }
   python3 - "$RES" "$ROOT" "$STALE_DAYS" "$FORCE" "$OWNER" "${I4R_REAP_ANY_OWNER:-0}" <<'PY'
-import datetime, glob, json, pathlib, sys
+import datetime, glob, json, pathlib, re, sys
 RES, ROOT, days, force = (pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]),
                           int(sys.argv[3]), sys.argv[4] == "--force")
 me, any_owner = sys.argv[5], sys.argv[6] == "1"
 now = datetime.datetime.now(datetime.timezone.utc)
 reaped = held = 0
+ARCHIVED = re.compile(r"(?:\.failed-|\.archived-|_backup_|\.bak$|\.old$)")   # status.py's ARCHIVED
+
+def _archived(audit):
+    """An audit kept for the record: under old_runs/, or in (or under) a folder named like an archived sibling."""
+    try:
+        where = audit.resolve().relative_to(ROOT.resolve()).parts
+    except ValueError:
+        where = audit.parts
+    return bool(where) and (where[0] == "old_runs" or any(ARCHIVED.search(part) for part in where))
+
+_NAMED = None
+def _named_audits():
+    """paper basename -> the live (non-archived) audit folders whose paper_source.json names it; one walk per reap."""
+    global _NAMED
+    if _NAMED is None:
+        _NAMED = {}
+        for source in ROOT.rglob("paper_source.json"):
+            if _archived(source.parent):
+                continue
+            try:
+                claimed = json.loads(source.read_text())
+            except Exception:
+                continue
+            named = (claimed.get("paper") or claimed.get("paper_dir") or "") if isinstance(claimed, dict) else ""
+            if named:
+                _NAMED.setdefault(pathlib.Path(str(named)).name, []).append(source.parent)
+    return _NAMED
+
 for f in sorted(RES.glob("*.json")):
     try:
         d = json.loads(f.read_text())
@@ -398,30 +429,37 @@ for f in sorted(RES.glob("*.json")):
         held += 1
         continue
     literal = pathlib.Path(str(d["paper"]))
+    # 2.7.11: an archived copy of the paper's audit (old_runs/, an audit.failed-* sibling: status.py's ARCHIVED) is
+    # never the only proof consulted. Its journal still counts (the youngest journal decides, so it can only hold a
+    # claim), but when every journal the globs find is archived, the live audits are looked up as well.
+    live_seen = False
+    def _glob_seen(journal):
+        global live_seen
+        _seen(journal)
+        live_seen = live_seen or not _archived(journal.parent)
     if literal.is_dir():
         for journal in literal.glob("audit*/run.events.jsonl"):
-            _seen(journal)
+            _glob_seen(journal)
     base = glob.escape(literal.name)
     for journal in ROOT.glob(f"runs/*/{base}/audit*/run.events.jsonl"):   # 2.5.0 layout
-        _seen(journal)
+        _glob_seen(journal)
     for journal in ROOT.glob(f"*/{base}/audit*/run.events.jsonl"):        # legacy layout
-        _seen(journal)
+        _glob_seen(journal)
     idle = min(seen_ages) if seen_ages else None
-    if idle is None:
-        # An audit relocated off its paper folder records the true paper in paper_source.json.
-        for source in ROOT.rglob("paper_source.json"):
-            try:
-                claimed = json.loads(source.read_text())
-            except Exception:
-                continue
-            named = claimed.get("paper") or claimed.get("paper_dir") or ""
-            if named and pathlib.Path(str(named)).name == literal.name:
-                _seen(source.parent / "run.events.jsonl")
-                unknown_location = False
-                break
-        else:
-            unknown_location = True
-        idle = min(seen_ages) if seen_ages else None
+    unknown_location = idle is None
+    if not live_seen:
+        # An audit relocated off its paper folder, or run in a folder without the title's ?*[]{}\ characters
+        # (new_audit.sh drops them), records the true paper in paper_source.json. 2.7.11: every live one counts and the
+        # youngest journal decides; one with no journal yet holds the claim. This stopped at the FIRST match, which could
+        # be an archived audit of the same paper, and judged a live audit by that copy's old journal: WOULD REAP, and
+        # with --force it released the live audit's claim.
+        named_audits = _named_audits().get(literal.name, [])
+        unknown_location = unknown_location and not named_audits
+        journals = [audit / "run.events.jsonl" for audit in named_audits]
+        for journal in journals:
+            _seen(journal)
+        no_journal_yet = any(not journal.is_file() for journal in journals)
+        idle = None if no_journal_yet else (min(seen_ages) if seen_ages else None)
         if idle is None and unknown_location:
             print(f"  UNKNOWN  {age:>3}d claim, no audit directory found anywhere: "
                   f"{literal.name[:44]} (held; reap cannot prove it is abandoned)")

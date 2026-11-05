@@ -128,6 +128,9 @@ fi
 python3 "$(cd "$(dirname "$0")" && pwd)/generate_finding_artifacts.py" "$A" --check || {
   echo "FATAL: canonical finding projections are missing or divergent" >&2; exit 1
 }
+# 2.7.11: the synced folder strips pkg/'s read-only mode, which the archive gate refuses; give it back when every file
+# still matches the intake manifest (modes only)
+python3 "$SCRIPT_DIR/refreeze_pkg.py" "$A" || true
 python3 "$(cd "$(dirname "$0")" && pwd)/validate_round_projections.py" "$A" --require-post-delta-gates || {
   echo "FATAL: the critique-round check above failed; fix the cause named in its FATAL line, re-run finalize_run.sh, then publish again" >&2; exit 1
 }
@@ -150,6 +153,14 @@ python3 "$(cd "$(dirname "$0")" && pwd)/finalization_receipt.py" check "$A" \
   echo "  finalize_run.sh; then publish again." >&2
   exit 1
 }
+# 2.7.10: the claims script filed below is the one a replicator gets; it must run on its own (stage_release.sh runs
+# the same check, but a claims script rebuilt after staging would otherwise be published unchecked). 2.7.11: --release
+# re-publishes a pre-2.7.10 script this audit already published as it was sent (a warning, never a refusal).
+for claims_file in "$A"/claims_script.*; do
+  bash "$(cd "$(dirname "$0")" && pwd)/check_claims_script.sh" --release "$A" "$claims_file" || {
+    echo "FATAL: $(basename "$claims_file") does not run on its own; fix it as stage_release.sh says, then finalize and publish" >&2
+    exit 1; }
+done
 
 python3 "$(cd "$(dirname "$0")" && pwd)/validate_json_schema.py" \
   "$RUN" "$(cd "$(dirname "$0")/../schemas" && pwd)/run.schema.json" >/dev/null || exit 1

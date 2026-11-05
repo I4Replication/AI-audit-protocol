@@ -57,7 +57,7 @@ import record_invocation  # noqa: E402
 
 IGNORED = shutil.ignore_patterns(
     ".git", ".pytest_cache", "__pycache__", "_history*", "CHEATSHEET.pdf", ".DS_Store", "*.pyc")
-OK_LINE = "POLICY DRIFT CHECK OK: v2 policy/docs agree and twenty planted drifts were rejected"
+OK_LINE = "POLICY DRIFT CHECK OK: v2 policy/docs agree and twenty-two planted drifts were rejected"
 PHASE1_LINE_2610 = "- Phase 1: 5 auditors, 5-up; all areas 1,2,3,4,5 use `sonnet-5` (`sonnet`), effort `max`."
 CLAUDE_PINS = ("coordinator policy is not", "one or more phase-1 auditors is not assigned to",
                "post-fan-out verifier policy is not", "auditor routing is",

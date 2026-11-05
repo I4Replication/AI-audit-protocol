@@ -256,14 +256,14 @@ class StagedRecordsAreNeutralised(unittest.TestCase):
         report = self.write("REPORT_final.md", f"See {HOME}kmensah/pkg and k.mensah@uni.edu.\n")
         rewritten = rrm.neutralise_records(self.release, cdv.record_file)
         rrm.note(self.release, rewritten)
-        self.assertEqual(sorted(rewritten), [("critique/round_2/critic_stats.md", 1, 1),
-                                             ("work/a5_privacy_archive/phase1_evidence/abc/scan.py", 1, 0)])
+        self.assertEqual(sorted(rewritten), [("critique/round_2/critic_stats.md", 1, 1, 0),
+                                             ("work/a5_privacy_archive/phase1_evidence/abc/scan.py", 1, 0, 0)])
         self.assertIn(f"{WIN_HOME}<user-dir>/Desktop/study", critic.read_text(encoding="utf-8"))
         self.assertIn("[e-mail address]", critic.read_text(encoding="utf-8"))
         self.assertIn("corresponding@uni.edu", critic.read_text(encoding="utf-8"))
         self.assertEqual(json.loads(evidence.read_text(encoding="utf-8"))["fixture"], f"{HOME}janedoe/x")
         note = (self.release / crp.NEUTRALISATION_NOTE).read_text(encoding="utf-8")
-        self.assertIn("critique/round_2/critic_stats.md  (1 path(s), 1 address(es))", note)
+        self.assertIn("critique/round_2/critic_stats.md  (1 path(s), 1 address(es), 0 date(s))", note)
         self.assertNotIn("mensah", note)
         issues = crp.inspect_tree(self.release, identifiers=True)
         self.assertTrue(issues)

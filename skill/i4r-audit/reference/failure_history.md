@@ -31,7 +31,7 @@ patterns, so every rule containing that `?` compiled to a pattern matching nothi
 | Preflight receipt reported `sandbox_paths: true` on a completely inert sandbox | Every preflight write goes through Python, not through the sandbox, so it cannot distinguish a working sandbox from a dead one | Receipt adds `sandbox_rules_expressible`, the one sandbox property decidable without a provider call |
 | Capability probe passed on the same inert sandbox | The probe only used the Write tool, which takes a relative path under cwd and is not seatbelt-confined, so it succeeds when every rule is inert | Probe must now produce `evidence/bash.ok` (`mkdir`+`cp`) and `packet_listing.txt` (`find`), verified on disk |
 | Two roles each burned all three attempts on `API Error: Connection closed mid-response` | Symptom, not cause: the roles fought a dead environment for 24 and 46 turns until context reached 1.98M and 2.71M tokens and the connection dropped | Denials of allowlisted commands raise `EnvironmentFaultError` and pause the phase instead of re-sampling |
-| Absolute `/Users/<account>/...` path in `phase1/status.json` | The role-failure path writes `str(exc)` directly, bypassing `make_terminal_record` where `redact_private_paths` is applied | Redact at the `failures[role]` assignment |
+| Absolute `/Users/<account>/...` path in `phase1/status.json` | The role-failure path writes `str(exc)` directly, bypassing `make_terminal_record` where `redact_private_paths` is applied | Redact at the `failures[role]` assignment; 2.7.9: also the preflight and probe pause paths (`status.json` and the `pause_start` event, which reached `run.json` and stopped the coordinator on audit A93) and the launch and catch-all status errors; then `provider_safe_text`, which also withholds a participant-code-shaped name (a deposit file named in a manifest mismatch or the deadline's step label) from every pause, status error and terminal row |
 
 Measured character set: `?`, `*`, `[`, `]`, `{`, `}` and `\\` break the rules; space, `:`, `~`,
 `(`, `)` and `!` are safe. An audit root containing a colon and spaces ran normally.
@@ -50,12 +50,13 @@ not see it because the fakes emit validator-perfect output. Symptom, cause and r
 |---|---|---|
 | `scientific_fields has an invalid exact field set` from 4 of 5 roles | Prompt said "passed-check IDs, open-question IDs"; validator required `passed_check_ids`, `open_question_ids` | Name every validated key literally; `tests/test_prompt_contract.py` pins the prompt to the validator's vocabulary |
 | `role evidence must be a regular non-symlink file: .../evidence/evidence/x.R` | Manifest paths resolve under `evidence/`; prompt never said so, roles prefixed `evidence/` | Prompt states the path base with an example |
-| `role output contains files outside the closed output contract` | Roles left `work/`, `scratch/`; prompt told them to copy code there and never said to clean up | Prompt states the closed contract and the cleanup step |
+| `role output contains files outside the closed output contract` | Roles left `work/`, `scratch/`; prompt told them to copy code there and never said to clean up | Prompt states the closed contract and the cleanup step. 2.7.9: the CLI refuses the cleanup when it is `cd <output.partial> && rm ...` (it checks a compound command part by part), so a leftover outside `evidence/` is moved to the attempt's `non_contract_scratch/`, recorded, and the output admitted; an extra under `evidence/` is still refused, by name |
 | `role evidence manifest contains an unbound source hash` | `ROLE_PACKET` carries both `source_manifest` and `assigned_evidence`; prompt said "copied from ROLE_PACKET" | Every citation names `source_manifest`; the index files are listed as never citable |
 | `provider reported sandbox permission denials` rejecting five complete reports | Denial treated as an authorization failure; under `--bare` the docile model never tripped it | Denials are recorded to `sandbox_denials.json`, not fatal |
 | `Not logged in · Please run /login` from every probe | `--bare` never reads OAuth or keychain credentials | Runners use `--safe-mode` only; `sandbox_policy_hash` records `bare: False` |
 | `capability probe exceeded 25000 normalized tokens` | Bound calibrated for bare mode's stripped context; safe mode costs ~70-100k before any work | Bound is 150,000, measured |
 | `capability probe exceeded 150000 normalized tokens` (2.7.0 and earlier audits) | A bound calibrated on 81-98k probes: by 2026-09-30T09:02Z, 11 of the 37 probes in `runs/` that used tokens went over it (160,004-254,191, in 8 audits; 3 also failed the contract check), against 26 passing at 67,830-149,259 | 2.7.1: new audits freeze 350,000 (about 1.4 times the worst); an existing audit keeps 150,000 (it keys its probe and receipts). Re-run the probe: all 8 audits passed on a retry after 1-3 over-bound probes. Or, before Phase 1 is paid for, re-initialise with the full `init_run.sh --force` command (INSTALL.md) |
+| Coordinator failed after most of an hour: `cites an unbound evidence hash: package_manifest.json` (or `unbound dependency: work/safe_evidence/manifest.json`), four audits | The prompt says to cite by `origin` in `input_manifest.json`, which lists the audit context with a sha256; `known_evidence` bound none of it | 2.7.9: `PAPER.txt`, the safe-evidence manifest and an unmasked `package_manifest.json` are bound at their live hash; `run.json` and the policy snapshot, whose bytes change later, are refused by name |
 | `completed invocation output hash mismatch` blocking the coordinator | Validator re-hashed every historical completed row; roles re-promote to fixed canonical paths | `read_ledger` byte-verifies only the latest completed row per artifact |
 | Transport drop classified `permanent`, no retry | Error text `API Error: Connection closed mid-response` matched no transient pattern | Classifier treats connection closed/reset/timeout as transport |
 | Coordinator succeeded (45 turns, 35 min) and reported four complete files, but `output.partial` was empty and the attempt failed `schema` | The model wrote to the attempt directory, one level up; the CLI's Write tool ignores the sandbox filesystem rules, so only cwd and prose steered it | Attempt root is read-only during the call; prompt names the working directory; `recover_misplaced_coordinator_outputs.py` relocates and revalidates without a provider call |
@@ -75,6 +76,7 @@ the prompt contains it. A green fake-provider suite proves nothing about this cl
 | Every critic fails with no output | Rejected model, exhausted credits, or network failure was retried as if transient | Probe once, preserve the provider error, and fail fast on deterministic failures |
 | A retry storm exceeds the configured budget | Parallel and serial passes reset independent counters | Count attempts per role across all execution modes and resumes |
 | A live shell reports syntax failure on a valid line | The running shell script was edited while Bash was reading it | Never edit a driver during its run; resume the same round after the process exits |
+| A critic or the adjudicator stopped `permanent` on attempt 1 of 3 (`authentication`, `unsupported_model`, `deterministic_schema` or plain `permanent`) when Codex said `Selected model is at capacity. Please try a different model.` (six audits, 2026-09-23 to 10-24) | `failure.log` carries the whole session transcript, and the classifier took the first rule matching anywhere: a printed `PIPELINE_POLICY.json` names `authentication`. No rule matched the capacity message | 2.7.9: only stderr, `validation.txt`, the `error` and `turn.failed` event rows and Codex's own warnings are classified, also past the log's 200 rows (read from the `events.jsonl` beside it); the provider's last word decides when it names a cause, and there at capacity, overloaded and server busy are `throttling` |
 
 One audit spent 22 hours waiting for a case-sensitive log phrase after the round had finished in 17
 minutes. The general rule is more important than the incident: silence must never be ambiguous
@@ -220,6 +222,26 @@ snapshot. A raise is `amend_round_cap.py` (the snapshot history, a read-only arc
 bytes, a `policy_amendment` event). A new round on a finalized audit needs a journaled
 `audit_reopened`. `round_cap_amendment.py` proves the chain at finalize and publication. Tests:
 `tests/test_269_round_cap_amendment.py`.
+
+## The shared registry index lost rows across machines (2026-09-28 to 10-18, fixed in 2.7.9)
+
+Every filing read `registry/index.jsonl`, changed it and rewrote it under an flock, which only
+excludes processes on the same machine. A machine whose Dropbox copy lagged by one to four hours
+filed with an index that lacked rows other machines had filed, and Dropbox kept one version: five
+times it left the other as a conflicted copy, other times nothing. Eleven filed audits lost their
+row (the per-audit `registry/<id>/` folders, with one writer each, all survived). The loss was
+silent, because publish checks on the filing machine, whose copy still had the row. Every later
+`check --require-registry` and every re-publication of those audits was refused. Each audit's row
+now also lives in its own `registry/<id>/index_row.json`, which `check` reads, and `index.jsonl` is
+a view rebuilt from all rows, conflicted copies included. Rows lost before the fix are restored by
+`finalization_receipt.py registry-recover`, and only when the row hashes to the receipt. On a scratch
+copy of the registry, all eleven rows were restored this way (five from conflicted copies, six rebuilt
+from the filed pair). The review of the fix found two dead ends in the row files themselves. A machine
+still on 2.7.8 that re-files an audit leaves the earlier filing's `index_row.json` behind, and `check`
+trusted it and refused the audit for good. One empty or unreadable `index_row.json` stopped every
+filing. `check` now uses `index.jsonl` when the row file is stale, filings skip a broken one with a
+warning, and `registry-audit` lists both. `registry-recover` replaces both, only with the row the receipt
+hashes to. Tests: `tests/test_279_registry.py`.
 
 ## Release and metadata failures
 

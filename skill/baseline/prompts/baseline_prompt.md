@@ -21,16 +21,25 @@ yourself before you stop.
     template, disclosure findings, objectivity and prose.
   - `house_citations.md`: the two protocol citations, the in-text sentence and the byline.
   - `FINDINGS_FORMAT.md`: the machine-readable record you also write.
-- `{PACKET}/tools/validate_outputs.py`: a checker for your outputs. Run
-  `python3 {PACKET}/tools/validate_outputs.py .` from the current directory before you finish, and fix every error
-  it reports.
+  - `verification_guide.md`: how each finding gets one check that a replicator can run (sections 2 to 4, and the
+    snippets table in section 5).
+- `{PACKET}/tools/validate_outputs.py`: a checker for your outputs. It also builds your claims script with the
+  pipeline's own builder and runs it against the deposit. Run `python3 {PACKET}/tools/validate_outputs.py .` from the
+  current directory before you finish, with the Bash tool's longest timeout (600000 ms), and fix every error it
+  reports.
 - The current directory: the only place you can write. The inputs are also reachable from it as `../input/raw/pkg/`,
   `../input/raw/paper/` and `../input/indexes/`, which keeps absolute paths out of your scripts.
 
 The reference files were written for a multi-stage pipeline in which several auditors, a coordinator, external
 critics and revision rounds work in sequence. You are none of those. Ignore every instruction about rounds, critics,
-adjudication, ledgers (LEDGER.md, ADJUDICATION.md), settled facts, verifiers, claim tags, role packets, `work/` or
-`report/` paths, generator scripts and build commands. Apply their standards for what to check, how to evidence a
+adjudication, ledgers (LEDGER.md, ADJUDICATION.md), settled facts, claim tags, role packets, `work/` or `report/`
+paths, generator scripts and build commands. verification_guide.md is written for the pipeline's verifier: take from it
+the contract for one check per finding, and leave its notebook, wrappers and projection aside, since the checker builds
+and runs your checks. Four of its statements do not hold for you: you write `verification_snippets/C-n.*` yourself
+(ignore what it says about generate_finding_artifacts and verification_snippet.path); your claims script's
+`read_deposit()` reads only csv, tsv, txt and rds files (ignore section 1's list); the script has no `SCRATCH`,
+`judgement()` or `unverifiable()`, so a judgement is a `C-n.judgement` file and scratch files go under `tempdir()`;
+and there is no coordinator, so a number that does not reproduce is corrected in the comment. Apply their standards for what to check, how to evidence a
 finding, how to classify it and how to write the comment. Aim directly for at most ten body pages, ignoring the
 "nine pages before Round 2" target. Where report_structure.md moves detail to a ledger, cut that detail instead.
 
@@ -61,7 +70,8 @@ dates and clock times on a different line from any sentence that mentions partic
 Work plan. Every tool call re-reads your whole context, so cost scales with the number of turns, not the amount of
 analysis. Read the reference files, the paper and the package first. Then write a small number of analysis scripts
 (Python or R) that perform your planned checks and write their results as files under `evidence/`. Run them and fix
-them rather than issuing one command per check. Then write the comment from those results.
+them rather than issuing one command per check. Then write the comment from those results. When the findings are settled, write one verification snippet per
+finding from the same results and run the checker, which runs every check.
 
 ## What to write
 
@@ -84,6 +94,28 @@ When you finish, the current directory holds exactly these files:
 - `evidence/`: the scripts that reproduce every quantitative claim, and their aggregate results. Never participant
   rows. Use text formats (scripts, CSV, Markdown, JSON, logs) and figures as PNG, SVG or PDF; binary or compressed
   data files cannot be checked and are not kept.
+- `verification_snippets/`: one check per finding, as the pipeline's verification notebook and claims script take
+  them (verification_guide.md). For finding Fn write `C-n.R` when the finding can be checked by computation, and
+  otherwise `C-n.judgement` (first line the assessment, the rest its basis) or `C-n.unverifiable` (first line the
+  reason, the rest context). A `C-n.R` first calls `expect("C-n", name = value, ..., tol = ..., note = "...")` with
+  the values the comment states, before computing anything, then computes those values from the deposit or the
+  article text and calls `check("C-n", name = computed, ...)`. Every declared name is checked, every observed value
+  has length 1, and each note says where the expected value comes from and why the tolerance is what it is. Shared
+  loaders and helpers go in `_prelude.R`, which never calls `expect()` or `check()`. The snippets are assembled, in
+  finding order, into a claims script that a replicator runs on its own in R with the deposit's folder in
+  `I4R_PKG_DIR`. That script provides `PKG_DIR`, `AUDIT_DIR` (the article text is
+  `file.path(AUDIT_DIR, "paper", "paper.txt")`), `read_deposit()` for csv, tsv, txt and rds files, `expect()` and
+  `check()`; load any other format in `_prelude.R` with the matching package (readxl, haven and so on). Write only
+  under `tempdir()`, never beside the deposit; do not use the network or install packages; print counts and
+  aggregates only, never a participant's value. `check()` compares a number with its expectation within the
+  tolerance, and anything else with `identical()`: give each observation the type of its expectation (wrap it in
+  `isTRUE()`, `as.character()` or `unname()`), and a numeric expectation a single numeric observation. Set each
+  tolerance from the precision the comment prints (or the Monte-Carlo error of a stochastic value) and say so in the
+  note. Where the comment reports that a value does not reproduce, the expected value is the deposit's value as the
+  comment states it, not the paper's. The whole script must finish within nine minutes. Every check must pass. A FAIL
+  means the check or the comment is wrong (verification_guide.md section 4): correct whichever is wrong, change a
+  tolerance only for a stated reason given in its note, and change an expected value only to the value the comment
+  states. Never loosen a tolerance or move an expected value just until a check passes.
 
 Rules for every file you write:
 - Never write an absolute filesystem path. Refer to deposited files by their package-relative paths such as

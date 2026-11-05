@@ -19,7 +19,10 @@ CLAUDE_ROUTES_PATH = ROOT / "scripts" / "claude_routes.py"
 PROBE_BOUNDS_PATH = ROOT / "scripts" / "probe_bounds.py"
 PHASE1_TIMEOUTS_PATH = ROOT / "scripts" / "phase1_timeouts.py"
 CRITIQUE_TIMEOUTS_PATH = ROOT / "scripts" / "critique_timeouts.py"
+PRE_DISPATCH_DEADLINES_PATH = ROOT / "scripts" / "pre_dispatch_deadlines.py"
 CLAIM_CHANGE_RULES_PATH = ROOT / "scripts" / "claim_change_rules.py"
+CLAUDE_THINKING_TOKENS_PATH = ROOT / "scripts" / "claude_thinking_tokens.py"
+SNAPSHOT_EVIDENCE_RULES_PATH = ROOT / "scripts" / "snapshot_evidence_rules.py"
 VERIFIER_TABLE = re.compile(
     r"<!-- VERIFIER-VERDICT-OUTCOME:START -->(.*?)<!-- VERIFIER-VERDICT-OUTCOME:END -->", re.DOTALL)
 ROUTE_KEYS = ("requested_model", "spawn_alias", "provider", "reasoning_effort")
@@ -66,10 +69,27 @@ LEGACY_PHASE1_TIMEOUT = 2700
 # I4R_PROVIDER_TIMEOUT_SECONDS, as before. A literal: check_critique_timeouts joins it to the module.
 SHIPPED_CRITIQUE_TIMEOUT = 5400
 LEGACY_CRITIQUE_TIMEOUT = 2700
+# 2.7.9: the pre-dispatch rule a NEW audit freezes in phase_1.runtime.pre_dispatch_deadline_scaling (60 s plus time
+# for the deposit's bytes and files, capped). Every audit initialised before 2.7.9 froze no such leaf and keeps
+# exactly 60 s, which the runtime still admits, so only this pin sees the leaf go. A literal: check_pre_dispatch_
+# deadlines joins it to scripts/pre_dispatch_deadlines.py.
+SHIPPED_PRE_DISPATCH_SCALING = {"package_bytes_per_second": 10000000, "package_files_per_second": 5, "max_seconds": 600}
 # 2.7.4: the later-round claim-change rule a NEW audit freezes (specialists re-review only substantive changes;
 # completeness reviews every changed finding). An audit initialised earlier froze no leaf and keeps the legacy
 # rule. A literal: check_claim_change_rules joins it to scripts/claim_change_rules.py.
 SHIPPED_CLAIM_CHANGE_RULE = "substantive_specialists_1"
+# 2.7.11: a NEW audit freezes metadata.claude_reasoning_tokens, so its Claude rows record the CLI's thinking count as
+# reasoning_tokens. An audit initialised earlier froze no leaf and keeps the 2.7.10 parse (null). A literal:
+# check_claude_thinking_tokens joins it to scripts/claude_thinking_tokens.py.
+SHIPPED_CLAUDE_REASONING_TOKENS = "thinking_tokens"
+# 2.7.11: the critic snapshot-evidence rule a NEW audit freezes (cited files plus the deposit, within bounds). An audit
+# initialised earlier froze no leaf and keeps the cited-only rule. A literal: check_snapshot_evidence_rules joins it
+# to scripts/snapshot_evidence_rules.py.
+SHIPPED_SNAPSHOT_EVIDENCE_RULE = "cited_plus_deposit_1"
+# Its bounds (inventory rows, inventory path characters, bytes per file, bytes per snapshot) belong to the rule name:
+# an audit that froze the name keeps them, and the rows keep the critic schema's evidence enums under the provider's
+# 250-value limit. A literal, joined to the module by check_snapshot_evidence_rules; new bounds are a new rule name.
+SNAPSHOT_EVIDENCE_BOUNDS = {"cited_plus_deposit_1": (230, 15000, 25 * 1024 * 1024, 100 * 1024 * 1024)}
 # A value printed for init_run.sh --auditor-model: separated by whitespace or "=", optionally opened by a quote.
 AUDITOR_MODEL_FLAG = re.compile(r"--auditor-model(?:\s+|=)[\"']?([A-Za-z0-9][A-Za-z0-9._-]*)")
 # The HTML tags the maintained documents use, by name: a Markdown placeholder such as <audit-dir> is not a tag, and
@@ -81,7 +101,10 @@ _CLAUDE_ROUTES = None
 _PROBE_BOUNDS = None
 _PHASE1_TIMEOUTS = None
 _CRITIQUE_TIMEOUTS = None
+_PRE_DISPATCH_DEADLINES = None
 _CLAIM_CHANGE_RULES = None
+_CLAUDE_THINKING_TOKENS = None
+_SNAPSHOT_EVIDENCE_RULES = None
 
 
 def load_policy() -> dict:
@@ -113,6 +136,35 @@ def load_claude_routes():
         spec.loader.exec_module(module)
         _CLAUDE_ROUTES = module
     return _CLAUDE_ROUTES
+
+
+# 2.7.11: the claims-script harness the shipped policy freezes into every new audit (publication.claims_script_harness).
+SHIPPED_CLAIMS_SCRIPT_HARNESS = "portable_1"
+
+
+def load_claims_harness():
+    """scripts/claims_harness.py from THIS tree (never another copy on sys.path)."""
+    spec = importlib.util.spec_from_file_location("i4r_drift_claims_harness", ROOT / "scripts" / "claims_harness.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_claims_harness(errors: list[str]) -> None:
+    """The shipped harness, its pin and scripts/claims_harness.py say one thing (2.7.11), and the module still builds
+    the 2.7.10 harness every audit without the leaf keeps."""
+    try:
+        harness = load_claims_harness()
+        shipped, live, legacy = harness.SHIPPED_HARNESS, list(harness.LIVE_HARNESSES), harness.LEGACY_HARNESS
+    except Exception as exc:  # a broken or incomplete module is a finding, not a checker crash
+        errors.append(f"claims-script harness module cannot be loaded: {type(exc).__name__}: {exc}")
+        return
+    if shipped != SHIPPED_CLAIMS_SCRIPT_HARNESS or shipped not in live:
+        errors.append(f"scripts/claims_harness.py SHIPPED_HARNESS is {shipped!r}, expected "
+                      f"{SHIPPED_CLAIMS_SCRIPT_HARNESS!r}")
+    if legacy != "notebook_setup_1" or legacy not in live:
+        errors.append("scripts/claims_harness.py LIVE_HARNESSES no longer holds the 2.7.10 harness every audit "
+                      "initialised before 2.7.11 keeps")
 
 
 def load_probe_bounds():
@@ -241,10 +293,17 @@ def check_policy_shape(policy: dict, errors: list[str]) -> None:
     if type(leaf_timeout) is not int or leaf_timeout != SHIPPED_PHASE1_TIMEOUT:
         errors.append(f"the Phase-1 leaf provider_timeout_seconds is {leaf_timeout!r}, not "
                       f"{SHIPPED_PHASE1_TIMEOUT}, the Phase-1 timeout")
+    # 2.7.9: the pre-dispatch rule a new audit freezes; also inside the exact runtime pin below, with its own message.
+    runtime_scaling = (policy["phase_1"].get("runtime") or {}).get("pre_dispatch_deadline_scaling")
+    if runtime_scaling != SHIPPED_PRE_DISPATCH_SCALING or any(
+            type(value) is not int for value in (runtime_scaling or {}).values()):
+        errors.append(f"the Phase-1 pre-dispatch rule phase_1.runtime.pre_dispatch_deadline_scaling is "
+                      f"{runtime_scaling!r}, not {SHIPPED_PRE_DISPATCH_SCALING}")
     expected_phase1_runtime = {
         "orchestrator": "scripts/run_phase1.py",
         "timeout_seconds": SHIPPED_PHASE1_TIMEOUT,
         "pre_dispatch_deadline_seconds": 60,
+        "pre_dispatch_deadline_scaling": SHIPPED_PRE_DISPATCH_SCALING,
         "max_provider_budget_usd": 15,
         "probe_max_normalized_tokens": SHIPPED_PROBE_BOUND,
         "maximum_pre_inference_retryable_rejections_per_role": 2,
@@ -261,7 +320,9 @@ def check_policy_shape(policy: dict, errors: list[str]) -> None:
         errors.append("packaged Phase-1 runtime limits and probe contract drifted")
     expected_preflight = {
         "required_before_inference": True,
-        "maximum_seconds": 60,
+        # 2.7.9: the most a new audit's pre-dispatch rule allows (an audit initialised earlier froze 60, its fixed
+        # deadline); by name, so the descriptive leaf cannot drift from the rule
+        "maximum_seconds": SHIPPED_PRE_DISPATCH_SCALING["max_seconds"],
         "checks": [
             "exact_sandbox_and_tool_policy", "source_and_evidence_readability",
             "attempt_output_writability", "canonical_output_promotion",
@@ -378,6 +439,10 @@ def check_policy_shape(policy: dict, errors: list[str]) -> None:
     if type(critique_timeout) is not int or critique_timeout != SHIPPED_CRITIQUE_TIMEOUT:
         errors.append(f"the critique ceiling critique.provider_timeout_seconds is {critique_timeout!r}, "
                       f"not {SHIPPED_CRITIQUE_TIMEOUT}")
+    # 2.7.11: the snapshot-evidence rule a new audit freezes (an older audit has no leaf and keeps cited-only snapshots)
+    if critique.get("snapshot_evidence") != SHIPPED_SNAPSHOT_EVIDENCE_RULE:
+        errors.append(f"the critic snapshot-evidence rule critique.snapshot_evidence is "
+                      f"{critique.get('snapshot_evidence')!r}, not {SHIPPED_SNAPSHOT_EVIDENCE_RULE!r}")
     # The driver runs the probe on the critics' model and effort; this leaf names that route, pinned apart from the
     # cache contract so a route revert is reported as one.
     critique_probe = critique.get("model_probe")
@@ -548,6 +613,9 @@ def check_policy_shape(policy: dict, errors: list[str]) -> None:
                 "prepared", "awaiting_authorization", "ready", "running",
                 "quorum_complete", "integrated"]):
         errors.append("metadata 2.1 journal or lifecycle contract drifted")
+    if metadata.get("claude_reasoning_tokens") != SHIPPED_CLAUDE_REASONING_TOKENS:
+        errors.append("the Claude reasoning-token parse metadata.claude_reasoning_tokens is "
+                      f"{metadata.get('claude_reasoning_tokens')!r}, not {SHIPPED_CLAUDE_REASONING_TOKENS!r}")
     document = policy.get("document", {})
     if (document.get("body_max_rendered_pages") != 10 or
             document.get("draft_body_page_target") != 9 or
@@ -879,6 +947,43 @@ def load_critique_timeouts():
     return _CRITIQUE_TIMEOUTS
 
 
+def load_pre_dispatch_deadlines():
+    """scripts/pre_dispatch_deadlines.py from THIS tree (never another copy on sys.path), loaded once."""
+    global _PRE_DISPATCH_DEADLINES
+    if _PRE_DISPATCH_DEADLINES is None:
+        spec = importlib.util.spec_from_file_location("i4r_drift_pre_dispatch_deadlines", PRE_DISPATCH_DEADLINES_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load {PRE_DISPATCH_DEADLINES_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _PRE_DISPATCH_DEADLINES = module
+    return _PRE_DISPATCH_DEADLINES
+
+
+def check_pre_dispatch_deadlines(errors: list[str]) -> None:
+    """The shipped pre-dispatch rule, its pin and scripts/pre_dispatch_deadlines.py say one thing (2.7.9).
+
+    check_policy_shape pins phase_1.runtime.pre_dispatch_deadline_scaling to SHIPPED_PRE_DISPATCH_SCALING. This joins
+    that literal to the module run_phase1.py and run_verifier.py take the live rules from, so a new audit's frozen
+    rule is one the runtime admits (else its Phase 1 is refused before any call) and a revert of the module fails
+    even when the policy is reverted with it. An audit without the leaf keeps 60 s and needs no entry. Not part of
+    the leaf sweep.
+    """
+    try:
+        deadlines = load_pre_dispatch_deadlines()
+        shipped = deadlines.SHIPPED_PRE_DISPATCH_SCALING
+        live = list(deadlines.LIVE_PRE_DISPATCH_SCALINGS)
+    except Exception as exc:  # a broken or incomplete module is a finding, not a checker crash
+        errors.append(f"shared pre-dispatch deadline module cannot be loaded: {type(exc).__name__}: {exc}")
+        return
+    if shipped != SHIPPED_PRE_DISPATCH_SCALING:
+        errors.append(f"scripts/pre_dispatch_deadlines.py SHIPPED_PRE_DISPATCH_SCALING is {shipped!r}, expected "
+                      f"{SHIPPED_PRE_DISPATCH_SCALING}")
+    if not live or live[-1] != shipped:
+        errors.append("scripts/pre_dispatch_deadlines.py SHIPPED_PRE_DISPATCH_SCALING is not the newest "
+                      "LIVE_PRE_DISPATCH_SCALINGS entry")
+
+
 def check_critique_timeouts(errors: list[str]) -> None:
     """The shipped critique ceiling, its pin and scripts/critique_timeouts.py say one thing (2.7.4).
 
@@ -935,6 +1040,71 @@ def check_claim_change_rules(errors: list[str]) -> None:
                       "before 2.7.4 keeps")
 
 
+def load_claude_thinking_tokens():
+    """scripts/claude_thinking_tokens.py from THIS tree (never another copy on sys.path), loaded once."""
+    global _CLAUDE_THINKING_TOKENS
+    if _CLAUDE_THINKING_TOKENS is None:
+        spec = importlib.util.spec_from_file_location("i4r_drift_claude_thinking_tokens", CLAUDE_THINKING_TOKENS_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load {CLAUDE_THINKING_TOKENS_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _CLAUDE_THINKING_TOKENS = module
+    return _CLAUDE_THINKING_TOKENS
+
+
+def check_claude_thinking_tokens(errors: list[str]) -> None:
+    """The shipped reasoning-token parse, its pin and scripts/claude_thinking_tokens.py say one thing (2.7.11)."""
+    try:
+        module = load_claude_thinking_tokens()
+        shipped, live, leaf = module.SHIPPED, list(module.LIVE_VALUES), module.LEAF
+    except Exception as exc:  # a broken or incomplete module is a finding, not a checker crash
+        errors.append(f"shared reasoning-token module cannot be loaded: {type(exc).__name__}: {exc}")
+        return
+    if shipped != SHIPPED_CLAUDE_REASONING_TOKENS or shipped not in live:
+        errors.append(f"scripts/claude_thinking_tokens.py SHIPPED is {shipped!r}, expected "
+                      f"{SHIPPED_CLAUDE_REASONING_TOKENS!r}")
+    if tuple(leaf) != ("metadata", "claude_reasoning_tokens"):
+        errors.append(f"scripts/claude_thinking_tokens.py LEAF is {leaf!r}, not metadata.claude_reasoning_tokens")
+
+
+def load_snapshot_evidence_rules():
+    """scripts/snapshot_evidence_rules.py from THIS tree (never another copy on sys.path), loaded once."""
+    global _SNAPSHOT_EVIDENCE_RULES
+    if _SNAPSHOT_EVIDENCE_RULES is None:
+        spec = importlib.util.spec_from_file_location("i4r_drift_snapshot_evidence_rules", SNAPSHOT_EVIDENCE_RULES_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load {SNAPSHOT_EVIDENCE_RULES_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _SNAPSHOT_EVIDENCE_RULES = module
+    return _SNAPSHOT_EVIDENCE_RULES
+
+
+def check_snapshot_evidence_rules(errors: list[str]) -> None:
+    """The shipped snapshot-evidence rule, its pin and scripts/snapshot_evidence_rules.py say one thing (2.7.11): the
+    module's SHIPPED_RULE is the literal, its bounds are the ones pinned for that rule name, and its LIVE_RULES still
+    hold the cited-only rule every older audit keeps."""
+    try:
+        rules = load_snapshot_evidence_rules()
+        shipped, live, legacy = rules.SHIPPED_RULE, list(rules.LIVE_RULES), rules.LEGACY_RULE
+        deposit = rules.DEPOSIT_RULE
+        bounds = (rules.MAX_INVENTORY_ENTRIES, rules.MAX_INVENTORY_PATH_CHARS, rules.MAX_FILE_BYTES,
+                  rules.MAX_ADDED_BYTES)
+    except Exception as exc:  # a broken or incomplete module is a finding, not a checker crash
+        errors.append(f"shared snapshot-evidence rule module cannot be loaded: {type(exc).__name__}: {exc}")
+        return
+    if shipped != SHIPPED_SNAPSHOT_EVIDENCE_RULE or shipped not in live:
+        errors.append(f"scripts/snapshot_evidence_rules.py SHIPPED_RULE is {shipped!r}, expected "
+                      f"{SHIPPED_SNAPSHOT_EVIDENCE_RULE!r}")
+    if bounds != SNAPSHOT_EVIDENCE_BOUNDS.get(deposit):
+        errors.append(f"scripts/snapshot_evidence_rules.py bounds for {deposit!r} are {bounds!r}, expected "
+                      f"{SNAPSHOT_EVIDENCE_BOUNDS.get(deposit)!r} (new bounds are a new rule name)")
+    if legacy != "cited_only" or legacy not in live:
+        errors.append("scripts/snapshot_evidence_rules.py LIVE_RULES no longer holds the cited-only rule every audit "
+                      "initialised before 2.7.11 keeps")
+
+
 def check_local_execution(policy: dict, errors: list[str]) -> None:
     expected = {
         "intake_manifest": "package_manifest.json",
@@ -986,9 +1156,12 @@ def check_verification_and_release(policy: dict, errors: list[str]) -> None:
         "manifest": "release-manifest.json",
         "total_file_count_without_docx": 7,
         "total_file_count_with_docx": 8,
+        # 2.7.11: the claims-script harness a new audit freezes (absent = 2.7.10's), joined to scripts/claims_harness.py
+        "claims_script_harness": SHIPPED_CLAIMS_SCRIPT_HARNESS,
     }
     if publication != expected_publication:
         errors.append("publication policy is not six bound artefacts plus release manifest and optional DOCX")
+    check_claims_harness(errors)
 
 
 def check_docs(policy: dict, errors: list[str]) -> None:
@@ -1286,7 +1459,8 @@ def check_policy_leaf_coverage(policy: dict, errors: list[str]) -> None:
 
 
 COUNT_WORDS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
-               "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty")
+               "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+               "twenty-one", "twenty-two")
 
 
 def check_negative_controls(policy: dict, errors: list[str]) -> int:
@@ -1368,10 +1542,22 @@ def check_negative_controls(policy: dict, errors: list[str]) -> int:
         # so an allow-set would accept this revert.
         candidate["critique"]["provider_timeout_seconds"] = LEGACY_CRITIQUE_TIMEOUT
 
+    def drop_pre_dispatch_rule(candidate: dict) -> None:
+        # 2.7.9 froze new audits' pre-dispatch rule; without the leaf a new audit would be legacy (exactly 60 s, which
+        # a large deposit on a slow synced folder cannot meet), and the runtime accepts that, so only the pin sees it.
+        # With the descriptive preflight leaf back at 60, as reverting the release would; each has its pin.
+        candidate["phase_1"]["runtime"].pop("pre_dispatch_deadline_scaling")
+        candidate["phase_1"]["provider_free_preflight"]["maximum_seconds"] = 60
+
     def drop_claim_change_rule(candidate: dict) -> None:
         # 2.7.4 froze new audits' claim-change rule; without the leaf a new audit would be legacy (every specialist
         # re-reviews every bookkeeping change), which the runtime accepts, so only the pin can see it.
         candidate["critique"]["later_rounds"]["routing_manifest"].pop("claim_change_rule")
+
+    def drop_claude_reasoning_tokens(candidate: dict) -> None:
+        # 2.7.11 froze new audits' reasoning-token parse; without the leaf a new audit would be legacy (Claude
+        # thinking dropped again), which the runtime accepts, so only the pin can see it.
+        candidate["metadata"].pop("claude_reasoning_tokens")
 
     def change_auditor(candidate: dict) -> None:
         candidate["models"]["phase_1_auditors"]["auditor_text_vs_data"]["spawn_alias"] = "opus"
@@ -1429,8 +1615,13 @@ def check_negative_controls(policy: dict, errors: list[str]) -> int:
               "the Phase-1 leaf provider_timeout_seconds is"]),
             (f"critique ceiling restored to {LEGACY_CRITIQUE_TIMEOUT}", restore_legacy_critique_timeout,
              check_policy_shape, ["the critique ceiling critique.provider_timeout_seconds is"]),
+            ("pre-dispatch rule removed", drop_pre_dispatch_rule, check_policy_shape,
+             ["the Phase-1 pre-dispatch rule phase_1.runtime.pre_dispatch_deadline_scaling is",
+              "Phase-1 provider-free preflight/deadline contract drifted"]),
             ("claim-change rule removed", drop_claim_change_rule, check_policy_shape,
              ["the later-round claim-change rule critique.later_rounds.routing_manifest.claim_change_rule is"]),
+            ("Claude reasoning-token parse removed", drop_claude_reasoning_tokens, check_policy_shape,
+             ["the Claude reasoning-token parse metadata.claude_reasoning_tokens is"]),
             ("auditor routing", change_auditor, check_policy_shape, ["auditor routing is"]),
             ("verification waiver", enable_waiver, check_verification_and_release,
              ["verification policy drifted from the accuracy-safe content-bound contract"]),
@@ -1472,7 +1663,10 @@ def main() -> int:
         check_probe_bounds(errors)
         check_phase1_timeouts(errors)
         check_critique_timeouts(errors)
+        check_pre_dispatch_deadlines(errors)
         check_claim_change_rules(errors)
+        check_claude_thinking_tokens(errors)
+        check_snapshot_evidence_rules(errors)
         check_local_execution(policy, errors)
         check_verification_and_release(policy, errors)
         check_docs(policy, errors)

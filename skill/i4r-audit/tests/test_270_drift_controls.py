@@ -89,6 +89,15 @@ class NegativeControlsNameTheirPins(unittest.TestCase):
         ("check_policy_shape",
          "the later-round claim-change rule critique.later_rounds.routing_manifest.claim_change_rule is",
          {"claim-change rule removed"}),
+        # 2.7.9 (tests/test_279_preflight.py): the pre-dispatch rule a new audit freezes, pinned to a literal.
+        ("check_policy_shape", "the Phase-1 pre-dispatch rule phase_1.runtime.pre_dispatch_deadline_scaling is",
+         {"pre-dispatch rule removed"}),
+        # and the descriptive leaf provider_free_preflight.maximum_seconds, which a revert puts back at 60
+        ("check_policy_shape", "Phase-1 provider-free preflight/deadline contract drifted",
+         {"pre-dispatch rule removed"}),
+        # 2.7.11 (tests/test_2711_thinking_tokens.py): the Claude reasoning-token parse a new audit freezes.
+        ("check_policy_shape", "the Claude reasoning-token parse metadata.claude_reasoning_tokens is",
+         {"Claude reasoning-token parse removed"}),
         ("check_policy_shape", "later-round extra specialists are not restricted", {"later-round routing"}),
         ("check_verification_and_release", "verification policy drifted", {"verification waiver"}),
         ("check_finding_projection", "finding source-of-truth projection policy drifted", {"finding registry"}),
@@ -108,7 +117,7 @@ class NegativeControlsNameTheirPins(unittest.TestCase):
                 errors.extend(error for error in raised if not error.startswith(dropped))
             setattr(module, detector, loosened)
         found: list[str] = []
-        self.assertEqual(module.check_negative_controls(module.load_policy(), found), 20)
+        self.assertEqual(module.check_negative_controls(module.load_policy(), found), 22)
         return found
 
     @staticmethod
@@ -120,7 +129,7 @@ class NegativeControlsNameTheirPins(unittest.TestCase):
             labels.add(match.group(1) if match else f"<unparsed: {error}>")
         return labels
 
-    def test_the_unmodified_checker_passes_all_twenty_controls(self) -> None:
+    def test_the_unmodified_checker_passes_all_twenty_two_controls(self) -> None:
         # Negative control for every loosening below.
         self.assertEqual(self.run_controls(), [])
 
@@ -132,7 +141,7 @@ class NegativeControlsNameTheirPins(unittest.TestCase):
                 self.assertEqual(self.failed_labels(found), expected, found)
                 covered |= expected
         # every control is named by at least one pin above
-        self.assertEqual(len(covered), 20)
+        self.assertEqual(len(covered), 22)
 
     def test_a_loosened_auditor_pin_is_seen_although_other_pins_still_fire(self) -> None:
         # The defect: the Phase-1 control still raises the alias and verifier errors (and, before the split,
@@ -203,7 +212,7 @@ class NegativeControlsNameTheirPins(unittest.TestCase):
             result = subprocess.run([sys.executable, str(tree / "config/check_policy_drift.py")],
                                     text=True, capture_output=True, timeout=120)
             self.assertEqual(result.returncode, 0, result.stdout)
-            self.assertIn("twenty planted drifts were rejected", result.stdout)
+            self.assertIn("twenty-two planted drifts were rejected", result.stdout)
 
 
 # ------------------------------------------------------------------------------ DD-2

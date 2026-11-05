@@ -75,7 +75,36 @@ if [ "$RENDER_RC" -ne 0 ]; then
 fi
 RENDER_ENDED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
-[ -s "$STATUS" ] || { echo "verification_status.txt missing or empty" >&2; exit 1; }
+if [ ! -s "$STATUS" ]; then
+  echo "verification_status.txt missing or empty: the notebook rendered, but its summary chunk did not finish" >&2
+  # knitr records the error in the rendered page, not on stderr; name the summary chunk's first one (2.7.11)
+  python3 - "${NB%.*}.html" <<'PYSUMMARY' >&2 || true
+import collections, html, re, sys
+try:
+    page = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+except OSError:
+    sys.exit(0)
+start = page.find('id="summary"')
+err = re.search(r"<code>(Error[^<]*)</code>", page[start:] if start >= 0 else "")
+if err:
+    print("  it stopped with: " + " ".join(html.unescape(err.group(1)).split()))
+    if "differing number of rows" in err.group(1):
+        # the claim chunks print one "[C-n key] EXPECTED|OBSERVED value" line per element (none for an
+        # empty value) and one VERDICT line per checked key: name the keys whose value has the wrong length
+        text = html.unescape(re.sub(r"<[^>]+>", "", page[:start] if start >= 0 else page))
+        seen = collections.defaultdict(collections.Counter)
+        for m in re.finditer(r"^ ?\[(C-\S+)\s+(\S+?)\s*\]\s+(EXPECTED|OBSERVED|VERDICT)\b(.*)$", text, re.M):
+            if not (m.group(3) == "VERDICT" and "undeclared" in m.group(4)):
+                seen[(m.group(1), m.group(2))][m.group(3)] += 1
+        keys = sorted(f"{c}/{k}" for (c, k), n in seen.items()
+                      if n["EXPECTED"] > 1 or n["OBSERVED"] > 1
+                      or (n["VERDICT"] and not (n["EXPECTED"] and n["OBSERVED"])))
+        print("  an expect()/check() value is not one number or one string (an empty value, or vectors of different")
+        print("  lengths); give each value its own key (reference/verification_guide.md, section 2)"
+              + (": " + ", ".join(keys) if keys else ""))
+PYSUMMARY
+  exit 1
+fi
 [ -s "$SUMMARY" ] || { echo "verification_summary.csv missing or empty" >&2; exit 1; }
 CODE=$(tr -d '[:space:]' < "$STATUS")
 case "$CODE" in ''|*[!0-9]*) echo "verification status is not an integer: $CODE" >&2; exit 1 ;; esac
@@ -119,7 +148,10 @@ for index, row in enumerate(rows, 2):
         raise SystemExit(f"verification summary row {index} has an empty check key")
     pair=(claim,key)
     if pair in pairs:
-        raise SystemExit(f"verification summary repeats claim/key pair {claim}/{key}")
+        # a value with several elements writes one summary row per element under the same key (2.7.11 message)
+        raise SystemExit(f"verification summary repeats claim/key pair {claim}/{key}" + ("" if key == "-" else
+                         ": an expect()/check() value there is not one number or one string; give each value "
+                         "its own key (reference/verification_guide.md, section 2)"))
     pairs.add(pair)
     if claim not in seen:
         claims.append(claim); seen.add(claim)
