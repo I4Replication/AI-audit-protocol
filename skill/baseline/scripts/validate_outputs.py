@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import collections
 import csv
+import hashlib
 import json
 import os
 import pathlib
@@ -48,7 +49,13 @@ UNVERIFIABLE_REASONS = ("data_missing", "data_not_available", "code_missing", "c
                         "discrepancy_in_output", "software_not_available", "insufficient_compute", "missing_readme",
                         "insufficient_documentation")
 CHECK_NATURE = ("deterministic", "deterministic_with_tolerance", "judgement")
-BYLINE_EMAILS = {"juposada93@gmail.com", "abrodeur@uottawa.ca"}
+# The house byline's correspondence address, which the baseline's recorded outputs print, held as the
+# SHA-256 digest of the lower-cased address so that this public copy does not print it: an address in an
+# output is allowed when its digest is listed here. The 1.2.0 validator also allowed a second address,
+# which no baseline output contains; this copy leaves it out.
+BYLINE_EMAIL_SHA256 = {
+    "49ac6465b57d823b852150ffdc683ffd09f7b42dd92914a0ecf43825a53595c1",
+}
 
 # i4r-audit check_consistency.sh section 3c
 BANNED = [r"earlier draft", r"earlier version of this comment", r"\bwe withdraw\b", r"\bround[ -][0-9]",
@@ -207,7 +214,8 @@ def hygiene(rep: Report, label: str, text: str, exempt: set[str], *, strict: boo
             flag(f"{label}:{number}: a participant identifier beside a date or clock time; put them on separate lines")
         for match in EMAIL.finditer(line):
             address = match.group(0).lower()
-            if address not in BYLINE_EMAILS and not address.split("@")[1].startswith("example."):
+            if (hashlib.sha256(address.encode()).hexdigest() not in BYLINE_EMAIL_SHA256
+                    and not address.split("@")[1].startswith("example.")):
                 flag(f"{label}:{number}: an e-mail address; name the identifier kind instead of a value")
                 break
     for match in ROW_PARTICIPANT_CODE.finditer(text):

@@ -740,8 +740,9 @@ new paper.
 - **Held fixed against the pipeline.** The model (`claude-sonnet-5-5` at `xhigh`, a 1,000,000-token window,
   the 128,000-token output cap); the input (the published audit's frozen Phase-1 snapshot, copied byte for
   byte); the task definition (i4r-audit 2.7.7's checklist, brief, scheme, report structure and citations,
-  verbatim and hash-recorded); the launch arguments and network denial; the comment layout and Appendix A
-  generator; and the accounting.
+  hash-recorded, and verbatim apart from this public copy's edits: reworded examples, no correspondence
+  e-mail in the byline or the front-matter template, and a sentence saying not to add one); the launch
+  arguments and network denial; the comment layout and Appendix A generator; and the accounting.
 - **What differs (recorded in every `run.json`).** One call does the work of five auditors, the coordinator
   and the rounds. Each call has a USD 30 budget and a 7,200 s timeout, with one retry only if no inference
   started. The sandbox is tighter. Before any paid call, a contamination scan refuses to start if it finds

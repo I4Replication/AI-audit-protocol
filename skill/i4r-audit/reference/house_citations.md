@@ -35,6 +35,8 @@ Ghina Abdul Baki^1^, Juan P. Aparicio^1^\*, Bruno Barbarioli^1^, Abel Brodeur^1^
 ^1^ Institute for Replication, Department of Economics, University of Ottawa
 :::
 ::: {custom-style="Affil"}
-\* Correspondence: Juan P. Aparicio, juposada93@gmail.com
+\* Correspondence: Juan P. Aparicio
 :::
 ```
+
+The correspondence line gives the corresponding author's name only; do not add an e-mail address to it.

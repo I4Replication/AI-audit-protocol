@@ -24,8 +24,10 @@ What is held fixed against the full pipeline:
   copied byte for byte and checked against its manifest. The environment fingerprint index is regenerated on this
   host, as the auditors' described the host they ran on.
 - **Task definition and standard**: i4r-audit 2.7.7's `checklist.md`, `brief_template.md`, `SCHEME.md`,
-  `report_structure.md` and `house_citations.md`, verbatim (`reference/PROVENANCE.json` holds their hashes), plus the
-  auditor and comment-writer rules on evidence, personal data and publication hygiene. The prompt tells the agent to
+  `report_structure.md` and `house_citations.md`, verbatim apart from this public copy's edits (reworded identifying
+  examples; no correspondence e-mail address in the byline or the front-matter template, and a sentence saying not
+  to add one; `reference/PROVENANCE.json` holds their hashes and notes), plus the auditor and comment-writer rules on
+  evidence, personal data and publication hygiene. The prompt tells the agent to
   ignore their pipeline-process instructions (rounds, critics, ledgers, claim tags).
 - **Launch**: the Phase-1 auditor argv, Bash allowlist, appended steer and network denial (a test compares them with
   the live i4r-audit when it is beside this skill). The launching session's own links (its messaging socket and

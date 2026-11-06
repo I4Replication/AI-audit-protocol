@@ -360,7 +360,7 @@ python3 "$DOCUMENT_RELEASE" recount "$PREP/document_build_manifest.json" \
 # the portable receipt.  This runs after all six files exist and before the
 # atomic rename makes any of them visible at the completed-report path.
 # The flattened candidate has no report/front_matter.md, so name the audit's own byline and article
-# text as the public email sources (the byline's correspondence address is mandatory content).
+# text as the public email sources (an address the byline prints is public content).
 python3 "$(cd "$(dirname "$0")" && pwd)/check_release_privacy.py" "$PREP" --identifiers \
     --allow-emails-from "$A/report/front_matter.md" --allow-emails-from "$A/paper/paper.txt" || {
   echo "FATAL: completed-report transaction failed privacy inspection" >&2

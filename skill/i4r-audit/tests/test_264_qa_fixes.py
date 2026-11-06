@@ -191,14 +191,14 @@ class RoundThreeFixes(unittest.TestCase):
             root = pathlib.Path(tmp)
             (root / "report").mkdir()
             (root / "report" / "front_matter.md").write_text("Correspondence: a.person@univ.edu\n")
-            article = root / "paper.txt"; article.write_text("CONTACT author@journal.org\n")
+            article = root / "paper.txt"; article.write_text("CONTACT author@journal-fixture.org\n")
             crp.ALLOWED_EMAILS.clear()
             crp.allow_emails_from(root / "report" / "front_matter.md")
             crp.allow_emails_from(article)
-            ok = crp.inspect_text("byline a.person@univ.edu, article author@journal.org, test x@example.org",
+            ok = crp.inspect_text("byline a.person@univ.edu, article author@journal-fixture.org, test x@example.org",
                                   "r.md", identifiers=True)
             self.assertEqual([i for i in ok if i.category == "email"], [])
-            bad = crp.inspect_text("participant reached at kid123@gmail.com", "r.md", identifiers=True)
+            bad = crp.inspect_text("participant reached at kid123@webmail-fixture.com", "r.md", identifiers=True)
             self.assertEqual([i.category for i in bad if i.category == "email"], ["email"])
             crp.ALLOWED_EMAILS.clear()
 
@@ -688,8 +688,8 @@ class RoundElevenFixes(unittest.TestCase):
 
     def test_email_detector_still_catches_real_addresses(self):
         import check_release_privacy as crp
-        for text in ("Contact jane.doe@g.harvard.edu", "jdoe@u.northwestern.edu", "e0123456@u.nus.edu",
-                     "alice@x.com", "Write to jane.doe@univ.edu: she has the data.", "a@b.co.uk"):
+        for text in ("Contact jane.doe@g.univ.edu", "jdoe@u.univ-fixture.edu", "e0123456@u.univ.edu",
+                     "alice@x.edu", "Write to jane.doe@univ.edu: she has the data.", "a@b.ac.uk"):
             self.assertEqual(len(crp._email_issues(text, "f")), 1, text)
         for text in ("beta = X.T@X.values", "r = M@model.params", "git clone git@github.com:org/pkg.git"):
             self.assertEqual(crp._email_issues(text, "f"), [], text)
@@ -809,7 +809,7 @@ class RoundTwelveFixes(unittest.TestCase):
 
     def test_email_detector_round_twelve_cases(self):
         import check_release_privacy as crp
-        for text in ("jane.doe@uni.eus", "x@lab.cat", "info@charity.ngo"):
+        for text in ("jane.doe@univ-fixture.eus", "x@lab.cat", "info@charity.ngo"):
             self.assertEqual(len(crp._email_issues(text, "f")), 1, text)
         for text in ("git+ssh://git@github.com/org/pkg.git@v1.2", "https://oauth2@gitlab.com/x",
                      "y = x@W.to(device)", "x@W.at[i]"):
@@ -920,7 +920,7 @@ class RoundThirteenFixes(unittest.TestCase):
 
     def test_email_real_tlds_are_not_code_attributes(self):
         import check_release_privacy as crp
-        for text in ("Correspondence: jane.doe@univie.ac.at", "bob@uni.to", "info@lab.data", "jane@uni.edu[1]"):
+        for text in ("Correspondence: jane.doe@univ-fixture.ac.at", "bob@uni.to", "info@lab.data", "jane@univ.edu[1]"):
             self.assertEqual(len(crp._email_issues(text, "f")), 1, text)
 
     def test_projection_refuses_a_snippet_with_another_claims_id(self):
@@ -979,7 +979,7 @@ class RoundFourteenFixes(unittest.TestCase):
         import check_release_privacy as crp
         for text in ("h = x@self.W.data", "out = inp@layer.weight.data.T", "z = A@B.dot"):
             self.assertEqual(crp._email_issues(text, "f"), [], text)
-        for text in ("jane.doe@univie.ac.at", "info@lab.data", "Write to jane.doe@univ.edu. She"):
+        for text in ("jane.doe@univ-fixture.ac.at", "info@lab.data", "Write to jane.doe@univ.edu. She"):
             self.assertEqual(len(crp._email_issues(text, "f")), 1, text)
 
     def test_also_refuses_the_canonical_report(self):
@@ -1004,7 +1004,7 @@ class RoundFourteenFixes(unittest.TestCase):
 
     def test_markdown_footnote_after_an_address_is_flagged(self):
         import check_release_privacy as crp
-        for text in ("jane.doe@uni.edu[^1]", "jane.doe@uni.edu[^note]"):
+        for text in ("jane.doe@univ.edu[^1]", "jane.doe@univ.edu[^note]"):
             self.assertEqual(len(crp._email_issues(text, "f")), 1, text)
 
     def test_plan_and_packet_sources(self):
@@ -1127,7 +1127,7 @@ class RoundSixteenFixes(unittest.TestCase):
 
     def test_latex_footnote_after_an_address_is_flagged(self):
         import check_release_privacy as crp
-        self.assertEqual(len(crp._email_issues("Corresponding: jane.doe@uni.edu$^{*}$", "f")), 1)
+        self.assertEqual(len(crp._email_issues("Corresponding: jane.doe@univ.edu$^{*}$", "f")), 1)
         self.assertEqual(crp._email_issues("table(obj@meta.data$cluster)", "f"), [])
 
     def test_reopened_round_fields_are_in_the_run_schema(self):
@@ -1248,11 +1248,12 @@ class RoundEighteenFixes(unittest.TestCase):
 
     def test_email_round_eighteen_cases(self):
         import check_release_privacy as crp
-        for text in ("office@weight.at", "info@meta.at", "hello@self.to", "js@w.tuwien.ac.at", "ab@e.univie.ac.at"):
+        for text in ("office@weight.at", "info@meta.univ-fixture.at", "info@fixture.meta.at",
+                     "hello@self.univ-fixture.to", "hello@fixture.self.to", "js@w.tuwien.ac.at", "ab@e.univie.ac.at"):
             self.assertEqual(len(crp._email_issues(text, "f.py")), 1, text)
         self.assertEqual(crp._email_issues("z = q@keys.data  # i4r-privacy: not-an-email", "f.py"), [])
         self.assertEqual(len(crp._email_issues("z = q@keys.data  # i4r-privacy: not-an-email", "f.json")), 1)
-        self.assertEqual(len(crp._email_issues("x = 1 # i4r-privacy: not-an-email\rjane@uni.edu", "f.py")), 1)
+        self.assertEqual(len(crp._email_issues("x = 1 # i4r-privacy: not-an-email\rjane@univ.edu", "f.py")), 1)
         for text in ("head(pbmc.obj@meta.data)", "out = x@model.weight.data", "pred = X.T@W.data"):
             self.assertEqual(crp._email_issues(text, "f.py"), [], text)
 

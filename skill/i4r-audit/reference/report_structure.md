@@ -48,7 +48,7 @@ First Author^1^\*, Second^1^, Third^1^
 ^1^ Institute for Replication, Department of Economics, University of Ottawa
 :::
 ::: {custom-style="Affil"}
-\* Correspondence: <name>, <email>
+\* Correspondence: <name>
 :::
 ::: {custom-style="Affil"}
 **Original study:** <full citation>. DOI: <doi>

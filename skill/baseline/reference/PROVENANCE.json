@@ -5,7 +5,8 @@
   "checklist.md": {
    "sha256": "02f15a342094907272e3fadc7a34915c7d3e74045d4c2e8bcb5c35c483479c74",
    "bytes": 7355,
-   "source_path": "reference/checklist.md"
+   "source_path": "reference/checklist.md",
+   "note": "i4r-audit 2.7.7 (copied verbatim on 2026-10-09; this public copy rewords identifying examples, as skill/i4r-audit's does)"
   },
   "brief_template.md": {
    "sha256": "3d2565f698e52a1c8e9cf19ed8e6f10a352a895411fadfaec3b1be575d22e416",
@@ -13,9 +14,10 @@
    "source_path": "reference/brief_template.md"
   },
   "report_structure.md": {
-   "sha256": "a74b5584c538d0c1394820302491451dc174dd99ea5e176d6ffc5eaea456d0f9",
-   "bytes": 12830,
-   "source_path": "reference/report_structure.md"
+   "sha256": "f5feaf93e0d49b900afd6687c8a2a2e1861714bf0f0b2aadd413ae736a2103db",
+   "bytes": 12821,
+   "source_path": "reference/report_structure.md",
+   "note": "i4r-audit 2.7.7 (copied verbatim on 2026-10-09; this public copy rewords identifying examples and drops the e-mail slot from the front matter's correspondence line, as skill/i4r-audit's does)"
   },
   "SCHEME.md": {
    "sha256": "c419caee282e33e06e717dc5d61aac0c45d386a2295ba903ae72d7684901a763",
@@ -23,9 +25,10 @@
    "source_path": "reference/SCHEME.md"
   },
   "house_citations.md": {
-   "sha256": "14945718116548751b3da00621faa9675862d1832df66a68590d3c9c621619d5",
-   "bytes": 1954,
-   "source_path": "reference/house_citations.md"
+   "sha256": "6f59e9c3475024cdd8ce6372864594951b5e1c01547b9da04dfb65c5512d350f",
+   "bytes": 2037,
+   "source_path": "reference/house_citations.md",
+   "note": "i4r-audit 2.7.7 (copied verbatim on 2026-10-09; this public copy omits the byline's correspondence e-mail address and says not to add one, as skill/i4r-audit's does)"
   },
   "FINDINGS_FORMAT.md": {
    "sha256": "8f854d33e2e1d07f3b7db43fe0d3d2687c30f01163da08c7fe1d3fdde05cb2b3",

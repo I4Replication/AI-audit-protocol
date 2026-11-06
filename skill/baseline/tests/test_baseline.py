@@ -1003,7 +1003,7 @@ class ValidatorTests(OutputsBase):
             "pid_date": {"REPORT_final.md": ("Duplicate rows were tested", "participant 12 was tested on 2019-03-02; rows were tested")},
             "pcode_clock": {"REPORT_final.md": ("Duplicate rows were tested", "P7 stopped at 10:42:05; rows were tested")},
             "code_token": {"REPORT_final.md": ("Duplicate rows", "SUBJ_P12 rows")},
-            "email": {"REPORT_final.md": ("Duplicate rows", "jane.doe@uni.edu rows")},
+            "email": {"REPORT_final.md": ("Duplicate rows", "jane.doe@univ.edu rows")},
             "captions": {"captions.txt": ("Summary of findings", "Table 1. Summary of findings")},
             "front": {"front_matter.md": ("**Replication package:**", "**Package:**")},
             "front_pii": {"front_matter.md": ("DOI: 10.0/test", "DOI: 10.0/test SUBJ_P12")},

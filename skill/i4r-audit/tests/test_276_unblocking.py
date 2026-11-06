@@ -70,8 +70,8 @@ class EmailDetectorIsLinear(unittest.TestCase):
 
     def test_the_matches_are_the_unbounded_patterns_own(self) -> None:
         samples = [
-            "write to jane.doe@uni.example.org or j@x.co.uk.", "a@b.cd@e.fg", "x" * 300 + "@host.org",
-            "user+tag@sub.domain.museum, other@ip", "no address here", "@lead.org and trail@", "mail:a.b-c@d-e.fr;",
+            "write to jane.doe@uni.example.org or j@x.ac.uk.", "a@b.qz@e.fg", "x" * 300 + "@host.org",
+            "user+tag@sub.domain.museum, other@ip", "no address here", "@lead.org and trail@", "mail:a.b-c@d-e-f.fr;",
             "q" * 90 + "@" + "r" * 300 + ".com",
         ]
         for text in samples:
@@ -108,8 +108,8 @@ class OperatorTextIsCheckedAndMaskable(JournalAudit):
     def test_an_address_a_home_path_or_a_participant_code_is_refused_and_nothing_is_written(self) -> None:
         before = self.journal()
         for arguments, message in (
-            (("note", "text=sent to jane.doe@uni.ca"), "contains an e-mail address"),
-            (("delivery", "artifact_path=report/comment.pdf", "recipient=editor@journal.org"), "e-mail address"),
+            (("note", "text=sent to jane.doe@univ-fixture.ca"), "contains an e-mail address"),
+            (("delivery", "artifact_path=report/comment.pdf", "recipient=editor@journal-fixture.org"), "e-mail address"),
             (("failure", "kind=other", f"detail=read {HOME}kmensah/pkg/data.csv"), "private absolute path"),
             (("brief_correction", "raised_by=auditor_privacy_archive", "description=file EMG_P41.csv"),
              "participant-code"),
@@ -129,17 +129,17 @@ class OperatorTextIsCheckedAndMaskable(JournalAudit):
 
     def test_a_text_redaction_masks_run_json_and_leaves_the_journal_as_it_was(self) -> None:
         # a pre-2.7.6 journal: the note went in before the refusal existed
-        lj.append_events(self.audit, [{"type": "note", "payload": {"text": "copy sent to jane.doe@uni.ca"},
+        lj.append_events(self.audit, [{"type": "note", "payload": {"text": "copy sent to jane.doe@univ-fixture.ca"},
                                        "source": "log_event.sh"}])
         target = self.last_seq()
-        self.assertIn("jane.doe@uni.ca", (self.audit / "run.json").read_text(encoding="utf-8"))
+        self.assertIn("jane.doe@univ-fixture.ca", (self.audit / "run.json").read_text(encoding="utf-8"))
         journal_before = self.journal()
         result = self.log("text_redaction", f"seq={target}", "field=text", "reason=an address in a note")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(self.journal().startswith(journal_before), "the journal is only appended to")
-        self.assertIn(b"jane.doe@uni.ca", self.journal())
+        self.assertIn(b"jane.doe@univ-fixture.ca", self.journal())
         projected = (self.audit / "run.json").read_text(encoding="utf-8")
-        self.assertNotIn("jane.doe@uni.ca", projected)
+        self.assertNotIn("jane.doe@univ-fixture.ca", projected)
         self.assertIn("[redacted]", projected)
 
     def test_a_redaction_must_name_an_existing_event_and_one_of_its_text_fields(self) -> None:
@@ -247,20 +247,20 @@ class StagedRecordsAreNeutralised(unittest.TestCase):
         return path
 
     def test_records_are_masked_and_listed_while_the_comment_still_refuses(self) -> None:
-        crp.ALLOWED_EMAILS.add("corresponding@uni.edu")
+        crp.ALLOWED_EMAILS.add("corresponding@univ.edu")
         critic = self.write("critique/round_2/critic_stats.md",
                             f'The authors call setwd("{WIN_HOME}kwame.mensah/Desktop/study") and\n'
-                            "write to k.mensah@uni.edu; corresponding@uni.edu is the byline's.\n")
+                            "write to k.mensah@univ.edu; corresponding@univ.edu is the byline's.\n")
         evidence = self.write("work/a5_privacy_archive/phase1_evidence/abc/scan.py",
                               json.dumps({"path": f"{HOME}kmensah/pkg/data.csv", "fixture": f"{HOME}janedoe/x"}) + "\n")
-        report = self.write("REPORT_final.md", f"See {HOME}kmensah/pkg and k.mensah@uni.edu.\n")
+        report = self.write("REPORT_final.md", f"See {HOME}kmensah/pkg and k.mensah@univ.edu.\n")
         rewritten = rrm.neutralise_records(self.release, cdv.record_file)
         rrm.note(self.release, rewritten)
         self.assertEqual(sorted(rewritten), [("critique/round_2/critic_stats.md", 1, 1, 0),
                                              ("work/a5_privacy_archive/phase1_evidence/abc/scan.py", 1, 0, 0)])
         self.assertIn(f"{WIN_HOME}<user-dir>/Desktop/study", critic.read_text(encoding="utf-8"))
         self.assertIn("[e-mail address]", critic.read_text(encoding="utf-8"))
-        self.assertIn("corresponding@uni.edu", critic.read_text(encoding="utf-8"))
+        self.assertIn("corresponding@univ.edu", critic.read_text(encoding="utf-8"))
         self.assertEqual(json.loads(evidence.read_text(encoding="utf-8"))["fixture"], f"{HOME}janedoe/x")
         note = (self.release / crp.NEUTRALISATION_NOTE).read_text(encoding="utf-8")
         self.assertIn("critique/round_2/critic_stats.md  (1 path(s), 1 address(es), 0 date(s))", note)
